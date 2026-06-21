@@ -1,0 +1,247 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global safety net catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSeedUser(userId) {
+      return userId == 'user_alice' || userId == 'user_bob' || userId == 'user_charlie' || userId == 'user_david';
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isBlocked() {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isBlocked', false) == true;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        ('email' in request.auth.token && (
+          request.auth.token.email == 'fresh.linksd@gmail.com' ||
+          request.auth.token.email.lower() == 'fresh.linksd@gmail.com'
+        )) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('email', '').lower() == 'fresh.linksd@gmail.com' ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin' ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true))
+      );
+    }
+
+    // --- Users Collection ---
+    match /users/{userId} {
+      allow read: if true; // Public profiles for discovery
+      allow create: if isSignedIn() && (request.auth.uid == userId || isSeedUser(userId)) && isValidUser(incoming());
+      allow update: if isSignedIn() && (
+        (request.auth.uid == userId && isValidUser(incoming())) ||
+        isAdmin() ||
+        (
+          // Action: Subscriber updating Creator's wallet Balance/Credits
+          incoming().diff(existing()).affectedKeys().hasOnly(['walletBalance', 'walletCredits']) &&
+          isValidUser(incoming())
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'name', 'email', 'createdAt'])
+        && (data.id == request.auth.uid || isSeedUser(data.id) || isAdmin())
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 200
+        && data.email is string && data.email.size() <= 250
+        && (!data.keys().hasAny(['bio']) || (data.bio is string && data.bio.size() <= 5000))
+        && (!data.keys().hasAny(['profileImage']) || (data.profileImage is string && data.profileImage.size() <= 3500000))
+        && (!data.keys().hasAny(['coverImage']) || (data.coverImage is string && data.coverImage.size() <= 3500000))
+        && (!data.keys().hasAny(['location']) || (data.location is string && data.location.size() <= 500))
+        && (!data.keys().hasAny(['interests']) || (data.interests is list && data.interests.size() <= 50))
+        && (!data.keys().hasAny(['socialLinks']) || (
+          data.socialLinks is map 
+          && (!data.socialLinks.keys().hasAny(['twitter']) || data.socialLinks.twitter is string)
+          && (!data.socialLinks.keys().hasAny(['github']) || data.socialLinks.github is string)
+          && (!data.socialLinks.keys().hasAny(['website']) || data.socialLinks.website is string)
+        ))
+        && (!data.keys().hasAny(['savedPosts']) || (data.savedPosts is list && data.savedPosts.size() <= 500))
+        && (!data.keys().hasAny(['hasSetupAccount']) || data.hasSetupAccount is bool)
+        && (!data.keys().hasAny(['isBlocked']) || data.isBlocked is bool)
+        && (!data.keys().hasAny(['role']) || data.role is string)
+        && (!data.keys().hasAny(['isAdmin']) || data.isAdmin is bool)
+        && (!data.keys().hasAny(['phoneNumber']) || (data.phoneNumber is string && data.phoneNumber.size() <= 100))
+        && (!data.keys().hasAny(['panNumber']) || (data.panNumber is string && data.panNumber.size() <= 100))
+        && (!data.keys().hasAny(['officialDocId']) || (data.officialDocId is string && data.officialDocId.size() <= 200))
+        && (!data.keys().hasAny(['idPhoto']) || (data.idPhoto is string && data.idPhoto.size() <= 3500000))
+        && (!data.keys().hasAny(['isApprovedByAdmin']) || data.isApprovedByAdmin is bool)
+        && (!data.keys().hasAny(['walletBalance']) || (data.walletBalance is number || data.walletBalance is int))
+        && (!data.keys().hasAny(['walletCredits']) || (data.walletCredits is number || data.walletCredits is int))
+        && (!data.keys().hasAny(['isMonetizationEnabled']) || data.isMonetizationEnabled is bool)
+        && (!data.keys().hasAny(['monthlySubscriptionPrice']) || (data.monthlySubscriptionPrice is number || data.monthlySubscriptionPrice is int))
+        && (!data.keys().hasAny(['subscribedCreators']) || data.subscribedCreators is list)
+        && (!data.keys().hasAny(['clearanceRemarks']) || data.clearanceRemarks is string)
+        && (!data.keys().hasAny(['hasVerifiedDetails']) || data.hasVerifiedDetails is bool);
+    }
+
+    // --- Posts Collection ---
+    function isPostAuthor(existing_userId) {
+      return isSignedIn() && (
+        existing_userId == request.auth.uid ||
+        (exists(/databases/$(database)/documents/users/$(existing_userId)) && 
+         exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('email', '') != '' &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('email', '') == get(/databases/$(database)/documents/users/$(existing_userId)).data.get('email', ''))
+      );
+    }
+
+    match /posts/{postId} {
+      allow read: if true; // Publicly readable for global search & interest discovery
+      allow create: if isSignedIn() && !isBlocked() && (incoming().userId == request.auth.uid || isSeedUser(incoming().userId)) && isValidPost(incoming());
+      allow update: if !isBlocked() && (isPostAuthor(existing().userId) || isAdmin()) && isValidPost(incoming());
+      allow delete: if !isBlocked() && (isPostAuthor(existing().userId) || isAdmin());
+    }
+
+    function isValidPost(data) {
+      return data.keys().hasAll(['id', 'userId', 'title', 'content', 'category', 'status', 'createdAt', 'readingTime'])
+        && data.id is string
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+        && data.content is string && data.content.size() <= 150000
+        && data.category is string && data.category.size() <= 50
+        && (!data.keys().hasAny(['tags']) || (data.tags is list && data.tags.size() <= 25))
+        && (!data.keys().hasAny(['mediaUrl']) || (data.mediaUrl is string && data.mediaUrl.size() <= 3500000))
+        && (!data.keys().hasAny(['mediaUrls']) || data.mediaUrls is list)
+        && (!data.keys().hasAny(['videoUrl']) || (data.videoUrl is string && data.videoUrl.size() <= 3500000))
+        && (!data.keys().hasAny(['isPremium']) || data.isPremium is bool)
+        && (data.status == 'published' || data.status == 'draft')
+        && data.readingTime is number;
+    }
+
+    // --- Likes Collection ---
+    match /likes/{likeId} {
+      allow read: if true;
+      allow create: if isSignedIn() && !isBlocked() && (incoming().userId == request.auth.uid || isSeedUser(incoming().userId)) && isValidLike(incoming());
+      allow delete: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    function isValidLike(data) {
+      return data.keys().hasAll(['userId', 'postId'])
+        && (data.userId == request.auth.uid || isSeedUser(data.userId))
+        && data.postId is string && data.postId.size() <= 100;
+    }
+
+    // --- Comments Collection ---
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if isSignedIn() && !isBlocked() && (incoming().userId == request.auth.uid || isSeedUser(incoming().userId)) && isValidComment(incoming());
+      allow update: if isSignedIn() && !isBlocked() && (existing().userId == request.auth.uid || isAdmin()) && isValidComment(incoming());
+      allow delete: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin() || 
+        get(/databases/$(database)/documents/posts/$(existing().postId)).data.userId == request.auth.uid);
+    }
+
+    function isValidComment(data) {
+      return data.keys().hasAll(['id', 'userId', 'postId', 'comment', 'createdAt'])
+        && (data.userId == request.auth.uid || isSeedUser(data.userId))
+        && data.postId is string && data.postId.size() <= 100
+        && data.comment is string && data.comment.size() > 0 && data.comment.size() <= 5000
+        && (!data.keys().hasAny(['updatedAt']) || data.updatedAt is string);
+    }
+
+    // --- Withdrawals Collection ---
+    match /withdrawals/{withdrawalId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && !isBlocked() && incoming().userId == request.auth.uid && isValidWithdrawal(incoming());
+      allow update: if isAdmin() && isValidWithdrawal(incoming());
+      allow delete: if isAdmin();
+    }
+
+    function isValidWithdrawal(data) {
+      return data.keys().hasAll(['id', 'userId', 'amountNpr', 'paymentMethod', 'details', 'status', 'createdAt'])
+        && data.id is string
+        && (data.userId == request.auth.uid || isAdmin())
+        && data.amountNpr is number
+        && data.paymentMethod is string
+        && data.details is string
+        && (data.status == 'pending' || data.status == 'approved' || data.status == 'rejected')
+        && (!data.keys().hasAny(['remarks']) || data.remarks is string)
+        && data.createdAt is string;
+    }
+
+    // --- Followers Collection ---
+    match /followers/{followerId_followingId} {
+      allow read: if true;
+      allow create: if isSignedIn() && !isBlocked() && (incoming().followerId == request.auth.uid || isSeedUser(incoming().followerId)) && isValidFollower(incoming());
+      allow delete: if isSignedIn() && (existing().followerId == request.auth.uid || isAdmin());
+    }
+
+    function isValidFollower(data) {
+      return data.keys().hasAll(['followerId', 'followingId'])
+        && (data.followerId == request.auth.uid || isSeedUser(data.followerId))
+        && data.followingId is string && data.followingId.size() <= 100;
+    }
+
+    // --- Messages Collection ---
+    match /messages/{messageId} {
+      allow get: if isSignedIn() && !isBlocked() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && !isBlocked() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      allow create: if isSignedIn() && !isBlocked() && (incoming().senderId == request.auth.uid || isSeedUser(incoming().senderId)) && isValidMessage(incoming());
+      allow update: if isSignedIn() && !isBlocked() 
+                    && (existing().senderId == request.auth.uid || existing().receiverId == request.auth.uid)
+                    && (
+                      (request.auth.uid == existing().senderId)
+                      ||
+                      (
+                        incoming().senderId == existing().senderId && 
+                        incoming().receiverId == existing().receiverId && 
+                        incoming().message == existing().message
+                      )
+                    );
+      allow delete: if isSignedIn() && (existing().senderId == request.auth.uid || isAdmin());
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['id', 'senderId', 'receiverId', 'message', 'createdAt', 'read'])
+        && (data.senderId is string && data.senderId.size() <= 100)
+        && data.receiverId is string && data.receiverId.size() <= 100
+        && data.message is string && data.message.size() <= 10000
+        && data.read is bool
+        && (!('mediaUrl' in data) || (data.mediaUrl is string && data.mediaUrl.size() <= 3500000))
+        && (!('status' in data) || (data.status == 'sent' || data.status == 'delivered' || data.status == 'seen'))
+        && (!('updatedAt' in data) || data.updatedAt is string);
+    }
+
+    // --- Notifications Collection ---
+    match /notifications/{notifId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // --- Post Reports Collection ---
+    match /postReports/{reportId} {
+      allow read: if isSignedIn() && isAdmin();
+      allow create: if isSignedIn() && !isBlocked();
+      allow update: if isSignedIn() && isAdmin();
+      allow delete: if isSignedIn() && isAdmin();
+    }
+
+    // --- Ads Collection ---
+    match /ads/{adId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isAdmin();
+      allow update: if isSignedIn() && isAdmin();
+      allow delete: if isSignedIn() && isAdmin();
+    }
+  }
+}

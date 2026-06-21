@@ -1,0 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,700;0,900;1,400;1,700&family=Playfair+Display:ital,wght@0,700;0,900;1,700;1,900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", -apple-system, system-ui, sans-serif;
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-mono: "Fira Code", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Override body styles for the warm paper layout */
+body {
+  background-color: #F8F7F4;
+  color: #1A1A1A;
+  font-family: var(--font-sans);
+}
+
+/* Accent highlight and typographic classes */
+.hero-text {
+  font-size: clamp(2.5rem, 6vw, 5.5rem);
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+  font-weight: 900;
+}
+
+.serif-italic {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 700;
+}
+
+.sidebar-border {
+  border-right: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.card-shadow {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+}
+
+.nav-active {
+  font-weight: 900 !important;
+  border-left: 3px solid #1A1A1A;
+  padding-left: 12px;
+}
+
+/* Custom scrollbars and hidden layouts */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-hover:hover {
+  animation: spin-slow 2s linear infinite;
+}

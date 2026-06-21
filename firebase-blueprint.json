@@ -1,0 +1,128 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile registered on the platform",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "bio": { "type": "string" },
+        "profileImage": { "type": "string" },
+        "coverImage": { "type": "string" },
+        "location": { "type": "string" },
+        "interests": {
+          "type": "array",
+          "description": "Selected interest categories"
+        },
+        "socialLinks": {
+          "type": "object",
+          "description": "Social media links"
+        },
+        "savedPosts": {
+          "type": "array",
+          "description": "List of post IDs bookmarked by the user"
+        },
+        "createdAt": { "type": "string" },
+        "hasSetupAccount": {
+          "type": "boolean",
+          "description": "Indicates whether the user completed profile onboarding setup"
+        }
+      },
+      "required": ["id", "name", "email", "createdAt"]
+    },
+    "Post": {
+      "title": "Post",
+      "description": "A blog post written by a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "mediaUrl": { "type": "string" },
+        "category": { "type": "string" },
+        "tags": { "type": "array" },
+        "status": { "type": "string", "enum": ["draft", "published"] },
+        "createdAt": { "type": "string" },
+        "readingTime": { "type": "number" }
+      },
+      "required": ["id", "userId", "title", "content", "category", "status", "createdAt"]
+    },
+    "Like": {
+      "title": "Like",
+      "description": "Indicates a post has been liked by a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "postId": { "type": "string" }
+      },
+      "required": ["userId", "postId"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A reply or comment on a post",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "postId": { "type": "string" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "postId", "comment", "createdAt"]
+    },
+    "Follower": {
+      "title": "Follower",
+      "description": "A follow connection between two users",
+      "type": "object",
+      "properties": {
+        "followerId": { "type": "string" },
+        "followingId": { "type": "string" }
+      },
+      "required": ["followerId", "followingId"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Direct message chat element between two users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderId": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "message": { "type": "string" },
+        "mediaUrl": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "read": { "type": "boolean" }
+      },
+      "required": ["id", "senderId", "receiverId", "message", "createdAt", "read"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Registered user profile collection"
+    },
+    "/posts/{postId}": {
+      "schema": "Post",
+      "description": "Public and draft blog posts"
+    },
+    "/likes/{likeId}": {
+      "schema": "Like",
+      "description": "Likes mapping index"
+    },
+    "/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Blog post comments"
+    },
+    "/followers/{followerId_followingId}": {
+      "schema": "Follower",
+      "description": "Follower and following pairs"
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Direct chat message items"
+    }
+  }
+}
