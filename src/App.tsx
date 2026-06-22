@@ -53,7 +53,7 @@ function AppContent() {
           </div>
           <h2 className="text-xl font-extrabold text-zinc-900 uppercase tracking-tight">Access Prohibited</h2>
           <p className="text-zinc-500 text-xs mt-3 leading-relaxed">
-            This Nexus profile (<span className="font-mono text-zinc-800 font-bold">{currentUser.email}</span>) has been blocked by administrators for community safety and code of conduct compliance.
+            This FreshLink profile (<span className="font-mono text-zinc-800 font-bold">{currentUser.email}</span>) has been blocked by administrators for community safety and code of conduct compliance.
           </p>
           <div className="bg-red-50 text-red-650 text-[10px] font-mono leading-relaxed p-4 rounded-xl mt-5 w-full text-left">
             <span>MODERATION INFRACTION: Writing, messaging, commenting and viewing access has been restricted.</span>
@@ -108,11 +108,11 @@ function AppContent() {
       {/* Mobile Top Header */}
       <header className="md:hidden bg-white border-b border-black/10 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-black flex items-center justify-center text-white font-black text-lg">
-            N
+          <div className="w-8 h-8 bg-black flex items-center justify-center text-white font-black text-lg rounded-lg">
+            FL
           </div>
           <span className="font-sans font-black text-xl tracking-tighter text-black">
-            NEXUS<span className="serif-italic font-normal text-orange-600">.</span>
+            FRESHLINK<span className="serif-italic font-normal text-orange-600">.</span>
           </span>
         </div>
 

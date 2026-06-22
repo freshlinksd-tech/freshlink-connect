@@ -1,6 +1,6 @@
 {
-  "name": "Social Blogging Platform",
-  "description": "A feature-rich social blogging and networking platform with interest pairing, feed algorithms, interactive chat, follows, and blog creation.",
+  "name": "FreshLink Connect",
+  "description": "A feature-rich social blogging and networking platform under the FreshLink Connect (frshlink) brand, with interest pairing, feed algorithms, interactive chat, follows, and blog creation.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

@@ -129,13 +129,13 @@ export const LandingPage: React.FC = () => {
         {/* Header Branding */}
         <div className="z-10 flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-orange-600 text-white flex items-center justify-center font-black text-xl rounded-2xl shadow-lg shadow-orange-600/20">
-            N
+            FL
           </div>
           <div>
             <span className="font-sans font-black text-2xl tracking-tighter text-white uppercase">
-              NEXUS<span className="font-normal text-orange-500">.</span>
+              FRESHLINK<span className="font-normal text-orange-500">.</span>
             </span>
-            <p className="text-[9px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Interest-driven blogging network</p>
+            <p className="text-[9px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Interest-driven connection & blogging</p>
           </div>
         </div>
 
@@ -153,7 +153,7 @@ export const LandingPage: React.FC = () => {
           </h1>
 
           <p className="text-zinc-400 font-sans text-sm md:text-base leading-relaxed font-normal">
-            Nexus coordinates content recommendations by analyzing tag categorization, chosen categories, and your personal interests. Build followers, chat seamlessly, and earn dynamic badges for platform milestone achievements.
+            FreshLink Connect (frshlink) coordinates content recommendations by analyzing tag categorization, chosen categories, and your personal interests. Build followers, chat seamlessly, and earn dynamic badges for platform milestone achievements.
           </p>
 
           {/* Real benefits grid */}
@@ -193,8 +193,8 @@ export const LandingPage: React.FC = () => {
         </div>
 
         {/* Aesthetic footer */}
-        <div className="z-10 flex flex-wrap gap-4 items-center text-[10px] font-mono uppercase tracking-wider text-zinc-600 pt-16 lg:pt-0">
-          <span>© {new Date().getFullYear()} NEXUS NETWORKS</span>
+        <div className="z-10 flex flex-wrap gap-4 items-center text-[10px] font-mono uppercase tracking-wider text-zinc-650 pt-16 lg:pt-0">
+          <span>© {new Date().getFullYear()} FRESHLINK CONNECT</span>
           <span>•</span>
           <span>SECURED CLOUD ENGINE INSTANT LOCK</span>
         </div>
@@ -233,7 +233,7 @@ export const LandingPage: React.FC = () => {
             <form onSubmit={handleSignupSubmit} className="space-y-4" id="land-signup-form">
               <div>
                 <h2 className="font-sans font-black text-xl uppercase tracking-tighter text-zinc-900 leading-tight">Create a Creator Profile</h2>
-                <p className="text-zinc-400 text-[10px] mt-0.5 leading-snug">Become part of the Nexus interests feed network.</p>
+                <p className="text-zinc-400 text-[10px] mt-0.5 leading-snug">Become part of the FreshLink Connect interests feed network.</p>
               </div>
               
               {signupError && (

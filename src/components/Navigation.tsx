@@ -63,13 +63,13 @@ export const Navigation: React.FC<NavigationProps> = ({
         <div className="flex flex-col gap-1" id="brand-logo">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-orange-600 flex items-center justify-center text-white font-extrabold text-sm shadow-md shadow-orange-500/20">
-              N
+              FL
             </div>
             <span className="font-sans font-black text-xl tracking-tight text-zinc-900">
-              NEXUS<span className="font-normal text-orange-600">.</span>
+              FRESHLINK<span className="font-normal text-orange-600">.</span>
             </span>
           </div>
-          <p className="text-[10px] uppercase tracking-widest text-zinc-400 font-semibold">Social Blogging</p>
+          <p className="text-[10px] uppercase tracking-widest text-zinc-400 font-semibold">Connect & Publish</p>
         </div>
         <div className="text-[9px] bg-orange-100/60 text-orange-700 font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">
           MVP 1.0

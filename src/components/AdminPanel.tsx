@@ -320,7 +320,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
           <div className="flex items-center gap-2 flex-wrap mb-3">
             <div className="inline-flex items-center gap-2 bg-zinc-900 px-3.5 py-1 text-[10px] font-sans font-bold uppercase tracking-widest text-white rounded-full">
               <ShieldCheck className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
-              <span>NEXUS CONTROL CORE</span>
+              <span>FRESHLINK CONTROL CORE</span>
             </div>
             {isSuperAdmin ? (
               <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 border border-amber-200 px-3 py-1 text-[10px] font-sans font-extrabold uppercase tracking-wide rounded-full">
@@ -1267,7 +1267,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                   required
                   value={adTitle}
                   onChange={(e) => setAdTitle(e.target.value)}
-                  placeholder="e.g. Nexus Premium Creators Club"
+                  placeholder="e.g. FreshLink Premium Creators Club"
                   className="w-full px-4 py-2.5 rounded-xl bg-zinc-50 border border-zinc-150 focus:bg-white text-xs font-bold text-zinc-800 outline-none"
                 />
               </div>

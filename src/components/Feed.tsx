@@ -252,10 +252,10 @@ export const Feed: React.FC<FeedProps> = ({
 
   const startEditingPost = (post: Post) => {
     setEditingPost(post);
-    setEditPostTitle(post.title);
-    setEditPostContent(post.content);
-    setEditPostCategory(post.category);
-    setEditPostTagsText(post.tags.join(', '));
+    setEditPostTitle(post.title || '');
+    setEditPostContent(post.content || '');
+    setEditPostCategory(post.category || '');
+    setEditPostTagsText(post.tags ? post.tags.join(', ') : '');
     setEditPostMediaUrl(post.mediaUrl || '');
     setEditUseLocalUpload(!!post.mediaUrl && !post.mediaUrl.includes('unsplash.com'));
     setEditUploadError('');

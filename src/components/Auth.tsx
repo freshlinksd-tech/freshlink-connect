@@ -127,7 +127,7 @@ export const Auth: React.FC<AuthProps> = ({ onClose }) => {
         {/* Header decoration banner */}
         <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 p-8 text-white text-center select-none relative">
           <div className="absolute top-6 left-6">
-            <span className="text-[10px] font-mono tracking-widest text-[#F1F5F9]/40 uppercase font-black">NEXUS CONNECT</span>
+            <span className="text-[10px] font-mono tracking-widest text-[#F1F5F9]/40 uppercase font-black">FRESHLINK CONNECT</span>
           </div>
           <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/10">
             <Compass className="w-6 h-6 text-orange-500 animate-spin-slow" />

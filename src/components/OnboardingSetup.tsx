@@ -20,7 +20,11 @@ import {
   Dumbbell, 
   Camera, 
   Utensils,
-  Upload
+  Upload,
+  Phone,
+  CreditCard,
+  ShieldCheck,
+  CheckCircle2
 } from 'lucide-react';
 
 const AVATAR_PRESETS = [
@@ -57,6 +61,34 @@ export const OnboardingSetup: React.FC = () => {
   
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [phoneNumber, setPhoneNumber] = useState(currentUser.phoneNumber || '');
+  const [docType, setDocType] = useState<'pan' | 'docId'>('pan');
+  const [docValue, setDocValue] = useState(currentUser.panNumber || currentUser.officialDocId || '');
+  const [idPhoto, setIdPhoto] = useState(currentUser.idPhoto || '');
+  const [idPhotoName, setIdPhotoName] = useState('');
+  const idFileInputRef = useRef<HTMLInputElement>(null);
+  const [isIdDragging, setIsIdDragging] = useState(false);
+
+  const handleIdPhotoRead = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setError('Please select/drop a valid ID document image file.');
+      return;
+    }
+    if (file.size > 1.5 * 1024 * 1024) {
+      setError('ID photo file size is too large. Image upload is capped at 1.5MB.');
+      return;
+    }
+    setError('');
+    setIdPhotoName(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (typeof e.target?.result === 'string') {
+        setIdPhoto(e.target.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleFileRead = (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -131,14 +163,40 @@ export const OnboardingSetup: React.FC = () => {
       return;
     }
 
+    const parsedPhone = phoneNumber.replace(/\D/g, '');
+    if (!phoneNumber.trim() || parsedPhone.length < 10) {
+      setError('Please enter a valid phone number (at least 10 digits) for identity verification.');
+      return;
+    }
+
+    if (!docValue.trim()) {
+      setError(
+        docType === 'pan'
+          ? 'PAN card number is required for identity verification.'
+          : 'Official Document identification number is required for identity verification.'
+      );
+      return;
+    }
+
+    if (!idPhoto) {
+      setError('A photo of your physical ID document is required for identity verification.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await updateProfile({
         name,
-        bio: bio.trim() || 'A creator exploring the Nexus interest platform.',
+        bio: bio.trim() || 'A creator exploring the FreshLink connection platform.',
         location: location.trim() || 'Earth',
         interests: selectedInterests,
         profileImage,
+        phoneNumber: phoneNumber.trim(),
+        panNumber: docType === 'pan' ? docValue.trim().toUpperCase() : '',
+        officialDocId: docType === 'docId' ? docValue.trim() : '',
+        idPhoto: idPhoto,
+        hasVerifiedDetails: true,
+        isApprovedByAdmin: false, // defaults to false, waiting for admin approval
         hasSetupAccount: true
       });
     } catch (err) {
@@ -166,7 +224,7 @@ export const OnboardingSetup: React.FC = () => {
             Finish Setting Up Your Account
           </h2>
           <p className="text-zinc-400 text-xs tracking-wide">
-            Your interest-first journey in the Nexus begins here
+            Your interest-first journey on FreshLink begins here
           </p>
         </div>
 
@@ -221,7 +279,7 @@ export const OnboardingSetup: React.FC = () => {
                 id="onboard-bio-input"
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
-                placeholder="Software dev, hiker, coffee drinker. Share your coordinates, vibes, and articles on the Nexus."
+                 placeholder="Software dev, hiker, coffee drinker. Share your vibes and articles on FreshLink."
                 className="w-full h-full min-h-[96px] md:min-h-0 md:flex-1 p-3.5 rounded-xl border border-zinc-200 text-xs bg-zinc-50 focus:border-orange-500 focus:outline-none focus:bg-white focus:ring-4 focus:ring-orange-500/10 transition-all text-zinc-950 resize-none leading-relaxed"
                 maxLength={400}
               />
@@ -360,6 +418,140 @@ export const OnboardingSetup: React.FC = () => {
             </div>
           </div>
 
+          {/* Identity Verification Section */}
+          <div className="space-y-4 pt-4 border-t border-zinc-100">
+            <div>
+              <label className="text-xs font-bold text-zinc-950 block uppercase tracking-wider flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-orange-500" />
+                <span>Identity Verification & Security clearance <span className="text-orange-500">*</span></span>
+              </label>
+              <p className="text-zinc-500 text-xs mt-0.5">
+                FreshLink requires identity registration to authorize article publishing and unlock Creator Partner Program monetization.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Contact phone number */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500 block">
+                  Contact Phone Number
+                </label>
+                <div className="relative">
+                  <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                  <input
+                    type="tel"
+                    required
+                    id="verify-phone-onboard"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    placeholder="e.g. +91 98765 43210"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-semibold bg-zinc-50 focus:border-orange-500 focus:outline-none focus:bg-white focus:ring-4 focus:ring-orange-500/10 transition-all text-zinc-900"
+                  />
+                </div>
+              </div>
+
+              {/* ID Identification Number */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500 block">
+                  {docType === 'pan' ? 'PAN Card Identification' : 'Official ID Identification'}
+                </label>
+                <div className="relative">
+                  <CreditCard className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                  <input
+                    type="text"
+                    required
+                    id="verify-doc-onboard"
+                    value={docValue}
+                    onChange={(e) => setDocValue(e.target.value)}
+                    placeholder={docType === 'pan' ? 'ABCDE1234F' : 'Passport/ID Card Number'}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-semibold bg-zinc-50 focus:border-orange-500 focus:outline-none focus:bg-white focus:ring-4 focus:ring-orange-500/10 transition-all text-zinc-900 uppercase"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Document Selection buttons & Upload area */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500 block">
+                  Select Document Type
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setDocType('pan'); }}
+                    className={`flex-1 py-2 text-center text-xs font-bold rounded-xl transition-all border ${
+                      docType === 'pan'
+                        ? 'bg-orange-600 border-orange-600 text-white font-extrabold shadow-sm'
+                        : 'bg-zinc-55 border-zinc-200 text-zinc-550 hover:bg-zinc-100'
+                    }`}
+                  >
+                    PAN Card
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setDocType('docId'); }}
+                    className={`flex-1 py-2 text-center text-xs font-bold rounded-xl transition-all border ${
+                      docType === 'docId'
+                        ? 'bg-orange-600 border-orange-600 text-white font-extrabold shadow-sm'
+                        : 'bg-zinc-55 border-zinc-200 text-zinc-550 hover:bg-zinc-100'
+                    }`}
+                  >
+                    Official ID Card
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500 block">
+                  Physical ID Document Image File
+                </span>
+
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setIsIdDragging(true); }}
+                  onDragLeave={() => setIsIdDragging(false)}
+                  onDrop={(e) => { e.preventDefault(); setIsIdDragging(false); const file = e.dataTransfer.files?.[0]; if (file) handleIdPhotoRead(file); }}
+                  onClick={() => idFileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-xl p-3.5 text-center cursor-pointer transition-all ${
+                    isIdDragging 
+                      ? 'border-orange-500 bg-orange-50/40' 
+                      : idPhoto 
+                        ? 'border-emerald-500 bg-emerald-50/10' 
+                        : 'border-zinc-200 hover:border-orange-450 bg-zinc-50'
+                  }`}
+                >
+                  <input
+                    type="file"
+                    ref={idFileInputRef}
+                    onChange={(e) => { const file = e.target.files?.[0]; if (file) handleIdPhotoRead(file); }}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                  {idPhoto ? (
+                    <div className="flex items-center gap-2 text-emerald-600 justify-center">
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <span className="text-xs font-bold truncate max-w-[180px]">Attached: {idPhotoName || 'id_document.png'}</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center">
+                      <Upload className="w-4.5 h-4.5 text-zinc-400 mb-1" />
+                      <p className="text-[11px] font-bold text-zinc-755">Drag & Drop of physical ID card, or select</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {idPhoto && (
+              <div className="bg-zinc-50 p-2 border border-zinc-150 rounded-xl max-w-xs">
+                <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest block mb-1">ID File Attachment Preview</span>
+                <div className="h-20 overflow-hidden rounded-lg border border-zinc-200">
+                  <img src={idPhoto} alt="Govt ID preview" className="w-full h-full object-cover" />
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Heavy high contrast action button */}
           <button
             type="submit"
@@ -372,7 +564,7 @@ export const OnboardingSetup: React.FC = () => {
             ) : (
               <>
                 <BookOpen className="w-4 h-4 shrink-0" />
-                <span>Assemble Profile & Discover Nexus</span>
+                 <span>Assemble Profile & Discover FreshLink</span>
               </>
             )}
           </button>

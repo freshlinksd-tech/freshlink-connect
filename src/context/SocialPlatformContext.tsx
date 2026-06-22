@@ -136,7 +136,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       authUnsub = onAuthStateChanged(auth, async (user) => {
         if (user) {
           setCurrentUserId(user.uid);
-          localStorage.setItem('nexus_current_user_id', user.uid);
+          localStorage.setItem('freshlink_current_user_id', user.uid);
 
           // Guarantee user document exists in Firestore
           try {
@@ -149,8 +149,8 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
               const defaultUser: User = {
                 id: user.uid,
                 name: isRootAdmin ? 'Super Admin' : (user.displayName || `Writer ${user.uid.slice(0, 5)}`),
-                email: isRootAdmin ? 'fresh.linksd@gmail.com' : (user.email || `${user.uid}@nexus.com`),
-                bio: isRootAdmin ? 'Root Developer & Primary System clearing administrator.' : 'A creator exploring the Nexus interest platform.',
+                email: isRootAdmin ? 'fresh.linksd@gmail.com' : (user.email || `${user.uid}@freshlinkconnect.info`),
+                bio: isRootAdmin ? 'Root Developer & Primary System clearing administrator.' : 'A creator exploring the FreshLink connection platform.',
                 profileImage: user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&h=250&q=80',
                 coverImage: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=1200&q=80',
                 location: isRootAdmin ? 'HQ' : 'Earth',
@@ -260,13 +260,18 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       handleFirestoreError(error, OperationType.GET, 'followers');
     });
 
-    const unsubWithdrawals = onSnapshot(collection(db, 'withdrawals'), (snap) => {
-      const list: WithdrawalRequest[] = [];
-      snap.forEach((d) => list.push(d.data() as WithdrawalRequest));
-      setWithdrawals(list);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'withdrawals');
-    });
+    let unsubWithdrawals = () => {};
+    if (currentUserId) {
+      unsubWithdrawals = onSnapshot(collection(db, 'withdrawals'), (snap) => {
+        const list: WithdrawalRequest[] = [];
+        snap.forEach((d) => list.push(d.data() as WithdrawalRequest));
+        setWithdrawals(list);
+      }, (error) => {
+        handleFirestoreError(error, OperationType.GET, 'withdrawals');
+      });
+    } else {
+      setWithdrawals([]);
+    }
 
     let unsubNotifications = () => {};
     if (currentUserId) {

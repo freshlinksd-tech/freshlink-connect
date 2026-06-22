@@ -136,7 +136,7 @@ export const VerificationSetup: React.FC = () => {
           </p>
 
           <p className="text-zinc-500 text-xs mt-4 leading-relaxed font-medium">
-            Thank you for uploading your details. The Nexus administrative panel has received your government ID document file and verification request. Your account is currently in queue for review. 
+            Thank you for uploading your details. The FreshLink administrative panel has received your government ID document file and verification request. Your account is currently in queue for review. 
             <strong className="block mt-2 text-zinc-700">Verification will be processed in 3-4 hours by the Administrator. Only the administrator can verify and approve.</strong>
           </p>
 
@@ -197,7 +197,7 @@ export const VerificationSetup: React.FC = () => {
             Security Clearance Request
           </h2>
           <p className="text-zinc-400 text-[11px] mt-1 font-medium max-w-xs mx-auto leading-relaxed">
-            Nexus requires a verified contact number, tax document identity, and photo ID upload to authorize publishing access.
+            FreshLink requires a verified contact number, tax document identity, and photo ID upload to authorize publishing access.
           </p>
         </div>
 

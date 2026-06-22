@@ -165,7 +165,7 @@ export const MonetizationPanel: React.FC = () => {
         <div className="relative max-w-5xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6 text-left">
           <div>
             <div className="text-[10px] font-black uppercase tracking-widest bg-white/20 inline-block px-3 py-1 rounded-full mb-3 border border-white/10">
-              NEXUS CREATOR PARTNER PROGRAM
+              FRESHLINK CREATOR PARTNER PROGRAM
             </div>
             <h1 className="font-sans font-black text-3xl md:text-4xl tracking-tighter uppercase leading-none">
               Monetization Hub
@@ -235,7 +235,7 @@ export const MonetizationPanel: React.FC = () => {
               <div className="flex justify-between items-start">
                 <div>
                   <h4 className="text-xs font-black uppercase text-zinc-800 tracking-wide">1. Post Volume</h4>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">Publish at least 5 articles on Nexus</p>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">Publish at least 5 articles on FreshLink</p>
                 </div>
                 {hasMetPosts ? (
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />

@@ -242,10 +242,10 @@ export const Profiles: React.FC<ProfilesProps> = ({
 
   const startEditingPost = (post: Post) => {
     setEditingPost(post);
-    setEditPostTitle(post.title);
-    setEditPostContent(post.content);
-    setEditPostCategory(post.category);
-    setEditPostTagsText(post.tags.join(', '));
+    setEditPostTitle(post.title || '');
+    setEditPostContent(post.content || '');
+    setEditPostCategory(post.category || '');
+    setEditPostTagsText(post.tags ? post.tags.join(', ') : '');
     setEditPostMediaUrl(post.mediaUrl || '');
     setEditUseLocalUpload(!!post.mediaUrl && !post.mediaUrl.includes('unsplash.com'));
     setEditUploadError('');
@@ -288,10 +288,10 @@ export const Profiles: React.FC<ProfilesProps> = ({
   // Initialize edit fields
   const handleStartEditing = () => {
     if (!activeProfile) return;
-    setEditName(activeProfile.name);
-    setEditBio(activeProfile.bio);
+    setEditName(activeProfile.name || '');
+    setEditBio(activeProfile.bio || '');
     setEditLocation(activeProfile.location || '');
-    setEditProfileImage(activeProfile.profileImage);
+    setEditProfileImage(activeProfile.profileImage || '');
     setEditCoverImage(activeProfile.coverImage || '');
     setEditTwitter(activeProfile.socialLinks?.twitter || '');
     setEditGithub(activeProfile.socialLinks?.github || '');
