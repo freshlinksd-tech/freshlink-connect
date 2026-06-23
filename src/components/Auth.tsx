@@ -3,10 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useSocialPlatform } from '../context/SocialPlatformContext';
 import { INTEREST_OPTIONS } from '../data/seedData';
-import { Check, Mail, User, Shield, AlertCircle, Compass, X, Phone, CreditCard } from 'lucide-react';
+import { FreshLinkLogo } from './FreshLinkLogo';
+import { motion } from 'motion/react';
+import { Check, Mail, User, Shield, AlertCircle, Compass, X, Phone, CreditCard, Upload } from 'lucide-react';
 
 interface AuthProps {
   onClose: () => void;
@@ -31,6 +33,12 @@ export const Auth: React.FC<AuthProps> = ({ onClose }) => {
   const [docType, setDocType] = useState<'pan' | 'docId'>('pan');
   const [docValue, setDocValue] = useState('');
 
+  // Document photo upload inputs for Auth signup
+  const [idPhoto, setIdPhoto] = useState('');
+  const [idPhotoName, setIdPhotoName] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRefForAuthSignup = useRef<HTMLInputElement>(null);
+
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
@@ -45,6 +53,46 @@ export const Auth: React.FC<AuthProps> = ({ onClose }) => {
       }
     } catch (err: any) {
       setLoginError(err?.message || 'Access prohibited.');
+    }
+  };
+
+  const handleFileChangeForAuth = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setSignupError('Please upload a valid image file (PNG, JPG, or JPEG) for your ID photo.');
+      return;
+    }
+
+    if (file.size > 1.5 * 1024 * 1024) {
+      setSignupError('ID photo file size is too large. Image upload is capped at 1.5MB.');
+      return;
+    }
+
+    setSignupError('');
+    setIdPhotoName(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (typeof e.target?.result === 'string') {
+        setIdPhoto(e.target.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const onDragOverForAuth = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const onDragLeaveForAuth = () => {
+    setIsDragging(false);
+  };
+
+  const onDropForAuth = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleFileChangeForAuth(file);
     }
   };
 
@@ -83,6 +131,11 @@ export const Auth: React.FC<AuthProps> = ({ onClose }) => {
       return;
     }
 
+    if (!idPhoto) {
+      setSignupError('Identity Document upload is mandatory. Please select or drag-and-drop your physical ID photo.');
+      return;
+    }
+
     const regLocked = localStorage.getItem('nexus_registration_locked') === 'true';
     if (regLocked) {
       setSignupError('Policy Restriction: New public registrations are locked by system administrators.');
@@ -93,7 +146,9 @@ export const Auth: React.FC<AuthProps> = ({ onClose }) => {
       phoneNumber: phoneNumber.trim(),
       panNumber: docType === 'pan' ? docValue.trim().toUpperCase() : '',
       officialDocId: docType === 'docId' ? docValue.trim() : '',
-      hasVerifiedDetails: true
+      idPhoto: idPhoto,
+      hasVerifiedDetails: true,
+      isApprovedByAdmin: false
     };
 
     await register(name, signupEmail, selectedInterests, extraDetails);
@@ -125,15 +180,15 @@ export const Auth: React.FC<AuthProps> = ({ onClose }) => {
         </button>
 
         {/* Header decoration banner */}
-        <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 p-8 text-white text-center select-none relative">
+        <div className="bg-gradient-to-br from-zinc-950 to-zinc-900 p-8 text-white text-center select-none relative">
           <div className="absolute top-6 left-6">
             <span className="text-[10px] font-mono tracking-widest text-[#F1F5F9]/40 uppercase font-black">FRESHLINK CONNECT</span>
           </div>
-          <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/10">
-            <Compass className="w-6 h-6 text-orange-500 animate-spin-slow" />
+          <div className="flex items-center justify-center mx-auto mb-3">
+            <FreshLinkLogo className="w-12 h-12 shadow-md shadow-orange-600/20" />
           </div>
           <h2 className="font-sans font-black text-2xl uppercase tracking-tighter">
-            Access The Network
+            Access FRESHLINK CONNECT
           </h2>
           <p className="text-zinc-400 text-xs mt-1 font-medium max-w-xs mx-auto leading-relaxed">
             Connect and discover articles across shared interest horizons.
@@ -266,6 +321,58 @@ export const Auth: React.FC<AuthProps> = ({ onClose }) => {
                     placeholder={docType === 'pan' ? 'e.g. ABCDE1234F' : 'e.g. Passport/National ID No.'}
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-150 focus:border-orange-500 bg-white text-xs font-semibold text-zinc-805 outline-none transition-all uppercase"
                   />
+                </div>
+              </div>
+
+              {/* Secure Physical ID Document Upload */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">
+                  Upload Physical ID Photo <span className="text-orange-500 font-bold">*</span>
+                </label>
+                <div 
+                  onDragOver={onDragOverForAuth}
+                  onDragLeave={onDragLeaveForAuth}
+                  onDrop={onDropForAuth}
+                  onClick={() => fileInputRefForAuthSignup.current?.click()}
+                  className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-all ${
+                    isDragging 
+                      ? 'border-orange-500 bg-orange-50/40' 
+                      : idPhoto 
+                        ? 'border-emerald-500/40 bg-emerald-50/10' 
+                        : 'border-zinc-200 hover:border-orange-400 bg-zinc-50/50'
+                  }`}
+                >
+                  <input 
+                    type="file" 
+                    ref={fileInputRefForAuthSignup}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileChangeForAuth(file);
+                    }}
+                    accept="image/*"
+                    className="hidden" 
+                  />
+                  {idPhoto ? (
+                    <div className="flex flex-col items-center">
+                      <div className="w-full h-24 overflow-hidden rounded-lg mb-1.5 relative">
+                        <img src={idPhoto} alt="Verification ID preview" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                          <span className="text-[9px] text-white font-bold bg-black/60 px-2 py-0.5 rounded">
+                            Tap to reset
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-[9.5px] text-emerald-600 font-bold max-w-full truncate">
+                        ✓ Attached: {idPhotoName || 'identity_doc.png'}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center py-1">
+                      <Upload className="w-6 h-6 text-zinc-400 mb-1" />
+                      <p className="text-[10px] font-bold text-zinc-700">Drag ID photo or click to browse</p>
+                      <p className="text-[8px] text-zinc-400 font-semibold mt-0.5">PNG, JPG (Max 1.5MB)</p>
+                    </div>
+                  )}
                 </div>
               </div>
 

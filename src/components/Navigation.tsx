@@ -5,6 +5,8 @@
 
 import React from 'react';
 import { useSocialPlatform } from '../context/SocialPlatformContext';
+import { FreshLinkLogo } from './FreshLinkLogo';
+import { motion } from 'motion/react';
 import { 
   Compass, 
   PlusCircle, 
@@ -59,20 +61,15 @@ export const Navigation: React.FC<NavigationProps> = ({
   return (
     <aside className="w-64 bg-white border-r border-zinc-100 flex flex-col h-screen sticky top-0 shrink-0 select-none">
       {/* Platform Branding */}
-      <div className="p-6 border-b border-zinc-100 flex items-center justify-between">
+      <div className="p-5 border-b border-zinc-100 flex items-center justify-between">
         <div className="flex flex-col gap-1" id="brand-logo">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-orange-600 flex items-center justify-center text-white font-extrabold text-sm shadow-md shadow-orange-500/20">
-              FL
-            </div>
-            <span className="font-sans font-black text-xl tracking-tight text-zinc-900">
-              FRESHLINK<span className="font-normal text-orange-600">.</span>
+            <FreshLinkLogo className="w-8 h-8" />
+            <span className="font-sans font-black text-base tracking-tighter text-zinc-900">
+              FRESHLINK CONNECT
             </span>
           </div>
-          <p className="text-[10px] uppercase tracking-widest text-zinc-400 font-semibold">Connect & Publish</p>
-        </div>
-        <div className="text-[9px] bg-orange-100/60 text-orange-700 font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">
-          MVP 1.0
+          <p className="text-[10px] uppercase tracking-widest text-zinc-405 text-zinc-400 font-semibold">Connect & Publish</p>
         </div>
       </div>
 
@@ -83,11 +80,13 @@ export const Navigation: React.FC<NavigationProps> = ({
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
-              <button
+              <motion.button
                 key={item.id}
                 id={`nav-tab-${item.id}`}
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center justify-between px-4 py-3 font-sans text-xs font-semibold rounded-xl transition-all ${
+                whileTap={{ scale: 0.96 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+                className={`w-full flex items-center justify-between px-4 py-3 font-sans text-xs font-semibold rounded-xl transition-all cursor-pointer ${
                   isActive
                     ? 'bg-orange-500/10 text-orange-600 shadow-sm shadow-orange-500/5'
                     : 'text-zinc-650 hover:text-zinc-900 hover:bg-zinc-50'
@@ -102,16 +101,18 @@ export const Navigation: React.FC<NavigationProps> = ({
                     {unreadCount}
                   </span>
                 )}
-              </button>
+              </motion.button>
             );
           })}
 
           {/* Profile Navigation Shortcut */}
           {currentUser && (
-            <button
+            <motion.button
               id="nav-tab-profile"
               onClick={handleProfileClick}
-              className={`w-full flex items-center gap-3 px-4 py-3 font-sans text-xs font-semibold rounded-xl transition-all ${
+              whileTap={{ scale: 0.96 }}
+              transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+              className={`w-full flex items-center gap-3 px-4 py-3 font-sans text-xs font-semibold rounded-xl transition-all cursor-pointer ${
                 activeTab === 'profile'
                   ? 'bg-orange-500/10 text-orange-600 shadow-sm shadow-orange-500/5'
                   : 'text-zinc-650 hover:text-zinc-900 hover:bg-zinc-50'
@@ -119,7 +120,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             >
               <User className={`w-4 h-4 ${activeTab === 'profile' ? 'text-orange-600' : 'text-zinc-400'}`} />
               My Profile
-            </button>
+            </motion.button>
           )}
         </div>
       </nav>

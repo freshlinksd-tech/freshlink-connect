@@ -8,6 +8,8 @@ import { SocialPlatformProvider, useSocialPlatform } from './context/SocialPlatf
 import { Navigation } from './components/Navigation';
 import { Auth } from './components/Auth';
 import { Feed } from './components/Feed';
+import { FreshLinkLogo } from './components/FreshLinkLogo';
+import { motion } from 'motion/react';
 import { CreatePost } from './components/CreatePost';
 import { Chat } from './components/Chat';
 import { Profiles } from './components/Profiles';
@@ -108,11 +110,9 @@ function AppContent() {
       {/* Mobile Top Header */}
       <header className="md:hidden bg-white border-b border-black/10 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-black flex items-center justify-center text-white font-black text-lg rounded-lg">
-            FL
-          </div>
-          <span className="font-sans font-black text-xl tracking-tighter text-black">
-            FRESHLINK<span className="serif-italic font-normal text-orange-600">.</span>
+          <FreshLinkLogo className="w-8 h-8" />
+          <span className="font-sans font-black text-xl tracking-tighter text-black uppercase">
+            FRESHLINK CONNECT
           </span>
         </div>
 
@@ -242,7 +242,13 @@ function AppContent() {
       {/* Main Screen Content Stage */}
       <main className="flex-1 min-w-0" id="main-canvas-stage">
         {/* Screen Routing logic */}
-        <div className="h-full">
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          className="h-full"
+        >
           {(() => {
             switch (activeTab) {
               case 'feed':
@@ -301,7 +307,7 @@ function AppContent() {
                 return <Feed onSelectUser={handleSelectUser} onNavigateToChat={handleNavigateToChat} activeCategoryFilter="all" setActiveCategoryFilter={setActiveCategoryFilter} />;
             }
           })()}
-        </div>
+        </motion.div>
       </main>
 
       {/* Unified Authentication Setup Portal */}
