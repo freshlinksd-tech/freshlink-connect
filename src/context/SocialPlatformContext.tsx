@@ -110,6 +110,7 @@ interface SocialPlatformContextType {
   deleteAd: (adId: string) => Promise<void>;
   trackAdClick: (adId: string) => Promise<void>;
   toggleAllAds: (active: boolean) => Promise<void>;
+  isQuotaFallbackMode: boolean;
 }
 
 const SocialPlatformContext = createContext<SocialPlatformContextType | undefined>(undefined);
@@ -129,6 +130,107 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   const [loading, setLoading] = useState(true);
   const [activeChatPartnerId, setActiveChatPartnerId] = useState<string | null>(null);
   const activeChatPartnerRef = useRef<string | null>(null);
+
+  const [isQuotaFallbackMode, setIsQuotaFallbackMode] = useState<boolean>(() => {
+    return localStorage.getItem('freshlink_quota_fallback') === 'true';
+  });
+
+  // Helper to load all stored local data or seed if empty
+  const triggerLocalQuotaFallback = () => {
+    localStorage.setItem('freshlink_quota_fallback', 'true');
+    setIsQuotaFallbackMode(true);
+
+    const getOrSeed = <T,>(key: string, seed: T[]): T[] => {
+      const stored = localStorage.getItem(`freshlink_loc_${key}`);
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch (e) {
+          console.error("Local storage fallback retrieve fail for key:", key, e);
+        }
+      }
+      return seed;
+    };
+
+    setUsers(getOrSeed('users', SEED_USERS));
+    setPosts(getOrSeed('posts', SEED_POSTS));
+    setFollowers(getOrSeed('followers', SEED_FOLLOWERS));
+    setComments(getOrSeed('comments', SEED_COMMENTS));
+    setMessages(getOrSeed('messages', SEED_MESSAGES));
+    setLikes(getOrSeed('likes', []));
+    setWithdrawals(getOrSeed('withdrawals', []));
+    setNotifications(getOrSeed('notifications', []));
+    setPostReports(getOrSeed('postReports', []));
+    setAds(getOrSeed('ads', []));
+    setLoading(false);
+  };
+
+  const saveLocalValue = <T,>(key: string, list: T[]) => {
+    localStorage.setItem(`freshlink_loc_${key}`, JSON.stringify(list));
+  };
+
+  const runWriteOperation = async (
+    firestoreCallback: () => Promise<void>,
+    localFallbackCallback: () => void,
+    pathInfo: string
+  ) => {
+    if (isQuotaFallbackMode) {
+      localFallbackCallback();
+      return;
+    }
+    try {
+      await firestoreCallback();
+    } catch (err: any) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg.includes('Quota limit') || errMsg.includes('quota') || errMsg.includes('exceeded') || errMsg.includes('resource-exhausted') || errMsg.includes('Resource exhausted')) {
+        triggerLocalQuotaFallback();
+        localFallbackCallback();
+      } else {
+        throw err;
+      }
+    }
+  };
+
+  // Automatic side-effect listeners to guarantee absolute state data integrity for offline sandbox testing
+  useEffect(() => {
+    if (isQuotaFallbackMode) saveLocalValue('users', users);
+  }, [users, isQuotaFallbackMode]);
+
+  useEffect(() => {
+    if (isQuotaFallbackMode) saveLocalValue('posts', posts);
+  }, [posts, isQuotaFallbackMode]);
+
+  useEffect(() => {
+    if (isQuotaFallbackMode) saveLocalValue('followers', followers);
+  }, [followers, isQuotaFallbackMode]);
+
+  useEffect(() => {
+    if (isQuotaFallbackMode) saveLocalValue('comments', comments);
+  }, [comments, isQuotaFallbackMode]);
+
+  useEffect(() => {
+    if (isQuotaFallbackMode) saveLocalValue('messages', messages);
+  }, [messages, isQuotaFallbackMode]);
+
+  useEffect(() => {
+    if (isQuotaFallbackMode) saveLocalValue('likes', likes);
+  }, [likes, isQuotaFallbackMode]);
+
+  useEffect(() => {
+    if (isQuotaFallbackMode) saveLocalValue('withdrawals', withdrawals);
+  }, [withdrawals, isQuotaFallbackMode]);
+
+  useEffect(() => {
+    if (isQuotaFallbackMode) saveLocalValue('notifications', notifications);
+  }, [notifications, isQuotaFallbackMode]);
+
+  useEffect(() => {
+    if (isQuotaFallbackMode) saveLocalValue('postReports', postReports);
+  }, [postReports, isQuotaFallbackMode]);
+
+  useEffect(() => {
+    if (isQuotaFallbackMode) saveLocalValue('ads', ads);
+  }, [ads, isQuotaFallbackMode]);
 
   useEffect(() => {
     activeChatPartnerRef.current = activeChatPartnerId;
@@ -155,10 +257,51 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
 
           // Guarantee user document exists in Firestore
           try {
+            if (isQuotaFallbackMode) {
+              const cachedUsersStr = localStorage.getItem('freshlink_loc_users');
+              let cachedUsers: User[] = [];
+              if (cachedUsersStr) {
+                try { cachedUsers = JSON.parse(cachedUsersStr); } catch(e) {}
+              }
+              if (cachedUsers.length === 0) {
+                cachedUsers = [...SEED_USERS];
+              }
+              const isRootAdmin = user.email?.toLowerCase() === 'fresh.linksd@gmail.com';
+              let existingLocal = cachedUsers.find(u => u.id === user.uid);
+              if (!existingLocal) {
+                existingLocal = {
+                  id: user.uid,
+                  name: isRootAdmin ? 'Super Admin' : (user.displayName || `Writer ${user.uid.slice(0, 5)}`),
+                  email: isRootAdmin ? 'fresh.linksd@gmail.com' : (user.email || `${user.uid}@freshlinkconnect.info`),
+                  bio: isRootAdmin ? 'Root Developer & Primary System clearing administrator.' : 'A creator exploring the FreshLink connection platform.',
+                  profileImage: user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&h=250&q=80',
+                  coverImage: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=1200&q=80',
+                  location: isRootAdmin ? 'HQ' : 'Earth',
+                  interests: isRootAdmin ? ['technology', 'business'] : ['technology'],
+                  socialLinks: {},
+                  savedPosts: [],
+                  createdAt: new Date().toISOString(),
+                  hasSetupAccount: isRootAdmin,
+                  isBlocked: false,
+                  role: isRootAdmin ? 'super_admin' : 'user',
+                  isAdmin: isRootAdmin,
+                  walletBalance: isRootAdmin ? 1000.00 : 25.00,
+                  walletCredits: isRootAdmin ? 99999 : 500,
+                  isMonetizationEnabled: isRootAdmin,
+                  monthlySubscriptionPrice: isRootAdmin ? 0.00 : 4.99,
+                  subscribedCreators: []
+                };
+                cachedUsers.push(existingLocal);
+                localStorage.setItem('freshlink_loc_users', JSON.stringify(cachedUsers));
+              }
+              setUsers(cachedUsers);
+              return;
+            }
+
             const userDocRef = doc(db, 'users', user.uid);
             const userSnap = await getDoc(userDocRef);
             const isRootAdmin = user.email?.toLowerCase() === 'fresh.linksd@gmail.com';
-
+ 
             if (!userSnap.exists()) {
               // Create default profile for this Firebase Auth session
               const defaultUser: User = {
@@ -200,8 +343,50 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
                 }
               }
             }
-          } catch (err) {
-            console.error("Failed to guarantee user profile document in Firestore:", err);
+          } catch (err: any) {
+            console.error("Failed to guarantee user profile document in Firestore, falling back to local database:", err);
+            const errMsg = err instanceof Error ? err.message : String(err);
+            if (errMsg.includes('Quota limit') || errMsg.includes('quota') || errMsg.includes('exceeded') || errMsg.includes('resource-exhausted') || errMsg.includes('Resource exhausted')) {
+              triggerLocalQuotaFallback();
+              
+              const cachedUsersStr = localStorage.getItem('freshlink_loc_users');
+              let cachedUsers: User[] = [];
+              if (cachedUsersStr) {
+                try { cachedUsers = JSON.parse(cachedUsersStr); } catch(e) {}
+              }
+              if (cachedUsers.length === 0) {
+                cachedUsers = [...SEED_USERS];
+              }
+              const isRootAdmin = user.email?.toLowerCase() === 'fresh.linksd@gmail.com';
+              let existingLocal = cachedUsers.find(u => u.id === user.uid);
+              if (!existingLocal) {
+                existingLocal = {
+                  id: user.uid,
+                  name: isRootAdmin ? 'Super Admin' : (user.displayName || `Writer ${user.uid.slice(0, 5)}`),
+                  email: isRootAdmin ? 'fresh.linksd@gmail.com' : (user.email || `${user.uid}@freshlinkconnect.info`),
+                  bio: isRootAdmin ? 'Root Developer & Primary System clearing administrator.' : 'A creator exploring the FreshLink connection platform.',
+                  profileImage: user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&h=250&q=80',
+                  coverImage: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=1200&q=80',
+                  location: isRootAdmin ? 'HQ' : 'Earth',
+                  interests: isRootAdmin ? ['technology', 'business'] : ['technology'],
+                  socialLinks: {},
+                  savedPosts: [],
+                  createdAt: new Date().toISOString(),
+                  hasSetupAccount: isRootAdmin,
+                  isBlocked: false,
+                  role: isRootAdmin ? 'super_admin' : 'user',
+                  isAdmin: isRootAdmin,
+                  walletBalance: isRootAdmin ? 1000.00 : 25.00,
+                  walletCredits: isRootAdmin ? 99999 : 500,
+                  isMonetizationEnabled: isRootAdmin,
+                  monthlySubscriptionPrice: isRootAdmin ? 0.00 : 4.99,
+                  subscribedCreators: []
+                };
+                cachedUsers.push(existingLocal);
+                localStorage.setItem('freshlink_loc_users', JSON.stringify(cachedUsers));
+              }
+              setUsers(cachedUsers);
+            }
           }
         } else {
           setCurrentUserId(null);
@@ -216,7 +401,20 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
 
   // 2. Seeding & Real-Time Sync subscriptions
   useEffect(() => {
+    const handleSubError = (error: any, collectionName: string) => {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      if (errMsg.includes('Quota limit') || errMsg.includes('quota') || errMsg.includes('exceeded') || errMsg.includes('resource-exhausted') || errMsg.includes('Resource exhausted')) {
+        triggerLocalQuotaFallback();
+      } else {
+        handleFirestoreError(error, OperationType.GET, collectionName);
+      }
+    };
+
     const initializeDatabaseAndSync = async () => {
+      if (isQuotaFallbackMode) {
+        setLoading(false);
+        return;
+      }
       try {
         // Check if DB is already populated by checking posts collection
         const postsColRef = collection(db, 'posts');
@@ -225,8 +423,12 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         if (postsSnap.empty) {
           console.log("Firestore is empty. Ready for authentic user actions.");
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("An error occurred during Firestore seeding:", err);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        if (errMsg.includes('Quota limit') || errMsg.includes('quota') || errMsg.includes('exceeded') || errMsg.includes('resource-exhausted') || errMsg.includes('Resource exhausted')) {
+          triggerLocalQuotaFallback();
+        }
       } finally {
         setLoading(false);
       }
@@ -236,53 +438,59 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
 
     // Attach reactive sync listeners
     const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
+      if (isQuotaFallbackMode) return;
       const list: User[] = [];
       snap.forEach((d) => list.push(d.data() as User));
       setUsers(list);
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'users');
+      handleSubError(error, 'users');
     });
 
     const unsubPosts = onSnapshot(collection(db, 'posts'), (snap) => {
+      if (isQuotaFallbackMode) return;
       const list: Post[] = [];
       snap.forEach((d) => list.push(d.data() as Post));
       setPosts(list);
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'posts');
+      handleSubError(error, 'posts');
     });
 
     const unsubLikes = onSnapshot(collection(db, 'likes'), (snap) => {
+      if (isQuotaFallbackMode) return;
       const list: Like[] = [];
       snap.forEach((d) => list.push(d.data() as Like));
       setLikes(list);
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'likes');
+      handleSubError(error, 'likes');
     });
 
     const unsubComments = onSnapshot(collection(db, 'comments'), (snap) => {
+      if (isQuotaFallbackMode) return;
       const list: Comment[] = [];
       snap.forEach((d) => list.push(d.data() as Comment));
       setComments(list);
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'comments');
+      handleSubError(error, 'comments');
     });
 
     const unsubFollowers = onSnapshot(collection(db, 'followers'), (snap) => {
+      if (isQuotaFallbackMode) return;
       const list: Follower[] = [];
       snap.forEach((d) => list.push(d.data() as Follower));
       setFollowers(list);
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'followers');
+      handleSubError(error, 'followers');
     });
 
     let unsubWithdrawals = () => {};
     if (currentUserId) {
       unsubWithdrawals = onSnapshot(collection(db, 'withdrawals'), (snap) => {
+        if (isQuotaFallbackMode) return;
         const list: WithdrawalRequest[] = [];
         snap.forEach((d) => list.push(d.data() as WithdrawalRequest));
         setWithdrawals(list);
       }, (error) => {
-        handleFirestoreError(error, OperationType.GET, 'withdrawals');
+        handleSubError(error, 'withdrawals');
       });
     } else {
       setWithdrawals([]);
@@ -292,22 +500,24 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     if (currentUserId) {
       const qNotif = query(collection(db, 'notifications'), where('userId', '==', currentUserId));
       unsubNotifications = onSnapshot(qNotif, (snap) => {
+        if (isQuotaFallbackMode) return;
         const list: Notification[] = [];
         snap.forEach((d) => list.push(d.data() as Notification));
         setNotifications(list);
       }, (error) => {
-        handleFirestoreError(error, OperationType.GET, 'notifications');
+        handleSubError(error, 'notifications');
       });
     } else {
       setNotifications([]);
     }
 
     const unsubAds = onSnapshot(collection(db, 'ads'), (snap) => {
+      if (isQuotaFallbackMode) return;
       const list: AdBanner[] = [];
       snap.forEach((d) => list.push(d.data() as AdBanner));
       setAds(list);
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'ads');
+      handleSubError(error, 'ads');
     });
 
     return () => {
@@ -320,10 +530,11 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       unsubNotifications();
       unsubAds();
     };
-  }, [currentUserId]);
+  }, [currentUserId, isQuotaFallbackMode]);
 
   // 2.5 Dynamic Admin-Only Post Reports subscription
   useEffect(() => {
+    if (isQuotaFallbackMode) return;
     const matchedUser = users.find(u => u.id === currentUserId);
     const isUserAdmin = matchedUser?.role === 'admin' || matchedUser?.isAdmin === true || matchedUser?.email?.toLowerCase() === 'fresh.linksd@gmail.com';
     
@@ -337,13 +548,18 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       snap.forEach((d) => list.push(d.data() as PostReport));
       setPostReports(list);
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'postReports');
+      const errMsg = error instanceof Error ? error.message : String(error);
+      if (errMsg.includes('Quota limit') || errMsg.includes('quota') || errMsg.includes('exceeded') || errMsg.includes('resource-exhausted') || errMsg.includes('Resource exhausted')) {
+        triggerLocalQuotaFallback();
+      } else {
+        handleFirestoreError(error, OperationType.GET, 'postReports');
+      }
     });
 
     return () => {
       unsubReports();
     };
-  }, [currentUserId, users]);
+  }, [currentUserId, users, isQuotaFallbackMode]);
 
   // 3. User Private Messages subscription
   useEffect(() => {
@@ -462,11 +678,24 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       ...extraDetails
     };
 
-    try {
-      await setDoc(doc(db, 'users', currentUserId), newUser);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `users/${currentUserId}`);
-    }
+    await runWriteOperation(
+      async () => {
+        await setDoc(doc(db, 'users', currentUserId), newUser);
+      },
+      () => {
+        setUsers(prev => {
+          const index = prev.findIndex(u => u.id === currentUserId);
+          if (index >= 0) {
+            const updated = [...prev];
+            updated[index] = newUser;
+            return updated;
+          } else {
+            return [...prev, newUser];
+          }
+        });
+      },
+      `users/${currentUserId}`
+    );
     return newUser;
   };
 
@@ -513,40 +742,44 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       throw new Error("This account has been blocked by community administrators.");
     }
 
-    try {
-      const isRootAdmin = matched.email.toLowerCase() === 'fresh.linksd@gmail.com';
-      // Copy profiles attributes to active user context document so we maintain zero-trust security clearance
-      await updateDoc(doc(db, 'users', currentUserId), {
-        name: matched.name,
-        email: matched.email,
-        bio: matched.bio,
-        profileImage: matched.profileImage,
-        coverImage: matched.coverImage,
-        location: matched.location,
-        interests: matched.interests,
-        socialLinks: matched.socialLinks || {},
-        savedPosts: matched.savedPosts || [],
-        hasSetupAccount: true,
-        isBlocked: matched.isBlocked || false,
-        role: isRootAdmin ? 'super_admin' : (matched.role || 'user'),
-        isAdmin: isRootAdmin ? true : (matched.isAdmin || false),
-        phoneNumber: matched.phoneNumber || '',
-        panNumber: matched.panNumber || '',
-        officialDocId: matched.officialDocId || '',
-        idPhoto: matched.idPhoto || '',
-        isApprovedByAdmin: matched.isApprovedByAdmin || false,
-        walletBalance: matched.walletBalance !== undefined ? matched.walletBalance : 25.00,
-        walletCredits: matched.walletCredits !== undefined ? matched.walletCredits : 500,
-        isMonetizationEnabled: matched.isMonetizationEnabled || false,
-        monthlySubscriptionPrice: matched.monthlySubscriptionPrice !== undefined ? matched.monthlySubscriptionPrice : 4.99,
-        subscribedCreators: matched.subscribedCreators || [],
-        hasVerifiedDetails: matched.hasVerifiedDetails || false
-      });
-      return true;
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `users/${currentUserId}`);
-      return false;
-    }
+    const isRootAdmin = matched.email.toLowerCase() === 'fresh.linksd@gmail.com';
+    const updatedAttrs: Partial<User> = {
+      name: matched.name,
+      email: matched.email,
+      bio: matched.bio,
+      profileImage: matched.profileImage,
+      coverImage: matched.coverImage,
+      location: matched.location,
+      interests: matched.interests,
+      socialLinks: matched.socialLinks || {},
+      savedPosts: matched.savedPosts || [],
+      hasSetupAccount: true,
+      isBlocked: matched.isBlocked || false,
+      role: isRootAdmin ? 'super_admin' : (matched.role || 'user'),
+      isAdmin: isRootAdmin ? true : (matched.isAdmin || false),
+      phoneNumber: matched.phoneNumber || '',
+      panNumber: matched.panNumber || '',
+      officialDocId: matched.officialDocId || '',
+      idPhoto: matched.idPhoto || '',
+      isApprovedByAdmin: matched.isApprovedByAdmin || false,
+      walletBalance: matched.walletBalance !== undefined ? matched.walletBalance : 25.00,
+      walletCredits: matched.walletCredits !== undefined ? matched.walletCredits : 500,
+      isMonetizationEnabled: matched.isMonetizationEnabled || false,
+      monthlySubscriptionPrice: matched.monthlySubscriptionPrice !== undefined ? matched.monthlySubscriptionPrice : 4.99,
+      subscribedCreators: matched.subscribedCreators || [],
+      hasVerifiedDetails: matched.hasVerifiedDetails || false
+    };
+
+    await runWriteOperation(
+      async () => {
+        await updateDoc(doc(db, 'users', currentUserId), updatedAttrs);
+      },
+      () => {
+        setUsers(prev => prev.map(u => u.id === currentUserId ? { ...u, ...updatedAttrs } : u));
+      },
+      `users/${currentUserId}`
+    );
+    return true;
   };
 
   // Login via Google Sign-In (real auth session)
@@ -574,11 +807,15 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   // Profile fields updating
   const updateProfile = async (updated: Partial<User>) => {
     if (!currentUserId) return;
-    try {
-      await updateDoc(doc(db, 'users', currentUserId), updated);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `users/${currentUserId}`);
-    }
+    await runWriteOperation(
+      async () => {
+        await updateDoc(doc(db, 'users', currentUserId), updated);
+      },
+      () => {
+        setUsers(prev => prev.map(u => u.id === currentUserId ? { ...u, ...updated } : u));
+      },
+      `users/${currentUserId}`
+    );
   };
 
   // Create article blog post
@@ -613,21 +850,29 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       isPremium: isPremium || false
     };
 
-    try {
-      await setDoc(doc(db, 'posts', id), newPost);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `posts/${id}`);
-    }
+    await runWriteOperation(
+      async () => {
+        await setDoc(doc(db, 'posts', id), newPost);
+      },
+      () => {
+        setPosts(prev => [...prev, newPost]);
+      },
+      `posts/${id}`
+    );
     return newPost;
   };
 
   // Delete article blog post
   const deletePost = async (postId: string) => {
-    try {
-      await deleteDoc(doc(db, 'posts', postId));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `posts/${postId}`);
-    }
+    await runWriteOperation(
+      async () => {
+        await deleteDoc(doc(db, 'posts', postId));
+      },
+      () => {
+        setPosts(prev => prev.filter(p => p.id !== postId));
+      },
+      `posts/${postId}`
+    );
   };
 
   // Update article blog post
@@ -642,29 +887,34 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     videoUrl?: string,
     isPremium?: boolean
   ) => {
-    try {
-      const postRef = doc(db, 'posts', postId);
-      const updateData: any = {
-        title,
-        content,
-        category,
-        tags: tags.map(t => t.trim().replace(/^#/, '')).filter(Boolean),
-        mediaUrl: mediaUrl || '',
-        updatedAt: new Date().toISOString()
-      };
-      if (mediaUrls !== undefined) {
-        updateData.mediaUrls = mediaUrls;
-      }
-      if (videoUrl !== undefined) {
-        updateData.videoUrl = videoUrl;
-      }
-      if (isPremium !== undefined) {
-        updateData.isPremium = isPremium;
-      }
-      await updateDoc(postRef, updateData);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `posts/${postId}`);
+    const updateData: any = {
+      title,
+      content,
+      category,
+      tags: tags.map(t => t.trim().replace(/^#/, '')).filter(Boolean),
+      mediaUrl: mediaUrl || '',
+      updatedAt: new Date().toISOString()
+    };
+    if (mediaUrls !== undefined) {
+      updateData.mediaUrls = mediaUrls;
     }
+    if (videoUrl !== undefined) {
+      updateData.videoUrl = videoUrl;
+    }
+    if (isPremium !== undefined) {
+      updateData.isPremium = isPremium;
+    }
+
+    await runWriteOperation(
+      async () => {
+        const postRef = doc(db, 'posts', postId);
+        await updateDoc(postRef, updateData);
+      },
+      () => {
+        setPosts(prev => prev.map(p => p.id === postId ? { ...p, ...updateData } : p));
+      },
+      `posts/${postId}`
+    );
   };
 
   // Toggle Like on Post
@@ -673,29 +923,48 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     const likeId = `${currentUserId}_${postId}`;
     const isLikedAlready = likes.some(l => l.userId === currentUserId && l.postId === postId);
 
-    try {
-      if (isLikedAlready) {
-        await deleteDoc(doc(db, 'likes', likeId));
-      } else {
-        await setDoc(doc(db, 'likes', likeId), {
-          userId: currentUserId,
-          postId
-        });
-
-        // Notify post owner
-        const post = posts.find(p => p.id === postId);
-        if (post && post.userId !== currentUserId) {
-          await addNotification(
-            post.userId,
-            'like',
-            `liked your post "${post.title}"`,
+    await runWriteOperation(
+      async () => {
+        if (isLikedAlready) {
+          await deleteDoc(doc(db, 'likes', likeId));
+        } else {
+          await setDoc(doc(db, 'likes', likeId), {
+            userId: currentUserId,
             postId
-          );
+          });
+
+          // Notify post owner
+          const post = posts.find(p => p.id === postId);
+          if (post && post.userId !== currentUserId) {
+            await addNotification(
+              post.userId,
+              'like',
+              `liked your post "${post.title}"`,
+              postId
+            );
+          }
         }
-      }
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `likes/${likeId}`);
-    }
+      },
+      () => {
+        if (isLikedAlready) {
+          setLikes(prev => prev.filter(l => l.userId !== currentUserId || l.postId !== postId));
+        } else {
+          setLikes(prev => [...prev, { userId: currentUserId, postId }]);
+          
+          // Notify post owner locally
+          const post = posts.find(p => p.id === postId);
+          if (post && post.userId !== currentUserId) {
+            addNotification(
+              post.userId,
+              'like',
+              `liked your post "${post.title}"`,
+              postId
+            );
+          }
+        }
+      },
+      `likes/${likeId}`
+    );
   };
 
   const isPostLiked = (postId: string) => {
@@ -720,22 +989,37 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       createdAt: new Date().toISOString()
     };
 
-    try {
-      await setDoc(doc(db, 'comments', id), newComment);
+    await runWriteOperation(
+      async () => {
+        await setDoc(doc(db, 'comments', id), newComment);
 
-      // Notify post owner
-      const post = posts.find(p => p.id === postId);
-      if (post && post.userId !== currentUserId) {
-        await addNotification(
-          post.userId,
-          'comment',
-          `commented on your post "${post.title}": "${commentText.slice(0, 30)}${commentText.length > 30 ? '...' : ''}"`,
-          postId
-        );
-      }
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `comments/${id}`);
-    }
+        // Notify post owner
+        const post = posts.find(p => p.id === postId);
+        if (post && post.userId !== currentUserId) {
+          await addNotification(
+            post.userId,
+            'comment',
+            `commented on your post "${post.title}": "${commentText.slice(0, 30)}${commentText.length > 30 ? '...' : ''}"`,
+            postId
+          );
+        }
+      },
+      () => {
+        setComments(prev => [...prev, newComment]);
+
+        // Notify post owner locally
+        const post = posts.find(p => p.id === postId);
+        if (post && post.userId !== currentUserId) {
+          addNotification(
+            post.userId,
+            'comment',
+            `commented on your post "${post.title}": "${commentText.slice(0, 30)}${commentText.length > 30 ? '...' : ''}"`,
+            postId
+          );
+        }
+      },
+      `comments/${id}`
+    );
     return newComment;
   };
 

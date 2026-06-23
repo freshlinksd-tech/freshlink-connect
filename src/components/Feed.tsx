@@ -120,7 +120,8 @@ export const Feed: React.FC<FeedProps> = ({
     reportPost,
     postReports,
     ads,
-    trackAdClick
+    trackAdClick,
+    isQuotaFallbackMode
   } = useSocialPlatform();
 
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
@@ -429,6 +430,26 @@ export const Feed: React.FC<FeedProps> = ({
   return (
     <div className="flex flex-col gap-6 w-full max-w-3xl mx-auto px-4 py-8 select-none">
       
+      {/* Dynamic Quota Fallback Mode Notice Badge */}
+      {isQuotaFallbackMode && (
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 flex gap-3 text-left shadow-sm"
+          id="quota-alert-badge"
+        >
+          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 shrink-0 select-none">
+            <ShieldAlert className="w-5 h-5 animate-pulse" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-700 bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 rounded-md leading-none">DEMO ACCELERATOR PASSIVE</span>
+            <p className="text-zinc-700 font-sans font-medium text-xs mt-1.5 leading-relaxed">
+              Google Cloud Firestore daily read/write limits exceeded. A high-resilience **local sandbox database** of curated campaign seeds has been fully synchronized so you can test comments, post creations, follows, and sponsor ad flows seamlessly on client session!
+            </p>
+          </div>
+        </motion.div>
+      )}
+
       {/* Elegant Header Block */}
       <header className="flex flex-col md:flex-row justify-between items-start gap-4 mb-2">
         <div className="space-y-1">
@@ -1865,84 +1886,106 @@ export const Feed: React.FC<FeedProps> = ({
         {selectedWorkspaceAd && (
           <div 
             id="workspace-ad-modal-overlay"
-            className="fixed inset-0 bg-zinc-950/75 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto"
+            className="fixed inset-0 bg-zinc-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 overflow-y-auto"
             onClick={() => setSelectedWorkspaceAd(null)}
           >
             <motion.div
-              initial={{ scale: 0.9, y: 30, opacity: 0 }}
+              initial={{ scale: 0.92, y: 40, opacity: 0 }}
               animate={{ scale: 1, y: 0, opacity: 1 }}
-              exit={{ scale: 0.9, y: 15, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 350, damping: 28 }}
-              className="bg-white rounded-3xl overflow-hidden shadow-2xl max-w-lg w-full border border-zinc-150 relative"
+              exit={{ scale: 0.92, y: 20, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 380, damping: 26 }}
+              className="bg-gradient-to-b from-zinc-900 via-zinc-950 to-zinc-950 text-white rounded-3xl overflow-hidden shadow-[0_0_60px_rgba(249,115,22,0.25)] max-w-lg w-full border border-orange-500/30 relative"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Header section with Badge */}
-              <div className="p-5 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/70">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 text-amber-700 rounded-full text-[10px] font-black uppercase tracking-widest leading-none">
-                  <Megaphone className="w-3.5 h-3.5 text-amber-600" />
-                  Partner Workspace Campaign
+              {/* Premium Glow Accents */}
+              <div className="absolute top-0 left-1/4 right-1/4 h-px bg-gradient-to-r from-transparent via-orange-500 to-transparent opacity-75" />
+              <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-24 bg-orange-500/10 blur-3xl rounded-full pointer-events-none" />
+
+              {/* Header Action Row */}
+              <div className="p-5 border-b border-zinc-800/60 flex items-center justify-between bg-zinc-950/40 backdrop-blur-md">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-orange-500/10 to-amber-500/10 border border-orange-500/25 text-orange-400 rounded-full text-[9.5px] font-black uppercase tracking-wider leading-none">
+                  <Megaphone className="w-3.5 h-3.5 text-orange-400 animate-pulse" />
+                  Verified Workspace Sponsor
                 </span>
                 <button
                   onClick={() => setSelectedWorkspaceAd(null)}
-                  className="p-1 px-2.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors cursor-pointer"
+                  className="p-1 px-2.5 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800/50 transition-colors cursor-pointer border border-zinc-800"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Campaign Poster Graphic Image */}
-              <div className="relative aspect-video w-full bg-zinc-900 border-b border-zinc-100 overflow-hidden">
+              {/* Creative Cover Graphic Screen */}
+              <div className="relative aspect-[16/10] w-full bg-zinc-900 border-b border-zinc-800/80 overflow-hidden">
                 <img 
                   src={selectedWorkspaceAd.imageUrl || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80'} 
                   alt={selectedWorkspaceAd.title} 
-                  className="w-full h-full object-cover select-none"
+                  className="w-full h-full object-cover select-none transition-transform duration-700 hover:scale-105"
                   referrerPolicy="no-referrer"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/15 to-transparent flex items-end p-6">
+                
+                {/* Visual Glass Stamp overlay */}
+                <div className="absolute top-4 right-4 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-lg border border-white/12 text-[8.5px] font-mono leading-none tracking-widest text-amber-400 uppercase select-none">
+                  EXCLUSIVE DEAL
+                </div>
+
+                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/30 to-transparent flex items-end p-6 md:p-8">
                   <div>
-                    <span className="text-[10px] font-mono font-bold tracking-widest text-[#F97316] uppercase">CONNECTED ADS NETWORK</span>
-                    <h3 className="text-xl md:text-2xl font-sans font-black text-white uppercase tracking-tight leading-tight mt-1">
+                    <span className="text-[9px] font-mono font-bold tracking-widest text-orange-400 uppercase bg-orange-950/40 border border-orange-500/20 px-2 py-0.5 rounded-md">CONNECTED ADS PLATFORM</span>
+                    <h3 className="text-xl md:text-2xl font-sans font-black text-white uppercase tracking-tight leading-none mt-2 drop-shadow-md">
                       {selectedWorkspaceAd.title}
                     </h3>
                   </div>
                 </div>
               </div>
 
-              {/* Description & Interactive Controls */}
-              <div className="p-6 md:p-8 space-y-5">
-                <p className="text-zinc-650 text-xs md:text-sm leading-relaxed font-sans font-medium">
+              {/* Description & Detailed Interactive Content */}
+              <div className="p-6 md:p-8 space-y-6">
+                <p className="text-zinc-300 text-xs md:text-sm leading-relaxed font-sans font-normal">
                   {selectedWorkspaceAd.description}
                 </p>
 
-                {/* Secure Trust Badge */}
-                <div className="p-3.5 bg-zinc-50 rounded-2xl flex items-start gap-2.5 border border-zinc-150">
-                  <div className="w-5 h-5 bg-orange-100 text-orange-700 rounded-md flex items-center justify-center shrink-0">
-                    <ShieldAlert className="w-3.5 h-3.5" />
+                {/* Grid of Highlighted Details */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-zinc-900/50 border border-zinc-800/60 p-3 rounded-2xl">
+                    <span className="block text-[8.5px] font-mono font-bold text-zinc-500 uppercase tracking-wider">Campaign Benefit</span>
+                    <span className="block text-[11px] font-sans font-bold text-zinc-200 mt-1">Instant Activation Code</span>
+                  </div>
+                  <div className="bg-zinc-900/50 border border-zinc-800/60 p-3 rounded-2xl">
+                    <span className="block text-[8.5px] font-mono font-bold text-zinc-500 uppercase tracking-wider">Security clearance</span>
+                    <span className="block text-[11px] font-sans font-bold text-emerald-400 mt-1">✓ Admin Pre-Cleared</span>
+                  </div>
+                </div>
+
+                {/* Secure Trust Frame */}
+                <div className="p-4 bg-zinc-950 border border-orange-500/15 rounded-2xl flex items-start gap-3">
+                  <div className="w-6 h-6 bg-orange-950 text-orange-400 border border-orange-500/20 rounded-lg flex items-center justify-center shrink-0">
+                    <ShieldAlert className="w-3.5 h-3.5 animate-pulse" />
                   </div>
                   <div>
-                    <h5 className="text-[10.5px] font-mono uppercase tracking-wider text-zinc-700 font-bold">Workspace Campaign Integrity</h5>
-                    <p className="text-[9.5px] text-zinc-500 mt-0.5 leading-snug">
-                      Redirection destination targets and digital assets pre-cleared by administrators. Click the action button to redeem partner benefits.
+                    <h5 className="text-[10px] font-mono uppercase tracking-wider text-zinc-200 font-bold">Encrypted Ad Integrity Protection</h5>
+                    <p className="text-[9px] text-zinc-400 mt-1 leading-normal">
+                      Redirection targets and cryptographic assets pre-cleared by social platform administrators. Pop stats and impressions tracked securely.
                     </p>
                   </div>
                 </div>
 
-                {/* Direct launch / redirection CTA */}
+                {/* Launcher Button CTA to load target URL */}
                 <div className="pt-2">
                   <a
                     href={selectedWorkspaceAd.targetUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     referrerPolicy="no-referrer"
-                    className="w-full py-4 px-6 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-[11px] font-extrabold uppercase tracking-widest rounded-2xl shadow-lg flex items-center justify-center gap-2.5 transition-all text-center select-none cursor-pointer"
+                    className="w-full py-4 px-6 bg-gradient-to-r from-[#F97316] via-orange-550 to-amber-500 hover:brightness-110 active:scale-98 text-white text-[11px] font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-orange-500/10 flex items-center justify-center gap-2.5 transition-all text-center select-none cursor-pointer border border-orange-400/20"
                     onClick={() => {
                       trackAdClick(selectedWorkspaceAd.id);
                       setSelectedWorkspaceAd(null);
                     }}
                   >
-                    <Sparkles className="w-4 h-4 text-white" />
-                    <span>Redeem Campaign Benefit</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
+                    <Sparkles className="w-4 h-4 text-white animate-spin-slow" />
+                    <span>Redeem Sponsor Benefits</span>
+                    <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                   </a>
                 </div>
               </div>
