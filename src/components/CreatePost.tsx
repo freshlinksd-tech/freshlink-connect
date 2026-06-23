@@ -372,16 +372,21 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
             </div>
 
             {videoUrl ? (
-              <div className="aspect-video bg-black border-b border-zinc-100 relative">
-                <video
-                  src={videoUrl}
-                  controls
-                  playsInline
-                  className="w-full h-full object-contain"
-                />
-                <div className="absolute top-4 right-4 bg-orange-600 text-white rounded-full p-1.5 shadow">
-                  <Video className="w-3.5 h-3.5" />
+              <div className="bg-zinc-950 p-4 border-b border-zinc-200/50 flex flex-col items-center">
+                <div className="aspect-[9/16] w-[180px] bg-black rounded-2xl overflow-hidden relative border border-zinc-850 shadow-lg">
+                  <video
+                    src={videoUrl}
+                    controls
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute top-3 right-3 bg-orange-600 text-white rounded-full p-1.5 shadow z-10">
+                    <Video className="w-3 h-3 animate-pulse" />
+                  </div>
                 </div>
+                <span className="text-[8.5px] font-black tracking-widest text-zinc-500 mt-2 uppercase">
+                  🎬 Feed Reel Preview
+                </span>
               </div>
             ) : multiplePhotos.length > 0 ? (
               <div className="border-b border-zinc-100 max-h-[320px] overflow-hidden">
@@ -677,33 +682,89 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
                   </div>
                 )}
 
-                {/* Video Playback Preview */}
-                {videoUrl && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[10px] font-black uppercase tracking-wider text-zinc-450 font-sans flex items-center gap-1">
-                        <Play className="w-3 h-3 text-orange-600" />
-                        Attached Video Preview
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setVideoUrl('')}
-                        className="text-[9px] text-red-500 uppercase font-black hover:underline"
-                      >
-                        Remove Video
-                      </button>
-                    </div>
-                    
-                    <div className="aspect-video bg-black rounded-xl overflow-hidden border border-zinc-200 relative max-w-md shadow-md animate-fadeIn">
-                      <video
-                        src={videoUrl}
-                        controls
-                        playsInline
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                  </div>
-                )}
+                 {/* Video Playback Preview (Reels Studio Simulator) */}
+                 {videoUrl && (
+                   <div className="space-y-3 bg-zinc-900 text-white p-5 rounded-3xl border border-zinc-800 shadow-xl max-w-sm mx-auto">
+                     <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                       <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 font-sans flex items-center gap-1.5">
+                         <Play className="w-3.5 h-3.5 text-orange-500 animate-pulse" />
+                         FRESHLINK REEL STUDIO
+                       </p>
+                       <button
+                         type="button"
+                         onClick={() => setVideoUrl('')}
+                         className="text-[9px] text-rose-450 hover:text-rose-400 uppercase font-black tracking-widest bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-lg transition-colors"
+                       >
+                         Remove Reel
+                       </button>
+                     </div>
+                     
+                     {/* Immersive Vertical Smartphone Reel Simulator */}
+                     <div className="aspect-[9/16] w-full max-w-[240px] mx-auto bg-black rounded-2xl overflow-hidden border-4 border-zinc-800 relative shadow-2xl animate-fadeIn group">
+                       <video
+                         src={videoUrl}
+                         controls={false}
+                         autoPlay
+                         loop
+                         muted
+                         playsInline
+                         id="preview-reel-video"
+                         className="w-full h-full object-cover"
+                         onClick={(e) => {
+                           const v = e.currentTarget;
+                           if (v.paused) v.play(); else v.pause();
+                         }}
+                       />
+
+                       {/* Reels Left Side Gradient Underlay */}
+                       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent p-3 pt-10 flex flex-col justify-end pointer-events-none select-none">
+                         <div className="flex items-center gap-1.5 mb-1">
+                           <div className="w-5 h-5 bg-gradient-to-r from-orange-500 to-orange-600 rounded-full flex items-center justify-center font-bold text-[8px] border border-white/20 text-white">
+                             {currentUser.name.slice(0, 1).toUpperCase()}
+                           </div>
+                           <span className="text-[9.5px] font-black text-white tracking-wide truncate">
+                             @{currentUser.name.toLowerCase().replace(/\s+/g, '')}
+                           </span>
+                           <span className="text-[8px] bg-orange-600 text-white font-black px-1.5 py-0.2 rounded uppercase scale-90">
+                             REEL
+                           </span>
+                         </div>
+                         <p className="text-[8px] text-zinc-300 line-clamp-2 leading-relaxed font-sans">
+                           {title ? title : 'Drafting new social reel contributions... 🍿'}
+                         </p>
+                       </div>
+
+                       {/* Reels Right Column Icons Hud Simulation */}
+                       <div className="absolute right-2 bottom-6 flex flex-col gap-3.5 items-center justify-center text-white z-10 select-none pointer-events-none opacity-80">
+                         <div className="flex flex-col items-center">
+                           <div className="p-1.5 bg-black/40 backdrop-blur-md rounded-full border border-white/10">
+                             <span className="text-zinc-100 text-[10px] font-bold">❤️</span>
+                           </div>
+                           <span className="text-[7.5px] font-mono font-bold mt-0.5">Likes</span>
+                         </div>
+                         <div className="flex flex-col items-center">
+                           <div className="p-1.5 bg-black/40 backdrop-blur-md rounded-full border border-white/10">
+                             <span className="text-zinc-100 text-[10px] font-bold">💬</span>
+                           </div>
+                           <span className="text-[7.5px] font-mono font-bold mt-0.5">Reply</span>
+                         </div>
+                         <div className="flex flex-col items-center">
+                           <div className="p-1.5 bg-black/40 backdrop-blur-md rounded-full border border-white/10">
+                             <span className="text-zinc-100 text-[10px] font-bold">⚡</span>
+                           </div>
+                           <span className="text-[7.5px] font-mono font-bold mt-0.5">Tip</span>
+                         </div>
+                       </div>
+
+                       {/* Interactive Pause/Play Toast Overlay indicator */}
+                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                         <div className="bg-black/50 backdrop-blur-md py-1.5 px-3 rounded-full border border-white/15 text-[8.5px] font-mono tracking-widest text-zinc-200">
+                           💡 Click Video to Play or Pause
+                         </div>
+                       </div>
+                     </div>
+                   </div>
+                 )}
               </div>
             )}
           </div>

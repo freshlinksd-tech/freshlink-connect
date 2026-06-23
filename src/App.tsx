@@ -18,6 +18,8 @@ import { OnboardingSetup } from './components/OnboardingSetup';
 import { AdminPanel } from './components/AdminPanel';
 import { VerificationSetup } from './components/VerificationSetup';
 import { MonetizationPanel } from './components/MonetizationPanel';
+import { AdBubblePortal } from './components/AdBubblePortal';
+import { Notifications } from './components/Notifications';
 import { 
   Sparkles, 
   Menu, 
@@ -30,11 +32,12 @@ import {
   Cpu,
   Wifi,
   ShieldCheck,
-  Coins
+  Coins,
+  Bell
 } from 'lucide-react';
 
 function AppContent() {
-  const { currentUser, logout, messages } = useSocialPlatform();
+  const { currentUser, logout, messages, notifications } = useSocialPlatform();
   const [activeTab, setActiveTab] = useState<string>('feed');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [targetChatUserId, setTargetChatUserId] = useState<string | null>(null);
@@ -130,18 +133,22 @@ function AppContent() {
         <div id="mobile-navigation-drawer" className="md:hidden fixed inset-0 bg-zinc-900/40 backdrop-blur-sm z-30" onClick={() => setMobileMenuOpen(false)}>
           <div className="w-64 bg-white h-full shadow-2xl flex flex-col pt-20" onClick={(e) => e.stopPropagation()}>
             <div className="px-4 space-y-1">
-              {(() => {
+               {(() => {
                 const isAdmin = currentUser?.email?.toLowerCase() === 'fresh.linksd@gmail.com' || currentUser?.isAdmin === true || currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
                 const itemsList = [
                   { id: 'feed', name: 'Home Feed', icon: Compass },
                   { id: 'create', name: 'Create Post', icon: PlusCircle },
                   { id: 'chat', name: 'Direct Messages', icon: MessageSquare },
+                  { id: 'notifications', name: 'Notifications', icon: Bell },
                   { id: 'bookmarks', name: 'Saved Blogs', icon: Bookmark },
                   { id: 'monetization', name: 'Monetization Hub', icon: Coins },
                   ...(isAdmin ? [{ id: 'admin', name: 'Admin Control', icon: ShieldCheck }] : [])
                 ];
                 const unreadCount = currentUser && messages ? messages.filter(
                   msg => msg.receiverId === currentUser.id && !msg.read
+                ).length : 0;
+                const unreadNotifications = currentUser && notifications ? notifications.filter(
+                  n => n.userId === currentUser.id && !n.read
                 ).length : 0;
 
                 return itemsList.map((item) => {
@@ -166,6 +173,11 @@ function AppContent() {
                       {item.id === 'chat' && unreadCount > 0 && (
                         <span className="bg-orange-600 text-white font-mono text-[9.5px] font-bold px-2.5 py-0.5 rounded-full">
                           {unreadCount}
+                        </span>
+                      )}
+                      {item.id === 'notifications' && unreadNotifications > 0 && (
+                        <span className="bg-orange-600 text-white font-mono text-[9.5px] font-bold px-2.5 py-0.5 rounded-full">
+                          {unreadNotifications}
                         </span>
                       )}
                     </button>
@@ -284,6 +296,10 @@ function AppContent() {
                     isBookmarksOnly={true}
                   />
                 );
+              case 'notifications':
+                return (
+                  <Notifications />
+                );
               case 'profile':
                 return (
                   <Profiles
@@ -314,6 +330,9 @@ function AppContent() {
       {authOpen && (
         <Auth onClose={() => setAuthOpen(false)} />
       )}
+
+      {/* Interactive Ad Popping Bubble Portal System */}
+      <AdBubblePortal />
     </div>
   );
 }

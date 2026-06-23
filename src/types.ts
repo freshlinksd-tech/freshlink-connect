@@ -151,5 +151,10 @@ export interface AdBanner {
   targetUrl: string; // Redirection URL (social media post, external link, etc.)
   active: boolean;
   createdAt: string;
+  clickCount?: number;
+  placement?: 'workspace' | 'bubble'; // Ad placement type: 'workspace' or 'bubble'
+  welcomeBadge?: string;             // Custom welcome badge text, e.g. "Sponsored Welcome"
+  welcomeTitle?: string;             // Custom welcome title, e.g. "Active Sponsor Bubbles live!"
+  welcomeText?: string;              // Custom welcome body text
 }
 

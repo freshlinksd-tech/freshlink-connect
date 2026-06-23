@@ -696,28 +696,7 @@ export const Profiles: React.FC<ProfilesProps> = ({
             </button>
           )}
 
-          {isOwnProfile && (
-            <button
-              id="tab-notifications"
-              onClick={() => {
-                setActiveTab('notifications');
-                markAllNotificationsAsRead();
-              }}
-              className={`px-5 py-3 font-sans font-bold text-xs tracking-wide uppercase border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
-                activeTab === 'notifications'
-                  ? 'border-orange-600 text-orange-600 font-extrabold'
-                  : 'border-transparent text-zinc-400 hover:text-zinc-700'
-              }`}
-            >
-              <Bell className="w-3.5 h-3.5" />
-              <span>Notifications</span>
-              {notifications.filter(n => n.userId === currentUser?.id && !n.read).length > 0 && (
-                <span className="bg-orange-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full animate-pulse">
-                  {notifications.filter(n => n.userId === currentUser?.id && !n.read).length}
-                </span>
-              )}
-            </button>
-          )}
+
         </div>
         <div>
           {activeTab === 'achievements' ? (
@@ -795,93 +774,6 @@ export const Profiles: React.FC<ProfilesProps> = ({
                   );
                 })}
               </div>
-            </div>
-          ) : activeTab === 'notifications' ? (
-            <div className="space-y-4 animate-fade-in text-left" id="notifications-list-box">
-              <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
-                <div>
-                  <h3 className="font-sans font-extrabold text-lg text-zinc-900 tracking-tight">Activity Alerts</h3>
-                  <p className="text-zinc-500 text-xs mt-0.5">Real-time notifications regarding comments, likes, clearances, and withdrawal requests.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => markAllNotificationsAsRead()}
-                  className="text-xs text-orange-600 hover:text-orange-700 font-bold transition flex items-center gap-1 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-xl border border-orange-100 cursor-pointer"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Mark all read</span>
-                </button>
-              </div>
-
-              {notifications.filter(n => n.userId === currentUser?.id).length === 0 ? (
-                <div className="bg-zinc-50 border border-zinc-200/50 p-12 text-center rounded-xl font-sans text-xs text-zinc-400">
-                  No activity alerts found. Check back later! 🔔
-                </div>
-              ) : (
-                <div className="divide-y divide-zinc-100 bg-white border border-zinc-200/65 rounded-2xl overflow-hidden shadow-sm">
-                  {[...notifications]
-                    .filter(n => n.userId === currentUser?.id)
-                    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-                    .map((notif) => (
-                      <div 
-                        key={notif.id}
-                        onClick={() => markNotificationAsRead(notif.id)}
-                        className={`flex items-start gap-4 p-4 hover:bg-zinc-50/70 transition-all cursor-pointer relative ${notif.read ? 'opacity-85' : 'bg-orange-50/10'}`}
-                      >
-                        {/* Unread Indicator dot */}
-                        {!notif.read && (
-                          <div className="w-2 h-2 bg-orange-600 rounded-full mt-1.5 shrink-0 animate-ping absolute left-1" />
-                        )}
-                        {!notif.read && (
-                          <div className="w-2 h-2 bg-orange-600 rounded-full mt-1.5 shrink-0 mr-1" />
-                        )}
-                        {notif.read && (
-                          <div className="w-2 h-2 bg-transparent rounded-full mt-1.5 shrink-0 mr-1" />
-                        )}
-
-                        {/* Sender Avatar */}
-                        {notif.senderImage ? (
-                          <img 
-                            referrerPolicy="no-referrer"
-                            src={notif.senderImage} 
-                            alt={notif.senderName} 
-                            className="w-9 h-9 rounded-full object-cover border border-zinc-200 shadow-xs shrink-0"
-                          />
-                        ) : (
-                          <div className="w-9 h-9 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center font-bold text-zinc-500 shrink-0 text-sm font-sans">
-                            {notif.senderName.slice(0, 1).toUpperCase()}
-                          </div>
-                        )}
-
-                        {/* Message details */}
-                        <div className="flex-1 min-w-0">
-                          <p className="font-sans text-xs text-zinc-800 leading-normal">
-                            <span className="font-extrabold text-zinc-900 mr-1">{notif.senderName}</span>
-                            {notif.message}
-                          </p>
-                          <span className="text-[10px] text-zinc-450 font-mono mt-1 block">
-                            {new Date(notif.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-
-                        {/* Notification Type Identifier tag */}
-                        <div className="shrink-0 font-sans">
-                          <span className={`text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full ${
-                            notif.type === 'like' ? 'bg-orange-100 text-orange-700' :
-                            notif.type === 'comment' ? 'bg-emerald-100 text-emerald-700' :
-                            notif.type === 'follow' ? 'bg-indigo-100 text-indigo-700' :
-                            notif.type === 'withdrawal_decision' ? 'bg-amber-100 text-amber-700' :
-                            notif.type === 'report_decision' ? 'bg-rose-100 text-rose-700' :
-                            'bg-zinc-105 text-zinc-700'
-                          }`}>
-                            {notif.type}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  }
-                </div>
-              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4" id="profile-posts-grid">

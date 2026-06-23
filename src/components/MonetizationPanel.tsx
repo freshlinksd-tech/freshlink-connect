@@ -29,7 +29,6 @@ export const MonetizationPanel: React.FC = () => {
   const { currentUser, posts, comments, likes, withdrawals, requestWithdrawal } = useSocialPlatform();
   
   // Local state
-  const [sandboxOverride, setSandboxOverride] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [payoutGateway, setPayoutGateway] = useState<'eSewa' | 'Khalti' | 'Bank Transfer'>('eSewa');
   const [destinationDetails, setDestinationDetails] = useState('');
@@ -86,12 +85,13 @@ export const MonetizationPanel: React.FC = () => {
   }, [likes, userPostIds]);
 
   // 2. Define criteria statuses
+  const isAccountVerified = currentUser?.role === 'super_admin' || currentUser?.role === 'admin' || currentUser?.isAdmin === true || (currentUser?.hasVerifiedDetails === true && currentUser?.isApprovedByAdmin === true);
   const hasMetPosts = postsCount >= 5;
   const hasMetComments = maxCommentsOnSinglePost >= 50;
   const hasMetLikes = maxLikesOnSinglePost >= 1000;
 
   const genuinelyEligible = hasMetPosts && hasMetComments && hasMetLikes;
-  const isMonetizationActive = genuinelyEligible || sandboxOverride;
+  const isMonetizationActive = isAccountVerified && genuinelyEligible;
 
   // 3. Earning metrics
   const EARNING_RATE_NPR = 0.25; // 0.25 Nepalese Rupees per like
@@ -191,27 +191,20 @@ export const MonetizationPanel: React.FC = () => {
 
       <div className="max-w-5xl mx-auto p-6 md:p-8 space-y-8">
         
-        {/* Sandbox Simulator Overlay Widget */}
-        <div className="bg-gradient-to-r from-cyan-900 to-indigo-950 text-white px-5 py-4 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-cyan-800/80 shadow-md">
-          <div className="text-left">
-            <h3 className="text-sm font-black text-white flex items-center gap-1.5 uppercase tracking-wide">
-              <ShieldCheck className="w-4.5 h-4.5 text-cyan-400" />
-              Developer Sandbox Control Panel
+        {/* Partner Program Conditions Information Widget */}
+        <div className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-3xl p-5 md:p-6 border border-amber-250/60 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-left">
+          <div className="space-y-1">
+            <h3 className="text-sm font-black text-amber-900 flex items-center gap-2 uppercase tracking-wider">
+              <Sparkles className="w-5 h-5 text-amber-600 animate-bounce" />
+              Creator Partner Program Conditions
             </h3>
-            <p className="text-[11px] text-zinc-350 mt-1 leading-normal">
-              Fulfilling 1,000 likes on a blog and 50 comments usually takes organic growth. Check this toggle to instantly clear requirements in testing environment!
+            <p className="text-xs text-amber-800 font-medium leading-relaxed max-w-2xl">
+              FreshLink shares ad revenues with passionate writers who foster vibrant local conversations. To check your status and initiate real payout transfers, you must meet the engagement requirements below.
             </p>
           </div>
-          <div>
-            <label className="inline-flex items-center gap-2 cursor-pointer bg-white/10 hover:bg-white/15 px-4 py-2.5 rounded-xl border border-white/10 transition select-none">
-              <input 
-                type="checkbox" 
-                checked={sandboxOverride} 
-                onChange={(e) => setSandboxOverride(e.target.checked)} 
-                className="rounded text-cyan-550 focus:ring-cyan-500 w-4 h-4 bg-zinc-950" 
-              />
-              <span className="text-[10px] font-extrabold uppercase tracking-widest text-cyan-200">Sandbox Override</span>
-            </label>
+          <div className="shrink-0 bg-white/80 backdrop-blur-md border border-amber-200/60 px-4 py-2.5 rounded-2xl">
+            <span className="text-[10px] font-bold text-amber-900 uppercase tracking-widest block">Accumulation Rate</span>
+            <span className="text-sm font-black text-orange-600">Rs. 0.25 <span className="text-[9.5px] font-normal text-zinc-500 font-sans tracking-normal">per post Like</span></span>
           </div>
         </div>
 
@@ -226,15 +219,43 @@ export const MonetizationPanel: React.FC = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             
-            {/* Rule 1 */}
+            {/* Step 1: Account Verification */}
+            <div className={`p-5 rounded-2xl border transition flex flex-col justify-between ${
+              isAccountVerified ? 'bg-emerald-50/40 border-emerald-250' : 'bg-zinc-50/60 border-zinc-200'
+            }`}>
+              <div className="flex justify-between items-start">
+                <div>
+                  <h4 className="text-xs font-black uppercase text-zinc-800 tracking-wide">1. ID Verification</h4>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">Approved citizen or PAN document</p>
+                </div>
+                {isAccountVerified ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                ) : (
+                  <XCircle className="w-5 h-5 text-zinc-300 shrink-0" />
+                )}
+              </div>
+              <div className="mt-5">
+                <div className="flex justify-between items-end text-[10px] font-bold text-zinc-400 mb-1">
+                  <span>Verification Status</span>
+                  <span className={isAccountVerified ? 'text-emerald-700 font-extrabold' : 'text-amber-700 font-bold'}>
+                    {isAccountVerified ? 'Verified' : 'Unverified'}
+                  </span>
+                </div>
+                <div className="w-full bg-zinc-200 rounded-full h-2 overflow-hidden animate-pulse">
+                  <div className={`h-full transition-all duration-350 ${isAccountVerified ? 'bg-emerald-650' : 'bg-amber-600'}`} style={{ width: isAccountVerified ? '100%' : '20%' }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Step 2: Post Volume */}
             <div className={`p-5 rounded-2xl border transition flex flex-col justify-between ${
               hasMetPosts ? 'bg-emerald-50/40 border-emerald-250' : 'bg-zinc-50/60 border-zinc-200'
             }`}>
               <div className="flex justify-between items-start">
                 <div>
-                  <h4 className="text-xs font-black uppercase text-zinc-800 tracking-wide">1. Post Volume</h4>
+                  <h4 className="text-xs font-black uppercase text-zinc-800 tracking-wide">2. Post Volume</h4>
                   <p className="text-[11px] text-zinc-400 mt-0.5">Publish at least 5 articles on FreshLink</p>
                 </div>
                 {hasMetPosts ? (
@@ -254,14 +275,14 @@ export const MonetizationPanel: React.FC = () => {
               </div>
             </div>
 
-            {/* Rule 2 */}
+            {/* Step 3: Peak Comments */}
             <div className={`p-5 rounded-2xl border transition flex flex-col justify-between ${
               hasMetComments ? 'bg-emerald-50/40 border-emerald-250' : 'bg-zinc-50/60 border-zinc-200'
             }`}>
               <div className="flex justify-between items-start">
                 <div>
-                  <h4 className="text-xs font-black uppercase text-zinc-800 tracking-wide">2. Peak Comments</h4>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">Receive at least 50 comments on any single post</p>
+                  <h4 className="text-xs font-black uppercase text-zinc-800 tracking-wide">3. Peak Comments</h4>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">Receive 50 comments on any single post</p>
                 </div>
                 {hasMetComments ? (
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
@@ -280,13 +301,13 @@ export const MonetizationPanel: React.FC = () => {
               </div>
             </div>
 
-            {/* Rule 3 */}
+            {/* Step 4: Peak Likes Quota */}
             <div className={`p-5 rounded-2xl border transition flex flex-col justify-between ${
               hasMetLikes ? 'bg-emerald-50/40 border-emerald-250' : 'bg-zinc-50/60 border-zinc-200'
             }`}>
               <div className="flex justify-between items-start">
                 <div>
-                  <h4 className="text-xs font-black uppercase text-zinc-800 tracking-wide">3. Peak Likes Quota</h4>
+                  <h4 className="text-xs font-black uppercase text-zinc-800 tracking-wide">4. Peak Likes Quota</h4>
                   <p className="text-[11px] text-zinc-400 mt-0.5">At least 1k likes on any single post</p>
                 </div>
                 {hasMetLikes ? (

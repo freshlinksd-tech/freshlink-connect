@@ -93,8 +93,23 @@ interface SocialPlatformContextType {
   markAllNotificationsAsRead: () => Promise<void>;
   reportPost: (postId: string, reason: string, remarks: string) => Promise<void>;
   resolveReport: (reportId: string, action: 'delete_post' | 'dismiss') => Promise<void>;
-  createOrUpdateAd: (ad: { id?: string; imageUrl: string; title: string; description: string; targetUrl: string; active: boolean }) => Promise<void>;
+  createOrUpdateAd: (ad: { 
+    id?: string; 
+    imageUrl: string; 
+    title: string; 
+    description: string; 
+    targetUrl: string; 
+    active: boolean; 
+    clickCount?: number; 
+    createdAt?: string;
+    placement?: 'workspace' | 'bubble';
+    welcomeBadge?: string;
+    welcomeTitle?: string;
+    welcomeText?: string;
+  }) => Promise<void>;
   deleteAd: (adId: string) => Promise<void>;
+  trackAdClick: (adId: string) => Promise<void>;
+  toggleAllAds: (active: boolean) => Promise<void>;
 }
 
 const SocialPlatformContext = createContext<SocialPlatformContextType | undefined>(undefined);
@@ -1193,8 +1208,23 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     }
   };
 
-  const createOrUpdateAd = async (adData: { id?: string; imageUrl: string; title: string; description: string; targetUrl: string; active: boolean }) => {
+  const createOrUpdateAd = async (adData: { 
+    id?: string; 
+    imageUrl: string; 
+    title: string; 
+    description: string; 
+    targetUrl: string; 
+    active: boolean; 
+    clickCount?: number; 
+    createdAt?: string;
+    placement?: 'workspace' | 'bubble';
+    welcomeBadge?: string;
+    welcomeTitle?: string;
+    welcomeText?: string;
+  }) => {
     const id = adData.id || `ad_${Date.now()}`;
+    const existingAd = ads.find(a => a.id === id);
+    const placement = adData.placement || 'workspace';
     const newAd: AdBanner = {
       id,
       imageUrl: adData.imageUrl,
@@ -1202,21 +1232,16 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       description: adData.description,
       targetUrl: adData.targetUrl,
       active: adData.active,
-      createdAt: new Date().toISOString()
+      createdAt: adData.createdAt || existingAd?.createdAt || new Date().toISOString(),
+      clickCount: adData.clickCount !== undefined ? adData.clickCount : (existingAd?.clickCount || 0),
+      placement,
+      welcomeBadge: adData.welcomeBadge,
+      welcomeTitle: adData.welcomeTitle,
+      welcomeText: adData.welcomeText
     };
 
     try {
-      if (adData.active) {
-        const activeAds = ads.filter(a => a.id !== id && a.active);
-        const batch = writeBatch(db);
-        activeAds.forEach(a => {
-          batch.update(doc(db, 'ads', a.id), { active: false });
-        });
-        batch.set(doc(db, 'ads', id), newAd);
-        await batch.commit();
-      } else {
-        await setDoc(doc(db, 'ads', id), newAd);
-      }
+      await setDoc(doc(db, 'ads', id), newAd);
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `ads/${id}`);
     }
@@ -1227,6 +1252,32 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       await deleteDoc(doc(db, 'ads', adId));
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `ads/${adId}`);
+    }
+  };
+
+  const trackAdClick = async (adId: string) => {
+    try {
+      if (adId.startsWith('ad_fallback_')) return;
+      const adDocRef = doc(db, 'ads', adId);
+      const adSnapshot = await getDoc(adDocRef);
+      if (adSnapshot.exists()) {
+        const currentCount = adSnapshot.data().clickCount || 0;
+        await updateDoc(adDocRef, { clickCount: currentCount + 1 });
+      }
+    } catch (err) {
+      console.error("Failed to increment click count:", err);
+    }
+  };
+
+  const toggleAllAds = async (active: boolean) => {
+    try {
+      const batch = writeBatch(db);
+      ads.forEach(ad => {
+        batch.update(doc(db, 'ads', ad.id), { active });
+      });
+      await batch.commit();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'ads');
     }
   };
 
@@ -1283,7 +1334,9 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         reportPost,
         resolveReport,
         createOrUpdateAd,
-        deleteAd
+        deleteAd,
+        trackAdClick,
+        toggleAllAds
       }}
     >
       {children}

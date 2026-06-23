@@ -20,7 +20,8 @@ import {
   Utensils,
   Briefcase,
   ShieldCheck,
-  Coins
+  Coins,
+  Bell
 } from 'lucide-react';
 
 interface NavigationProps {
@@ -36,7 +37,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   onOpenAuth,
   setSelectedUser
 }) => {
-  const { currentUser, logout, messages, updateProfile } = useSocialPlatform();
+  const { currentUser, logout, messages, updateProfile, notifications } = useSocialPlatform();
 
   const isAdmin = currentUser?.email?.toLowerCase() === 'fresh.linksd@gmail.com' || currentUser?.isAdmin === true || currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
 
@@ -44,10 +45,15 @@ export const Navigation: React.FC<NavigationProps> = ({
     msg => msg.receiverId === currentUser.id && !msg.read
   ).length : 0;
 
+  const unreadNotificationsCount = currentUser && notifications ? notifications.filter(
+    n => n.userId === currentUser.id && !n.read
+  ).length : 0;
+
   const navItems = [
     { id: 'feed', name: 'Home Feed', icon: Compass },
     { id: 'create', name: 'Create Post', icon: PlusCircle },
     { id: 'chat', name: 'Direct Messages', icon: MessageCircle },
+    { id: 'notifications', name: 'Notifications', icon: Bell },
     { id: 'bookmarks', name: 'Saved Blogs', icon: Bookmark },
     { id: 'monetization', name: 'Monetization Hub', icon: Coins },
     ...(isAdmin ? [{ id: 'admin', name: 'Admin Control', icon: ShieldCheck }] : [])
@@ -99,6 +105,11 @@ export const Navigation: React.FC<NavigationProps> = ({
                 {item.id === 'chat' && unreadCount > 0 && (
                   <span className="bg-orange-600 text-white font-mono text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse">
                     {unreadCount}
+                  </span>
+                )}
+                {item.id === 'notifications' && unreadNotificationsCount > 0 && (
+                  <span className="bg-orange-600 text-white font-mono text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+                    {unreadNotificationsCount}
                   </span>
                 )}
               </motion.button>

@@ -4,9 +4,10 @@
  */
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useSocialPlatform } from '../context/SocialPlatformContext';
 import { INTEREST_OPTIONS } from '../data/seedData';
-import { Post, User } from '../types';
+import { Post, User, AdBanner } from '../types';
 import { MultiPhotosLayout } from './MultiPhotosLayout';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -118,7 +119,8 @@ export const Feed: React.FC<FeedProps> = ({
     updateProfile,
     reportPost,
     postReports,
-    ads
+    ads,
+    trackAdClick
   } = useSocialPlatform();
 
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
@@ -133,6 +135,7 @@ export const Feed: React.FC<FeedProps> = ({
   const [useAlgorithm, setUseAlgorithm] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [selectedWorkspaceAd, setSelectedWorkspaceAd] = useState<AdBanner | null>(null);
   const [activeDetailsImage, setActiveDetailsImage] = useState<string | null>(null);
   const [detailsViewMode, setDetailsViewMode] = useState<'image' | 'video'>('image');
 
@@ -617,16 +620,14 @@ export const Feed: React.FC<FeedProps> = ({
 
       {/* Active Ad Banner / Poster inside the top white space */}
       {(() => {
-        const activeAd = ads.find(a => a.active);
+        const activeAd = ads.find(a => a.active && (a.placement || 'workspace') === 'workspace');
         if (!activeAd) return null;
         return (
           <div 
             id={`ad-banner-${activeAd.id}`}
             className="bg-gradient-to-r from-orange-50 to-amber-50 border border-amber-200/60 rounded-3xl p-5 md:p-6 mb-8 flex flex-col md:flex-row items-center gap-6 shadow-sm overflow-hidden relative group cursor-pointer transition hover:border-amber-300"
             onClick={() => {
-              if (activeAd.targetUrl) {
-                window.open(activeAd.targetUrl, '_blank', 'noopener,noreferrer');
-              }
+              setSelectedWorkspaceAd(activeAd);
             }}
           >
             {/* Subtle Tag */}
@@ -656,7 +657,7 @@ export const Feed: React.FC<FeedProps> = ({
                 {activeAd.description}
               </p>
               <div className="flex items-center gap-1 text-orange-600 font-mono text-[10px] font-semibold mt-2">
-                <span>View / Open Deal</span>
+                <span>View Sponsor Deal</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </div>
             </div>
@@ -810,11 +811,13 @@ export const Feed: React.FC<FeedProps> = ({
                   <div 
                     id={`post-${post.id}-video-cover`}
                     onClick={() => setSelectedPost(post)}
-                    className="cursor-pointer overflow-hidden aspect-video relative bg-black border-b border-zinc-100 flex items-center justify-center group"
+                    className="cursor-pointer overflow-hidden aspect-[3/4] max-h-[440px] relative bg-black border-b border-zinc-100 flex items-center justify-center group"
                   >
                     <video
                       src={post.videoUrl}
-                      className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
+                      className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
+                      autoPlay
+                      loop
                       muted
                       playsInline
                     />
@@ -1069,14 +1072,28 @@ export const Feed: React.FC<FeedProps> = ({
                   {(activeDetailsImage || selectedPost.videoUrl) && (
                     <div className="space-y-3">
                       {detailsViewMode === 'video' && selectedPost.videoUrl ? (
-                        <div className="aspect-video bg-black rounded-2xl border border-zinc-150 overflow-hidden shadow-sm relative group">
-                          <video
-                            src={selectedPost.videoUrl}
-                            controls
-                            playsInline
-                            autoPlay={false}
-                            className="w-full h-full object-contain"
-                          />
+                        <div className="bg-zinc-950 p-6 rounded-3xl border border-zinc-800 shadow-2xl flex flex-col items-center text-zinc-100">
+                          <div className="text-[10px] font-black text-orange-500 uppercase tracking-widest mb-3.5 select-none flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-orange-500 animate-ping shrink-0" />
+                            Active Cinematic Reel Loop
+                          </div>
+                          <div className="aspect-[9/16] w-full max-w-[250px] bg-black rounded-2xl overflow-hidden relative border-4 border-zinc-800 shadow-2xl group">
+                            <video
+                              src={selectedPost.videoUrl}
+                              controls
+                              loop
+                              autoPlay
+                              playsInline
+                              className="w-full h-full object-cover"
+                            />
+                            {/* Floating category overlay */}
+                            <div className="absolute top-3 left-3 bg-black/70 backdrop-blur-md text-[8.5px] font-extrabold py-1 px-2.5 rounded-full text-zinc-200 border border-white/10 uppercase tracking-widest">
+                              #{selectedPost.category}
+                            </div>
+                          </div>
+                          <p className="text-[9.5px] text-zinc-400 mt-3.5 italic font-sans text-center">
+                            💡 Features auto-looping. Use video seeker inside player to fast-forward!
+                          </p>
                         </div>
                       ) : activeDetailsImage ? (
                         <div className="aspect-video bg-zinc-950 rounded-2xl border border-zinc-150 overflow-hidden shadow-sm relative">
@@ -1842,6 +1859,97 @@ export const Feed: React.FC<FeedProps> = ({
           </div>
         </div>
       )}
+
+      {/* Expanded Workspace Ad Popup Modal */}
+      <AnimatePresence>
+        {selectedWorkspaceAd && (
+          <div 
+            id="workspace-ad-modal-overlay"
+            className="fixed inset-0 bg-zinc-950/75 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto"
+            onClick={() => setSelectedWorkspaceAd(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 30, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.9, y: 15, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 350, damping: 28 }}
+              className="bg-white rounded-3xl overflow-hidden shadow-2xl max-w-lg w-full border border-zinc-150 relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header section with Badge */}
+              <div className="p-5 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/70">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 text-amber-700 rounded-full text-[10px] font-black uppercase tracking-widest leading-none">
+                  <Megaphone className="w-3.5 h-3.5 text-amber-600" />
+                  Partner Workspace Campaign
+                </span>
+                <button
+                  onClick={() => setSelectedWorkspaceAd(null)}
+                  className="p-1 px-2.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Campaign Poster Graphic Image */}
+              <div className="relative aspect-video w-full bg-zinc-900 border-b border-zinc-100 overflow-hidden">
+                <img 
+                  src={selectedWorkspaceAd.imageUrl || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80'} 
+                  alt={selectedWorkspaceAd.title} 
+                  className="w-full h-full object-cover select-none"
+                  referrerPolicy="no-referrer"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/15 to-transparent flex items-end p-6">
+                  <div>
+                    <span className="text-[10px] font-mono font-bold tracking-widest text-[#F97316] uppercase">CONNECTED ADS NETWORK</span>
+                    <h3 className="text-xl md:text-2xl font-sans font-black text-white uppercase tracking-tight leading-tight mt-1">
+                      {selectedWorkspaceAd.title}
+                    </h3>
+                  </div>
+                </div>
+              </div>
+
+              {/* Description & Interactive Controls */}
+              <div className="p-6 md:p-8 space-y-5">
+                <p className="text-zinc-650 text-xs md:text-sm leading-relaxed font-sans font-medium">
+                  {selectedWorkspaceAd.description}
+                </p>
+
+                {/* Secure Trust Badge */}
+                <div className="p-3.5 bg-zinc-50 rounded-2xl flex items-start gap-2.5 border border-zinc-150">
+                  <div className="w-5 h-5 bg-orange-100 text-orange-700 rounded-md flex items-center justify-center shrink-0">
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h5 className="text-[10.5px] font-mono uppercase tracking-wider text-zinc-700 font-bold">Workspace Campaign Integrity</h5>
+                    <p className="text-[9.5px] text-zinc-500 mt-0.5 leading-snug">
+                      Redirection destination targets and digital assets pre-cleared by administrators. Click the action button to redeem partner benefits.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Direct launch / redirection CTA */}
+                <div className="pt-2">
+                  <a
+                    href={selectedWorkspaceAd.targetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    referrerPolicy="no-referrer"
+                    className="w-full py-4 px-6 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-[11px] font-extrabold uppercase tracking-widest rounded-2xl shadow-lg flex items-center justify-center gap-2.5 transition-all text-center select-none cursor-pointer"
+                    onClick={() => {
+                      trackAdClick(selectedWorkspaceAd.id);
+                      setSelectedWorkspaceAd(null);
+                    }}
+                  >
+                    <Sparkles className="w-4 h-4 text-white" />
+                    <span>Redeem Campaign Benefit</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

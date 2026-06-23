@@ -27,7 +27,8 @@ import {
   Info,
   Loader2,
   Megaphone,
-  ExternalLink
+  ExternalLink,
+  Sparkles
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -51,7 +52,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
     updateWithdrawalStatusByAdmin,
     ads,
     createOrUpdateAd,
-    deleteAd
+    deleteAd,
+    toggleAllAds
   } = useSocialPlatform();
 
   const isSuperAdmin = currentUser?.role === 'super_admin' || currentUser?.email?.toLowerCase() === 'fresh.linksd@gmail.com';
@@ -100,6 +102,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
   const [adDescription, setAdDescription] = useState('');
   const [adTargetUrl, setAdTargetUrl] = useState('');
   const [adActive, setAdActive] = useState(true);
+  const [adPlacement, setAdPlacement] = useState<'workspace' | 'bubble'>('workspace');
+  const [adWelcomeBadge, setAdWelcomeBadge] = useState('Sponsored Welcome');
+  const [adWelcomeTitle, setAdWelcomeTitle] = useState('Active Sponsor Bubbles live!');
+  const [adWelcomeText, setAdWelcomeText] = useState('Pop the glossy floating spheres orbiting the workspace to test campaign previews and grab exclusive content offers.');
   const [adEditingId, setAdEditingId] = useState<string | null>(null);
   const [adError, setAdError] = useState<string | null>(null);
   const [adSuccess, setAdSuccess] = useState<string | null>(null);
@@ -1208,13 +1214,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
             <div>
               <div className="inline-flex items-center gap-1.5 bg-orange-50 border-r border-[#1A1A1A]/5 px-3.5 py-1 text-[10px] font-sans font-bold uppercase tracking-widest text-orange-600 rounded-full mb-2">
                 <Megaphone className="w-3.5 h-3.5 shrink-0" />
-                <span>SPONSORED AD DESK</span>
+                <span>SPONSORED CAMPAIGN BUILDER</span>
               </div>
-              <h2 className="font-sans font-black text-lg uppercase tracking-tight text-zinc-900">
-                {adEditingId ? 'Edit Ad Campaign' : 'Publish Ad Campaign'}
+              <h2 className="font-sans font-black text-lg uppercase tracking-tight text-zinc-900 font-bold">
+                {adEditingId ? 'Edit Campaign' : 'Create Campaign'}
               </h2>
-              <p className="text-zinc-400 text-xs mt-1">
-                Post promotion details to be rendered directly inside the white unused space on the main Feed page.
+              <p className="text-zinc-650 text-xs mt-1 leading-relaxed">
+                Configure tailored promotional campaigns. Select **Workspace Banners** to insert static ads inside the top Feed white space, or select **Interactive Bubbles** to spawn sleek floating spheres with customized welcome overlays.
               </p>
             </div>
 
@@ -1244,15 +1250,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                   description: adDescription.trim(),
                   imageUrl: adImageUrl.trim(),
                   targetUrl: adTargetUrl.trim(),
-                  active: adActive
+                  active: adActive,
+                  placement: adPlacement,
+                  welcomeBadge: adPlacement === 'bubble' ? adWelcomeBadge.trim() : undefined,
+                  welcomeTitle: adPlacement === 'bubble' ? adWelcomeTitle.trim() : undefined,
+                  welcomeText: adPlacement === 'bubble' ? adWelcomeText.trim() : undefined
                 });
-                setAdSuccess(adEditingId ? "Campaign successfully updated!" : "Ad Banner successfully queued and published!");
+                setAdSuccess(adEditingId ? "Campaign successfully updated!" : "Ad campaign successfully queued and published!");
                 // Clear the states
                 setAdTitle('');
                 setAdDescription('');
                 setAdImageUrl('');
                 setAdTargetUrl('');
                 setAdActive(true);
+                setAdPlacement('workspace');
+                setAdWelcomeBadge('Sponsored Welcome');
+                setAdWelcomeTitle('Active Sponsor Bubbles live!');
+                setAdWelcomeText('Pop the glossy floating spheres orbiting the workspace to test campaign previews and grab exclusive content offers.');
                 setAdEditingId(null);
                 setTimeout(() => setAdSuccess(null), 3000);
               } catch (err: any) {
@@ -1260,6 +1274,81 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
               }
             }} className="space-y-4">
               
+              {/* Segmented Placement Toggle between Workspace & Bubble Ads */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Ad Campaign Placement type</label>
+                <div className="grid grid-cols-2 gap-2 bg-zinc-50 p-1 rounded-2xl border border-zinc-150">
+                  <button
+                    type="button"
+                    onClick={() => setAdPlacement('workspace')}
+                    className={`py-2 px-3 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
+                      adPlacement === 'workspace'
+                        ? 'bg-black text-white shadow'
+                        : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 cursor-pointer'
+                    }`}
+                  >
+                    <span>📰 Workspace Banner</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAdPlacement('bubble')}
+                    className={`py-2 px-3 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
+                      adPlacement === 'bubble'
+                        ? 'bg-black text-white shadow'
+                        : 'text-zinc-650 hover:bg-zinc-100 hover:text-zinc-900 cursor-pointer'
+                    }`}
+                  >
+                    <span>🫧 Interactive Bubble</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Conditional customizations for Bubble Welcome overlay elements */}
+              {adPlacement === 'bubble' && (
+                <div className="space-y-4 p-4 bg-orange-50/40 rounded-2xl border border-orange-200/50 animate-fadeIn">
+                  <div className="flex items-center gap-1.5 pb-2 border-b border-orange-200/35">
+                    <Sparkles className="w-3.5 h-3.5 text-orange-600 animate-pulse" />
+                    <span className="text-[10px] uppercase font-mono tracking-widest text-orange-700 font-extrabold">Bubble Welcome Notifications Customizer</span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Welcome Notification Badge Tag</label>
+                    <input
+                      type="text"
+                      required
+                      value={adWelcomeBadge}
+                      onChange={(e) => setAdWelcomeBadge(e.target.value)}
+                      placeholder="e.g., Sponsored Welcome"
+                      className="w-full px-3.5 py-2 rounded-xl bg-white border border-zinc-200 focus:border-orange-500 text-xs text-zinc-800 outline-none font-sans font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Welcome Heading Title</label>
+                    <input
+                      type="text"
+                      required
+                      value={adWelcomeTitle}
+                      onChange={(e) => setAdWelcomeTitle(e.target.value)}
+                      placeholder="e.g., Active Sponsor Bubbles live!"
+                      className="w-full px-3.5 py-2 rounded-xl bg-white border border-zinc-200 focus:border-orange-500 text-xs text-zinc-800 outline-none font-sans font-black"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Welcome description copy</label>
+                    <textarea
+                      required
+                      rows={3}
+                      value={adWelcomeText}
+                      onChange={(e) => setAdWelcomeText(e.target.value)}
+                      placeholder="e.g., Pop the glossy floating spheres orbiting the workspace to test campaign previews and grab exclusive content offers."
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-zinc-200 focus:border-orange-500 text-[10px] text-zinc-800 outline-none font-sans leading-relaxed"
+                    />
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-1.5">
                 <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Ad title / headline</label>
                 <input
@@ -1379,6 +1468,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                       setAdImageUrl('');
                       setAdTargetUrl('');
                       setAdActive(true);
+                      setAdPlacement('workspace');
+                      setAdWelcomeBadge('Sponsored Welcome');
+                      setAdWelcomeTitle('Active Sponsor Bubbles live!');
+                      setAdWelcomeText('Pop the glossy floating spheres orbiting the workspace to test campaign previews and grab exclusive content offers.');
                       setAdError(null);
                     }}
                     className="px-4 py-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-sans font-bold uppercase tracking-widest text-[10px] rounded-2xl transition"
@@ -1442,6 +1535,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
               </p>
             </div>
 
+            {/* Quick Actions Bar to Pause or Activate All campaigns */}
+            {ads && ads.length > 0 && (
+              <div className="grid grid-cols-2 gap-3 bg-zinc-50 p-3 rounded-2xl border border-zinc-150">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (confirm("Are you sure you want to pause all advertisement campaigns?")) {
+                      await toggleAllAds(false);
+                    }
+                  }}
+                  className="py-2.5 text-[9.5px] uppercase font-black tracking-widest bg-white hover:bg-zinc-100 text-zinc-700 border border-zinc-250 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <span>⏸️ Pause All Ads</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (confirm("Are you sure you want to activate all advertisement campaigns?")) {
+                      await toggleAllAds(true);
+                    }
+                  }}
+                  className="py-2.5 text-[9.5px] uppercase font-black tracking-widest bg-zinc-900 hover:bg-black text-white rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <span>▶️ Activate All Ads</span>
+                </button>
+              </div>
+            )}
+
             <div className="space-y-4 max-h-[700px] overflow-y-auto pr-2">
               {ads && ads.length > 0 ? (
                 [...ads]
@@ -1461,12 +1582,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <h4 className="text-xs font-black text-zinc-800 truncate max-w-[200px] md:max-w-xs">{a.title}</h4>
-                          <span className={`text-[8.5px] font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                            a.active
-                              ? 'text-emerald-850 bg-emerald-50 border-emerald-100'
-                              : 'text-zinc-500 bg-zinc-100 border-zinc-200/60'
+                          {(() => {
+                            const hoursElapsed = (Date.now() - new Date(a.createdAt).getTime()) / (1000 * 60 * 60);
+                            const hoursRemaining = 24 - hoursElapsed;
+                            if (a.active) {
+                              if (hoursRemaining <= 0) {
+                                return (
+                                  <span className="text-[8.5px] font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded-full border text-red-700 bg-red-50 border-red-100">
+                                    EXPIRED (24H Over)
+                                  </span>
+                                );
+                              }
+                              const h = Math.floor(hoursRemaining);
+                              const m = Math.floor((hoursRemaining - h) * 60);
+                              return (
+                                <span className="text-[8.5px] font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded-full border text-emerald-700 bg-emerald-50 border-emerald-100 animate-pulse">
+                                  RUNNING • {h}h {m}m LEFT
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="text-[8.5px] font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded-full border text-zinc-500 bg-zinc-100 border-zinc-100">
+                                PAUSED / STOPPED
+                              </span>
+                            );
+                          })()}
+
+                          <span className={`text-[8.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                            a.placement === 'bubble'
+                              ? 'text-purple-700 bg-purple-50 border-purple-100'
+                              : 'text-blue-700 bg-blue-50 border-blue-100'
                           }`}>
-                            {a.active ? 'ACTIVE BANNER' : 'PAUSED'}
+                            {a.placement === 'bubble' ? '🫧 Interactive Bubble' : '📰 Workspace Banner'}
                           </span>
                         </div>
                         <p className="text-[10.5px] text-zinc-500 mt-1 line-clamp-2 leading-normal">{a.description}</p>
@@ -1476,6 +1623,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                           <a href={a.targetUrl} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline inline-flex items-center gap-0.5">
                             {a.targetUrl} <ExternalLink className="w-3 h-3 shrink-0" />
                           </a>
+                        </div>
+
+                        <div className="flex gap-4 items-center mt-2 text-zinc-500 text-[10px] font-mono flex-wrap">
+                          <div className="flex items-center gap-1 bg-zinc-100/70 border border-zinc-150 px-2 py-0.5 rounded-lg text-zinc-700 font-bold">
+                            <span className="text-orange-600">🎯</span> Click Rate: <span className="text-zinc-900 font-black">{a.clickCount || 0}</span> redirections
+                          </div>
+                          <div className="text-[9.5px]">
+                            Created: <span className="font-semibold text-zinc-650">{new Date(a.createdAt).toLocaleString()}</span>
+                          </div>
                         </div>
                       </div>
 
@@ -1508,6 +1664,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                             setAdImageUrl(a.imageUrl);
                             setAdTargetUrl(a.targetUrl);
                             setAdActive(a.active);
+                            setAdPlacement(a.placement || 'workspace');
+                            setAdWelcomeBadge(a.welcomeBadge || 'Sponsored Welcome');
+                            setAdWelcomeTitle(a.welcomeTitle || 'Active Sponsor Bubbles live!');
+                            setAdWelcomeText(a.welcomeText || 'Pop the glossy floating spheres orbiting the workspace to test campaign previews and grab exclusive content offers.');
                           }}
                           className="px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider text-zinc-600 hover:bg-zinc-100 bg-zinc-50 rounded-xl transition cursor-pointer"
                         >
