@@ -7,6 +7,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { User, Post, Like, Comment, Follower, Message, Achievement, WithdrawalRequest, Notification, PostReport, AdBanner } from '../types';
 import { SEED_USERS, SEED_POSTS, SEED_FOLLOWERS, SEED_COMMENTS, SEED_MESSAGES } from '../data/seedData';
 import { censorText } from '../lib/security';
+import { checkRateLimit, resetRateLimit } from '../lib/rateLimiter';
 import {
   collection,
   doc,
@@ -112,6 +113,9 @@ interface SocialPlatformContextType {
   toggleAllAds: (active: boolean) => Promise<void>;
   isQuotaFallbackMode: boolean;
   resetQuotaFallback: () => void;
+  securityBlock: { actionType: string; remainingMs: number } | null;
+  setSecurityBlock: (block: { actionType: string; remainingMs: number } | null) => void;
+  resolveSecurityChallenge: () => void;
 }
 
 const SocialPlatformContext = createContext<SocialPlatformContextType | undefined>(undefined);
@@ -133,6 +137,14 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   const activeChatPartnerRef = useRef<string | null>(null);
 
   const [isQuotaFallbackMode, setIsQuotaFallbackMode] = useState<boolean>(false);
+  const [securityBlock, setSecurityBlock] = useState<{ actionType: string; remainingMs: number } | null>(null);
+
+  const resolveSecurityChallenge = () => {
+    if (securityBlock) {
+      resetRateLimit(currentUserId || 'anonymous', securityBlock.actionType);
+      setSecurityBlock(null);
+    }
+  };
 
   // Helper to load all stored local data or seed if empty
   const triggerLocalQuotaFallback = () => {
@@ -179,12 +191,22 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     localFallbackCallback: () => void,
     pathInfo: string
   ) => {
+    // Client-side Anti-Spam / Anti-DDoS rate limiter layer
+    const actionType = pathInfo.split('/')[0] || 'write';
+    const limitCheck = checkRateLimit(currentUserId || 'anonymous', actionType);
+    if (!limitCheck.allowed) {
+      setSecurityBlock({ actionType, remainingMs: limitCheck.blockedRemainingMs });
+      console.warn(`Spam Defense System blocked write to ${pathInfo} (cooling down)`);
+      return; // Stop execution of the write to protect server resources
+    }
+
     if (isQuotaFallbackMode) {
       localFallbackCallback();
       return;
     }
     try {
       await firestoreCallback();
+      localFallbackCallback(); // Always update local React state on successful write to avoid needing real-time sync listeners
     } catch (err: any) {
       const errMsg = err instanceof Error ? err.message : String(err);
       if (errMsg.includes('Quota limit') || errMsg.includes('quota') || errMsg.includes('exceeded') || errMsg.includes('resource-exhausted') || errMsg.includes('Resource exhausted')) {
@@ -404,7 +426,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     return () => authUnsub();
   }, []);
 
-  // 2. Seeding & Real-Time Sync subscriptions
+  // 2. High-Performance One-Time Initial Data Load & Caching
   const handleSubError = (error: any, collectionName: string) => {
     const errMsg = error instanceof Error ? error.message : String(error);
     if (errMsg.includes('Quota limit') || errMsg.includes('quota') || errMsg.includes('exceeded') || errMsg.includes('resource-exhausted') || errMsg.includes('Resource exhausted')) {
@@ -415,21 +437,54 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   };
 
   useEffect(() => {
-    const initializeDatabaseAndSync = async () => {
+    const fetchInitialData = async () => {
       if (isQuotaFallbackMode) {
         setLoading(false);
         return;
       }
       try {
-        // Check if DB is already populated by checking posts collection
-        const postsColRef = collection(db, 'posts');
-        const postsSnap = await getDocs(postsColRef);
+        setLoading(true);
+        // Execute single-round concurrent reads instead of maintaining heavy, permanent wide-collection listeners
+        const [usersSnap, postsSnap, likesSnap, commentsSnap, followersSnap, adsSnap, reportsSnap] = await Promise.all([
+          getDocs(collection(db, 'users')),
+          getDocs(collection(db, 'posts')),
+          getDocs(collection(db, 'likes')),
+          getDocs(collection(db, 'comments')),
+          getDocs(collection(db, 'followers')),
+          getDocs(collection(db, 'ads')),
+          getDocs(collection(db, 'postReports'))
+        ]);
 
-        if (postsSnap.empty) {
-          console.log("Firestore is empty. Ready for authentic user actions.");
-        }
+        const usersList: User[] = [];
+        usersSnap.forEach((d) => usersList.push(d.data() as User));
+        setUsers(usersList);
+
+        const postsList: Post[] = [];
+        postsSnap.forEach((d) => postsList.push(d.data() as Post));
+        setPosts(postsList);
+
+        const likesList: Like[] = [];
+        likesSnap.forEach((d) => likesList.push(d.data() as Like));
+        setLikes(likesList);
+
+        const commentsList: Comment[] = [];
+        commentsSnap.forEach((d) => commentsList.push(d.data() as Comment));
+        setComments(commentsList);
+
+        const followersList: Follower[] = [];
+        followersSnap.forEach((d) => followersList.push(d.data() as Follower));
+        setFollowers(followersList);
+
+        const adsList: AdBanner[] = [];
+        adsSnap.forEach((d) => adsList.push(d.data() as AdBanner));
+        setAds(adsList);
+
+        const reportsList: PostReport[] = [];
+        reportsSnap.forEach((d) => reportsList.push(d.data() as PostReport));
+        setPostReports(reportsList);
+
       } catch (err: any) {
-        console.error("An error occurred during Firestore seeding:", err);
+        console.error("An error occurred during Firestore one-time initial load:", err);
         const errMsg = err instanceof Error ? err.message : String(err);
         if (errMsg.includes('Quota limit') || errMsg.includes('quota') || errMsg.includes('exceeded') || errMsg.includes('resource-exhausted') || errMsg.includes('Resource exhausted')) {
           triggerLocalQuotaFallback();
@@ -439,58 +494,12 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       }
     };
 
-    initializeDatabaseAndSync();
+    fetchInitialData();
 
-    // Attach reactive sync listeners
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
-      if (isQuotaFallbackMode) return;
-      const list: User[] = [];
-      snap.forEach((d) => list.push(d.data() as User));
-      setUsers(list);
-    }, (error) => {
-      handleSubError(error, 'users');
-    });
-
-    const unsubPosts = onSnapshot(collection(db, 'posts'), (snap) => {
-      if (isQuotaFallbackMode) return;
-      const list: Post[] = [];
-      snap.forEach((d) => list.push(d.data() as Post));
-      setPosts(list);
-    }, (error) => {
-      handleSubError(error, 'posts');
-    });
-
-    const unsubLikes = onSnapshot(collection(db, 'likes'), (snap) => {
-      if (isQuotaFallbackMode) return;
-      const list: Like[] = [];
-      snap.forEach((d) => list.push(d.data() as Like));
-      setLikes(list);
-    }, (error) => {
-      handleSubError(error, 'likes');
-    });
-
-    const unsubComments = onSnapshot(collection(db, 'comments'), (snap) => {
-      if (isQuotaFallbackMode) return;
-      const list: Comment[] = [];
-      snap.forEach((d) => list.push(d.data() as Comment));
-      setComments(list);
-    }, (error) => {
-      handleSubError(error, 'comments');
-    });
-
-    const unsubFollowers = onSnapshot(collection(db, 'followers'), (snap) => {
-      if (isQuotaFallbackMode) return;
-      const list: Follower[] = [];
-      snap.forEach((d) => list.push(d.data() as Follower));
-      setFollowers(list);
-    }, (error) => {
-      handleSubError(error, 'followers');
-    });
-
+    // Attach reactive sync listeners ONLY for real-time user-specific collections (notifications, withdrawals)
     let unsubWithdrawals = () => {};
-    if (currentUserId) {
+    if (currentUserId && !isQuotaFallbackMode) {
       unsubWithdrawals = onSnapshot(collection(db, 'withdrawals'), (snap) => {
-        if (isQuotaFallbackMode) return;
         const list: WithdrawalRequest[] = [];
         snap.forEach((d) => list.push(d.data() as WithdrawalRequest));
         setWithdrawals(list);
@@ -502,10 +511,9 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     }
 
     let unsubNotifications = () => {};
-    if (currentUserId) {
+    if (currentUserId && !isQuotaFallbackMode) {
       const qNotif = query(collection(db, 'notifications'), where('userId', '==', currentUserId));
       unsubNotifications = onSnapshot(qNotif, (snap) => {
-        if (isQuotaFallbackMode) return;
         const list: Notification[] = [];
         snap.forEach((d) => list.push(d.data() as Notification));
         setNotifications(list);
@@ -516,55 +524,11 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       setNotifications([]);
     }
 
-    const unsubAds = onSnapshot(collection(db, 'ads'), (snap) => {
-      if (isQuotaFallbackMode) return;
-      const list: AdBanner[] = [];
-      snap.forEach((d) => list.push(d.data() as AdBanner));
-      setAds(list);
-    }, (error) => {
-      handleSubError(error, 'ads');
-    });
-
     return () => {
-      unsubUsers();
-      unsubPosts();
-      unsubLikes();
-      unsubComments();
-      unsubFollowers();
       unsubWithdrawals();
       unsubNotifications();
-      unsubAds();
     };
   }, [currentUserId, isQuotaFallbackMode]);
-
-  // 2.5 Dynamic Admin-Only Post Reports subscription
-  useEffect(() => {
-    if (isQuotaFallbackMode) return;
-    const matchedUser = users.find(u => u.id === currentUserId);
-    const isUserAdmin = matchedUser?.role === 'admin' || matchedUser?.isAdmin === true || matchedUser?.email?.toLowerCase() === 'fresh.linksd@gmail.com';
-    
-    if (!currentUserId || !isUserAdmin) {
-      setPostReports([]);
-      return;
-    }
-
-    const unsubReports = onSnapshot(collection(db, 'postReports'), (snap) => {
-      const list: PostReport[] = [];
-      snap.forEach((d) => list.push(d.data() as PostReport));
-      setPostReports(list);
-    }, (error) => {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      if (errMsg.includes('Quota limit') || errMsg.includes('quota') || errMsg.includes('exceeded') || errMsg.includes('resource-exhausted') || errMsg.includes('Resource exhausted')) {
-        triggerLocalQuotaFallback();
-      } else {
-        handleFirestoreError(error, OperationType.GET, 'postReports');
-      }
-    });
-
-    return () => {
-      unsubReports();
-    };
-  }, [currentUserId, users, isQuotaFallbackMode]);
 
   // 3. User Private Messages subscription
   useEffect(() => {
@@ -1037,24 +1001,33 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   };
 
   const editComment = async (commentId: string, newText: string) => {
-    try {
-      const cleanText = censorText(newText);
-      const commentRef = doc(db, 'comments', commentId);
-      await updateDoc(commentRef, {
-        comment: cleanText,
-        updatedAt: new Date().toISOString()
-      });
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `comments/${commentId}`);
-    }
+    const cleanText = censorText(newText);
+    const updatedAt = new Date().toISOString();
+    await runWriteOperation(
+      async () => {
+        const commentRef = doc(db, 'comments', commentId);
+        await updateDoc(commentRef, {
+          comment: cleanText,
+          updatedAt
+        });
+      },
+      () => {
+        setComments(prev => prev.map(c => c.id === commentId ? { ...c, comment: cleanText, updatedAt } : c));
+      },
+      `comments/${commentId}`
+    );
   };
 
   const deleteComment = async (commentId: string) => {
-    try {
-      await deleteDoc(doc(db, 'comments', commentId));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `comments/${commentId}`);
-    }
+    await runWriteOperation(
+      async () => {
+        await deleteDoc(doc(db, 'comments', commentId));
+      },
+      () => {
+        setComments(prev => prev.filter(c => c.id !== commentId));
+      },
+      `comments/${commentId}`
+    );
   };
 
   // Creators Following system
@@ -1063,25 +1036,38 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     const followId = `${currentUserId}_${targetUserId}`;
     const followingAlready = followers.some(f => f.followerId === currentUserId && f.followingId === targetUserId);
 
-    try {
-      if (followingAlready) {
-        await deleteDoc(doc(db, 'followers', followId));
-      } else {
-        await setDoc(doc(db, 'followers', followId), {
-          followerId: currentUserId,
-          followingId: targetUserId
-        });
+    await runWriteOperation(
+      async () => {
+        if (followingAlready) {
+          await deleteDoc(doc(db, 'followers', followId));
+        } else {
+          await setDoc(doc(db, 'followers', followId), {
+            followerId: currentUserId,
+            followingId: targetUserId
+          });
 
-        // Notify the creator
-        await addNotification(
-          targetUserId,
-          'follow',
-          `started following you`
-        );
-      }
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `followers/${followId}`);
-    }
+          // Notify the creator
+          await addNotification(
+            targetUserId,
+            'follow',
+            `started following you`
+          );
+        }
+      },
+      () => {
+        if (followingAlready) {
+          setFollowers(prev => prev.filter(f => f.followerId !== currentUserId || f.followingId !== targetUserId));
+        } else {
+          setFollowers(prev => [...prev, { followerId: currentUserId, followingId: targetUserId }]);
+          addNotification(
+            targetUserId,
+            'follow',
+            `started following you`
+          );
+        }
+      },
+      `followers/${followId}`
+    );
   };
 
   const isFollowing = (userId: string) => {
@@ -1111,33 +1097,49 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       status: 'sent'
     };
 
-    try {
-      await setDoc(doc(db, 'messages', id), newMsg);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `messages/${id}`);
-    }
+    await runWriteOperation(
+      async () => {
+        await setDoc(doc(db, 'messages', id), newMsg);
+      },
+      () => {
+        setMessages(prev => {
+          if (prev.some(m => m.id === id)) return prev;
+          return [...prev, newMsg];
+        });
+      },
+      `messages/${id}`
+    );
     return newMsg;
   };
 
   const editMessage = async (messageId: string, newText: string) => {
-    try {
-      const cleanText = censorText(newText);
-      const msgRef = doc(db, 'messages', messageId);
-      await updateDoc(msgRef, {
-        message: cleanText,
-        updatedAt: new Date().toISOString()
-      });
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `messages/${messageId}`);
-    }
+    const cleanText = censorText(newText);
+    const updatedAt = new Date().toISOString();
+    await runWriteOperation(
+      async () => {
+        const msgRef = doc(db, 'messages', messageId);
+        await updateDoc(msgRef, {
+          message: cleanText,
+          updatedAt
+        });
+      },
+      () => {
+        setMessages(prev => prev.map(m => m.id === messageId ? { ...m, message: cleanText, updatedAt } : m));
+      },
+      `messages/${messageId}`
+    );
   };
 
   const deleteMessage = async (messageId: string) => {
-    try {
-      await deleteDoc(doc(db, 'messages', messageId));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `messages/${messageId}`);
-    }
+    await runWriteOperation(
+      async () => {
+        await deleteDoc(doc(db, 'messages', messageId));
+      },
+      () => {
+        setMessages(prev => prev.filter(m => m.id !== messageId));
+      },
+      `messages/${messageId}`
+    );
   };
 
   const getChatRooms = () => {
@@ -1303,48 +1305,62 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   };
 
   const blockUser = async (userId: string, blocked: boolean) => {
-    try {
-      await updateDoc(doc(db, 'users', userId), { isBlocked: blocked });
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `users/${userId}`);
-    }
+    await runWriteOperation(
+      async () => {
+        await updateDoc(doc(db, 'users', userId), { isBlocked: blocked });
+      },
+      () => {
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, isBlocked: blocked } : u));
+      },
+      `users/${userId}`
+    );
   };
 
   const setRoleByAdmin = async (userId: string, role: 'admin' | 'user') => {
-    try {
-      await updateDoc(doc(db, 'users', userId), { role, isAdmin: role === 'admin' });
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `users/${userId}`);
-    }
+    await runWriteOperation(
+      async () => {
+        await updateDoc(doc(db, 'users', userId), { role, isAdmin: role === 'admin' });
+      },
+      () => {
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, role, isAdmin: role === 'admin' } : u));
+      },
+      `users/${userId}`
+    );
   };
 
   const verifyUserByAdmin = async (userId: string, approved: boolean, remarks?: string) => {
-    try {
-      if (approved) {
-        await updateDoc(doc(db, 'users', userId), { 
-          isApprovedByAdmin: true,
-          clearanceRemarks: remarks || ""
-        });
+    const updateData = approved ? { 
+      isApprovedByAdmin: true,
+      clearanceRemarks: remarks || ""
+    } : { 
+      isApprovedByAdmin: false, 
+      hasVerifiedDetails: false,
+      clearanceRemarks: remarks || ""
+    };
+
+    await runWriteOperation(
+      async () => {
+        await updateDoc(doc(db, 'users', userId), updateData);
         await addNotification(
           userId,
           'report_decision',
-          `Your identity document verification request has been APPROVED by the admin.${remarks ? ` Remarks: ${remarks}` : ''}`
+          approved 
+            ? `Your identity document verification request has been APPROVED by the admin.${remarks ? ` Remarks: ${remarks}` : ''}`
+            : `Your identity document verification request was REJECTED by the admin.${remarks ? ` Reason: ${remarks}` : ''}`
         );
-      } else {
-        await updateDoc(doc(db, 'users', userId), { 
-          isApprovedByAdmin: false, 
-          hasVerifiedDetails: false,
-          clearanceRemarks: remarks || ""
-        });
-        await addNotification(
+      },
+      () => {
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updateData } : u));
+        addNotification(
           userId,
           'report_decision',
-          `Your identity document verification request was REJECTED by the admin.${remarks ? ` Reason: ${remarks}` : ''}`
+          approved 
+            ? `Your identity document verification request has been APPROVED by the admin.${remarks ? ` Remarks: ${remarks}` : ''}`
+            : `Your identity document verification request was REJECTED by the admin.${remarks ? ` Reason: ${remarks}` : ''}`
         );
-      }
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `users/${userId}`);
-    }
+      },
+      `users/${userId}`
+    );
   };
 
   const requestWithdrawal = async (amountNpr: number, paymentMethod: string, details: string) => {
@@ -1359,31 +1375,46 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       status: 'pending',
       createdAt: new Date().toISOString()
     };
-    try {
-      await setDoc(doc(db, 'withdrawals', id), newRequest);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `withdrawals/${id}`);
-    }
+    await runWriteOperation(
+      async () => {
+        await setDoc(doc(db, 'withdrawals', id), newRequest);
+      },
+      () => {
+        setWithdrawals(prev => [...prev, newRequest]);
+      },
+      `withdrawals/${id}`
+    );
   };
 
   const updateWithdrawalStatusByAdmin = async (withdrawalId: string, status: 'approved' | 'rejected', remarks?: string) => {
-    try {
-      await updateDoc(doc(db, 'withdrawals', withdrawalId), { 
-        status,
-        remarks: remarks || ""
-      });
-      
-      const withdrawal = withdrawals.find(w => w.id === withdrawalId);
-      if (withdrawal) {
-        await addNotification(
-          withdrawal.userId,
-          'withdrawal_decision',
-          `Your withdrawal request of NPR ${withdrawal.amountNpr} has been ${status === 'approved' ? 'APPROVED' : 'REJECTED'}.${remarks ? ` Remarks: ${remarks}` : ''}`
-        );
-      }
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `withdrawals/${withdrawalId}`);
-    }
+    await runWriteOperation(
+      async () => {
+        await updateDoc(doc(db, 'withdrawals', withdrawalId), { 
+          status,
+          remarks: remarks || ""
+        });
+        const withdrawal = withdrawals.find(w => w.id === withdrawalId);
+        if (withdrawal) {
+          await addNotification(
+            withdrawal.userId,
+            'withdrawal_decision',
+            `Your withdrawal request of NPR ${withdrawal.amountNpr} has been ${status === 'approved' ? 'APPROVED' : 'REJECTED'}.${remarks ? ` Remarks: ${remarks}` : ''}`
+          );
+        }
+      },
+      () => {
+        setWithdrawals(prev => prev.map(w => w.id === withdrawalId ? { ...w, status, remarks: remarks || "" } : w));
+        const withdrawal = withdrawals.find(w => w.id === withdrawalId);
+        if (withdrawal) {
+          addNotification(
+            withdrawal.userId,
+            'withdrawal_decision',
+            `Your withdrawal request of NPR ${withdrawal.amountNpr} has been ${status === 'approved' ? 'APPROVED' : 'REJECTED'}.${remarks ? ` Remarks: ${remarks}` : ''}`
+          );
+        }
+      },
+      `withdrawals/${withdrawalId}`
+    );
   };
 
   // --- New Methods Implementation ---
@@ -1412,31 +1443,43 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
 
     try {
       await setDoc(doc(db, 'notifications', notifId), newNotification);
+      // Also update notifications local state if not in quota fallback (since snapshot handles normal real-time notifications stream)
+      if (isQuotaFallbackMode) {
+        setNotifications(prev => [...prev, newNotification]);
+      }
     } catch (err) {
       console.error("Error creating notification:", err);
     }
   };
 
   const markNotificationAsRead = async (id: string) => {
-    try {
-      await updateDoc(doc(db, 'notifications', id), { read: true });
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `notifications/${id}`);
-    }
+    await runWriteOperation(
+      async () => {
+        await updateDoc(doc(db, 'notifications', id), { read: true });
+      },
+      () => {
+        setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+      },
+      `notifications/${id}`
+    );
   };
 
   const markAllNotificationsAsRead = async () => {
-    try {
-      const userNotifs = notifications.filter(n => n.userId === currentUserId && !n.read);
-      if (userNotifs.length === 0) return;
-      const batch = writeBatch(db);
-      userNotifs.forEach(notif => {
-        batch.update(doc(db, 'notifications', notif.id), { read: true });
-      });
-      await batch.commit();
-    } catch (err) {
-      console.error("Error marking all notifications as read:", err);
-    }
+    const userNotifs = notifications.filter(n => n.userId === currentUserId && !n.read);
+    if (userNotifs.length === 0) return;
+    await runWriteOperation(
+      async () => {
+        const batch = writeBatch(db);
+        userNotifs.forEach(notif => {
+          batch.update(doc(db, 'notifications', notif.id), { read: true });
+        });
+        await batch.commit();
+      },
+      () => {
+        setNotifications(prev => prev.map(n => n.userId === currentUserId ? { ...n, read: true } : n));
+      },
+      'notifications/all'
+    );
   };
 
   const reportPost = async (postId: string, reason: string, remarks: string) => {
@@ -1629,7 +1672,10 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         trackAdClick,
         toggleAllAds,
         isQuotaFallbackMode,
-        resetQuotaFallback
+        resetQuotaFallback,
+        securityBlock,
+        setSecurityBlock,
+        resolveSecurityChallenge
       }}
     >
       {children}

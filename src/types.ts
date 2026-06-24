@@ -30,6 +30,7 @@ export interface User {
   panNumber?: string;
   officialDocId?: string;
   idPhoto?: string; // photo of id
+  dob?: string; // Date of birth (YYYY-MM-DD)
   isApprovedByAdmin?: boolean; // admin security clearance approval
   hasVerifiedDetails?: boolean;
   clearanceRemarks?: string; // Remarks/reason for clearance actions

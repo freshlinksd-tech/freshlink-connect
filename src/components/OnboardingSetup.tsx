@@ -24,7 +24,8 @@ import {
   Phone,
   CreditCard,
   ShieldCheck,
-  CheckCircle2
+  CheckCircle2,
+  Cake
 } from 'lucide-react';
 
 const AVATAR_PRESETS = [
@@ -52,6 +53,7 @@ export const OnboardingSetup: React.FC = () => {
   const [name, setName] = useState(currentUser.name || '');
   const [bio, setBio] = useState(currentUser.bio || '');
   const [location, setLocation] = useState(currentUser.location || 'Earth');
+  const [dob, setDob] = useState(currentUser.dob || '');
   const [selectedInterests, setSelectedInterests] = useState<string[]>(
     currentUser.interests && currentUser.interests.length > 0 ? currentUser.interests : ['technology']
   );
@@ -195,6 +197,7 @@ export const OnboardingSetup: React.FC = () => {
         panNumber: docType === 'pan' ? docValue.trim().toUpperCase() : '',
         officialDocId: docType === 'docId' ? docValue.trim() : '',
         idPhoto: idPhoto,
+        dob: dob,
         hasVerifiedDetails: true,
         isApprovedByAdmin: false, // defaults to false, waiting for admin approval
         hasSetupAccount: true
@@ -266,6 +269,20 @@ export const OnboardingSetup: React.FC = () => {
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
                     placeholder="San Francisco, CA"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-semibold bg-zinc-50 focus:border-orange-500 focus:outline-none focus:bg-white focus:ring-4 focus:ring-orange-500/10 transition-all text-zinc-900"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-zinc-600 block">Date of Birth</label>
+                <div className="relative">
+                  <Cake className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                  <input
+                    type="date"
+                    id="onboard-dob-input"
+                    value={dob}
+                    onChange={(e) => setDob(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-semibold bg-zinc-50 focus:border-orange-500 focus:outline-none focus:bg-white focus:ring-4 focus:ring-orange-500/10 transition-all text-zinc-900"
                   />
                 </div>

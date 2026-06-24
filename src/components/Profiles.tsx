@@ -35,7 +35,8 @@ import {
   Upload,
   AlertCircle,
   Loader2,
-  Bell
+  Bell,
+  Cake
 } from 'lucide-react';
 
 const COVER_SUGGESTIONS: Record<string, string[]> = {
@@ -155,6 +156,7 @@ export const Profiles: React.FC<ProfilesProps> = ({
   const [editInstagram, setEditInstagram] = useState('');
   const [editFacebook, setEditFacebook] = useState('');
   const [editTiktok, setEditTiktok] = useState('');
+  const [editDob, setEditDob] = useState('');
   const [editInterests, setEditInterests] = useState<string[]>([]);
 
   // Drag & drop references for edit profile overlays
@@ -299,6 +301,7 @@ export const Profiles: React.FC<ProfilesProps> = ({
     setEditInstagram(activeProfile.socialLinks?.instagram || '');
     setEditFacebook(activeProfile.socialLinks?.facebook || '');
     setEditTiktok(activeProfile.socialLinks?.tiktok || '');
+    setEditDob(activeProfile.dob || '');
     setEditInterests(activeProfile.interests || []);
     setIsEditing(true);
   };
@@ -318,6 +321,7 @@ export const Profiles: React.FC<ProfilesProps> = ({
         location: editLocation.trim(),
         profileImage: editProfileImage.trim(),
         coverImage: editCoverImage.trim(),
+        dob: editDob,
         interests: editInterests,
         socialLinks: {
           twitter: editTwitter.trim(),
@@ -512,6 +516,12 @@ export const Profiles: React.FC<ProfilesProps> = ({
                   <div className="flex items-center gap-1 bg-zinc-50 border border-zinc-100 px-3 py-1 rounded-full">
                     <MapPin className="w-3.5 h-3.5 text-zinc-400" />
                     <span>{activeProfile.location}</span>
+                  </div>
+                )}
+                {activeProfile.dob && (
+                  <div className="flex items-center gap-1 bg-zinc-50 border border-zinc-100 px-3 py-1 rounded-full">
+                    <Cake className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                    <span>DOB: {new Date(activeProfile.dob).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</span>
                   </div>
                 )}
                 {activeProfile.socialLinks?.twitter && (
@@ -1031,6 +1041,17 @@ export const Profiles: React.FC<ProfilesProps> = ({
                   value={editLocation}
                   onChange={(e) => setEditLocation(e.target.value)}
                   placeholder="Brooklyn, NY"
+                  className="w-full px-4 py-2.5 text-xs border border-zinc-200 outline-none rounded-xl focus:border-orange-500 font-sans font-medium bg-white transition-all text-zinc-800"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-sans font-bold text-zinc-500 block">Date of Birth</label>
+                <input
+                  type="date"
+                  id="edit-dob-input"
+                  value={editDob}
+                  onChange={(e) => setEditDob(e.target.value)}
                   className="w-full px-4 py-2.5 text-xs border border-zinc-200 outline-none rounded-xl focus:border-orange-500 font-sans font-medium bg-white transition-all text-zinc-800"
                 />
               </div>

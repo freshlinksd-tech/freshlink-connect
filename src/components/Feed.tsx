@@ -40,7 +40,8 @@ import {
   ExternalLink,
   ShieldAlert,
   Lock,
-  Coins
+  Coins,
+  Cake
 } from 'lucide-react';
 
 const COVER_SUGGESTIONS: Record<string, string[]> = {
@@ -121,11 +122,45 @@ export const Feed: React.FC<FeedProps> = ({
     postReports,
     ads,
     trackAdClick,
-    isQuotaFallbackMode
+    isQuotaFallbackMode,
+    securityBlock,
+    resolveSecurityChallenge
   } = useSocialPlatform();
 
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState('');
+
+  // Birthday & Security Challenge state
+  const [showBirthdayCard, setShowBirthdayCard] = useState(true);
+  const [challengeAnswer, setChallengeAnswer] = useState('');
+  const [challengeError, setChallengeError] = useState('');
+  const [num1, setNum1] = useState(() => Math.floor(Math.random() * 9) + 2);
+  const [num2, setNum2] = useState(() => Math.floor(Math.random() * 8) + 2);
+
+  const isBirthdayToday = useMemo(() => {
+    if (!currentUser || !currentUser.dob) return false;
+    try {
+      const today = new Date();
+      const dobDate = new Date(currentUser.dob + 'T00:00:00'); // enforce local interpretation
+      return today.getMonth() === dobDate.getMonth() && today.getDate() === dobDate.getDate();
+    } catch (e) {
+      return false;
+    }
+  }, [currentUser]);
+
+  const handleChallengeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (parseInt(challengeAnswer) === num1 * num2) {
+      resolveSecurityChallenge();
+      setChallengeAnswer('');
+      setChallengeError('');
+      // Generate new numbers for next time
+      setNum1(Math.floor(Math.random() * 9) + 2);
+      setNum2(Math.floor(Math.random() * 8) + 2);
+    } else {
+      setChallengeError('Incorrect answer. Please try again to verify humanity.');
+    }
+  };
 
   const [reportingPostId, setReportingPostId] = useState<string | null>(null);
   const [reportReason, setReportReason] = useState('Controversial Topic / Disinformation');
@@ -448,6 +483,100 @@ export const Feed: React.FC<FeedProps> = ({
             </p>
           </div>
         </motion.div>
+      )}
+
+      {/* Birthday Celebration Greeting Card */}
+      {isBirthdayToday && showBirthdayCard && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative bg-gradient-to-br from-amber-500 via-orange-500 to-rose-600 text-white rounded-3xl p-6 shadow-xl overflow-hidden"
+          id="birthday-wishes-card"
+        >
+          {/* Background decorative bubbles */}
+          <div className="absolute top-0 right-0 -mr-6 -mt-6 w-36 h-36 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute bottom-0 left-0 -ml-8 -mb-8 w-44 h-44 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+          
+          <button
+            onClick={() => setShowBirthdayCard(false)}
+            className="absolute top-4 right-4 p-1.5 rounded-full bg-white/10 hover:bg-white/20 transition-all border border-white/10 outline-none"
+            id="dismiss-birthday-btn"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          <div className="flex gap-4 items-start relative z-10">
+            <div className="w-14 h-14 rounded-2xl bg-white/25 flex items-center justify-center border border-white/20 text-white shadow-inner animate-bounce shrink-0">
+              <Cake className="w-7 h-7" />
+            </div>
+            <div className="space-y-2 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-mono font-extrabold bg-white/20 border border-white/30 px-2 py-0.5 rounded-full uppercase tracking-wider">ANNIVERSARY MILESTONE</span>
+                <Sparkles className="w-4 h-4 text-amber-200 animate-pulse" />
+              </div>
+              <h3 className="text-xl md:text-2xl font-black tracking-tight leading-none text-white font-sans">
+                Happy Birthday, {currentUser?.name || 'FreshLink Creator'}! 🎂
+              </h3>
+              <p className="text-white/90 text-xs md:text-sm leading-relaxed max-w-xl font-medium">
+                The entire FreshLink connection ecosystem wishes you a beautiful birthday filled with inspiration, safety, and wonderful creative discoveries. Keep building elite links! ✨
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Spam Defense Security Gate Modal */}
+      {securityBlock && (
+        <div className="fixed inset-0 bg-zinc-950/90 backdrop-blur-md flex items-center justify-center p-4 z-[999] font-sans" id="security-shield-modal">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white border border-zinc-200 max-w-md w-full shadow-2xl rounded-3xl overflow-hidden p-6 text-center space-y-6"
+          >
+            <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mx-auto text-rose-600 animate-pulse">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+            <div className="space-y-2">
+              <span className="text-[10px] font-bold font-mono tracking-wider text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-full uppercase">Shield Security Clearance</span>
+              <h3 className="text-xl font-black text-zinc-900 tracking-tight leading-tight">Spam Defense Gate Active</h3>
+              <p className="text-zinc-500 text-xs leading-relaxed font-sans font-medium">
+                FreshLink detected rapid clicks or automated requests. To block brute-force hacking attempts and defend database server limits, please solve this challenge to resume.
+              </p>
+            </div>
+
+            <form onSubmit={handleChallengeSubmit} className="space-y-4 bg-zinc-50 border border-zinc-150 p-4 rounded-2xl">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Security Mathematics Challenge</label>
+                <p className="text-lg font-black text-zinc-800 tracking-tight font-mono py-1">
+                  How much is {num1} &times; {num2}?
+                </p>
+              </div>
+              
+              <input
+                type="number"
+                required
+                id="security-challenge-answer"
+                placeholder="Your answer"
+                value={challengeAnswer}
+                onChange={(e) => setChallengeAnswer(e.target.value)}
+                className="w-full text-center px-4 py-2.5 rounded-xl border border-zinc-200 text-sm font-bold bg-white focus:ring-4 focus:ring-rose-500/10 focus:border-rose-500 outline-none transition-all text-zinc-950"
+                autoFocus
+              />
+
+              {challengeError && (
+                <p className="text-xs text-rose-600 font-semibold" id="challenge-error-msg">{challengeError}</p>
+              )}
+
+              <button
+                type="submit"
+                id="submit-security-challenge-btn"
+                className="w-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold py-3 rounded-xl transition shadow-lg shadow-rose-600/10 uppercase tracking-wider outline-none"
+              >
+                Unlock Connection Session
+              </button>
+            </form>
+          </motion.div>
+        </div>
       )}
 
       {/* Elegant Header Block */}
