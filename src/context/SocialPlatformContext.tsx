@@ -132,9 +132,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   const [activeChatPartnerId, setActiveChatPartnerId] = useState<string | null>(null);
   const activeChatPartnerRef = useRef<string | null>(null);
 
-  const [isQuotaFallbackMode, setIsQuotaFallbackMode] = useState<boolean>(() => {
-    return localStorage.getItem('freshlink_quota_fallback') === 'true';
-  });
+  const [isQuotaFallbackMode, setIsQuotaFallbackMode] = useState<boolean>(false);
 
   // Helper to load all stored local data or seed if empty
   const triggerLocalQuotaFallback = () => {
