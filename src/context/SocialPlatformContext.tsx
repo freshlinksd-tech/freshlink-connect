@@ -111,6 +111,7 @@ interface SocialPlatformContextType {
   trackAdClick: (adId: string) => Promise<void>;
   toggleAllAds: (active: boolean) => Promise<void>;
   isQuotaFallbackMode: boolean;
+  resetQuotaFallback: () => void;
 }
 
 const SocialPlatformContext = createContext<SocialPlatformContextType | undefined>(undefined);
@@ -163,6 +164,12 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     setPostReports(getOrSeed('postReports', []));
     setAds(getOrSeed('ads', []));
     setLoading(false);
+  };
+
+  const resetQuotaFallback = () => {
+    localStorage.removeItem('freshlink_quota_fallback');
+    setIsQuotaFallbackMode(false);
+    window.location.reload();
   };
 
   const saveLocalValue = <T,>(key: string, list: T[]) => {
@@ -400,16 +407,16 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   }, []);
 
   // 2. Seeding & Real-Time Sync subscriptions
-  useEffect(() => {
-    const handleSubError = (error: any, collectionName: string) => {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      if (errMsg.includes('Quota limit') || errMsg.includes('quota') || errMsg.includes('exceeded') || errMsg.includes('resource-exhausted') || errMsg.includes('Resource exhausted')) {
-        triggerLocalQuotaFallback();
-      } else {
-        handleFirestoreError(error, OperationType.GET, collectionName);
-      }
-    };
+  const handleSubError = (error: any, collectionName: string) => {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    if (errMsg.includes('Quota limit') || errMsg.includes('quota') || errMsg.includes('exceeded') || errMsg.includes('resource-exhausted') || errMsg.includes('Resource exhausted')) {
+      triggerLocalQuotaFallback();
+    } else {
+      handleFirestoreError(error, OperationType.GET, collectionName);
+    }
+  };
 
+  useEffect(() => {
     const initializeDatabaseAndSync = async () => {
       if (isQuotaFallbackMode) {
         setLoading(false);
@@ -571,6 +578,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     // Load messages where user is the sender
     const qSender = query(collection(db, 'messages'), where('senderId', '==', currentUserId));
     const unsubSender = onSnapshot(qSender, (snap) => {
+      if (isQuotaFallbackMode) return;
       setMessages((prev) => {
         const otherMsgs = prev.filter((m) => m.senderId !== currentUserId);
         const updatedSenderMsgs: Message[] = [];
@@ -579,12 +587,13 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         return Array.from(new Map(merged.map((m) => [m.id, m])).values());
       });
     }, (error) => {
-      console.error("Messages sender synchronization error:", error);
+      handleSubError(error, 'messages_sender');
     });
 
     // Load messages where user is the receiver
     const qReceiver = query(collection(db, 'messages'), where('receiverId', '==', currentUserId));
     const unsubReceiver = onSnapshot(qReceiver, (snap) => {
+      if (isQuotaFallbackMode) return;
       setMessages((prev) => {
         const otherMsgs = prev.filter((m) => m.receiverId !== currentUserId);
         const updatedReceiverMsgs: Message[] = [];
@@ -612,7 +621,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         batch.commit().catch(e => console.error("Error committing message status update:", e));
       }
     }, (error) => {
-      console.error("Messages receiver synchronization error:", error);
+      handleSubError(error, 'messages_receiver');
     });
 
     return () => {
@@ -1620,7 +1629,9 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         createOrUpdateAd,
         deleteAd,
         trackAdClick,
-        toggleAllAds
+        toggleAllAds,
+        isQuotaFallbackMode,
+        resetQuotaFallback
       }}
     >
       {children}

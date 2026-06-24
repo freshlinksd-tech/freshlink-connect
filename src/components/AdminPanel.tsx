@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import { motion } from 'motion/react';
 import { useSocialPlatform } from '../context/SocialPlatformContext';
 import { User, Post } from '../types';
 import { 
@@ -35,6 +36,43 @@ interface AdminPanelProps {
   onSelectUser: (userId: string) => void;
 }
 
+const CampaignMonitor = ({ ads }: { ads: any[] }) => {
+  const activeCustomBubble = ads.find((a: any) => a.active && a.placement === 'bubble');
+  const activeWorkspaceAd = ads.find((a: any) => a.active && (a.placement || 'workspace') === 'workspace');
+  
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-zinc-950 text-white rounded-3xl p-6 shadow-xl border border-zinc-800 mb-6"
+    >
+      <div className="flex items-center gap-2 border-b border-zinc-800 pb-3 mb-4 justify-between">
+        <div className="flex items-center gap-2">
+          <Activity className="w-4 h-4 text-emerald-500" />
+          <span className="text-[11px] font-mono font-bold tracking-wider text-zinc-300 uppercase">Live Campaign Monitor</span>
+        </div>
+        <span className="text-[9px] font-mono bg-orange-950 text-orange-400 border border-orange-500/20 px-2 py-0.5 rounded-full uppercase">LIVE</span>
+      </div>
+      <div className="space-y-4">
+        <div>
+          <div className="flex justify-between text-[10px] text-zinc-400 uppercase font-mono">
+            <span>Bubble Ad</span>
+            <span className={activeCustomBubble ? "text-emerald-400" : "text-zinc-600"}>{activeCustomBubble ? "ACTIVE" : "FALLBACK"}</span>
+          </div>
+          <div className="text-xs font-bold mt-1 text-zinc-100">{activeCustomBubble?.title || "None configured"}</div>
+        </div>
+        <div className="border-t border-zinc-800 pt-3">
+          <div className="flex justify-between text-[10px] text-zinc-400 uppercase font-mono">
+            <span>Workspace Banner</span>
+            <span className={activeWorkspaceAd ? "text-emerald-400" : "text-zinc-600"}>{activeWorkspaceAd ? "ACTIVE" : "EMPTY"}</span>
+          </div>
+          <div className="text-xs font-bold mt-1 text-zinc-100">{activeWorkspaceAd?.title || "None configured"}</div>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
   const { 
     users, 
@@ -53,7 +91,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
     ads,
     createOrUpdateAd,
     deleteAd,
-    toggleAllAds
+    toggleAllAds,
+    isQuotaFallbackMode,
+    resetQuotaFallback
   } = useSocialPlatform();
 
   const isSuperAdmin = currentUser?.role === 'super_admin' || currentUser?.email?.toLowerCase() === 'fresh.linksd@gmail.com';
@@ -198,7 +238,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
 
   // 4. Clearance filters
   const filteredPendingClearanceUsers = useMemo(() => {
-    return users.filter(u => u.hasVerifiedDetails === true && u.isApprovedByAdmin !== true).filter(u => {
+    console.log("AdminPanel: All Users", users);
+    const filtered = users.filter(u => u.hasVerifiedDetails === true && u.isApprovedByAdmin !== true);
+    console.log("AdminPanel: Pending Clearance Users", filtered);
+    return filtered.filter(u => {
       if (!clearanceSearch) return true;
       const term = clearanceSearch.toLowerCase();
       return (
@@ -355,12 +398,47 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
 
         {/* Live system state switches */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="bg-emerald-50 text-emerald-700 text-xs font-semibold px-4 py-2.5 rounded-2xl flex items-center gap-2">
-            <Activity className="w-4 h-4 animate-pulse" />
-            <span>CLOUD SYNC CONNECTED</span>
-          </div>
+          {isQuotaFallbackMode ? (
+            <button
+              onClick={resetQuotaFallback}
+              className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold px-4 py-2.5 rounded-2xl flex items-center gap-2 cursor-pointer transition"
+              title="Click to reconnect to the live Firestore cloud database"
+            >
+              <ShieldAlert className="w-4 h-4 animate-bounce text-red-600" />
+              <span>OFFLINE FALLBACK MODE (RECONNECT)</span>
+            </button>
+          ) : (
+            <div className="bg-emerald-50 text-emerald-700 text-xs font-semibold px-4 py-2.5 rounded-2xl flex items-center gap-2">
+              <Activity className="w-4 h-4 animate-pulse" />
+              <span>CLOUD SYNC CONNECTED</span>
+            </div>
+          )}
         </div>
       </div>
+
+      {isQuotaFallbackMode && (
+        <div className="mb-8 bg-amber-50 border border-amber-200/80 p-6 rounded-3xl flex flex-col md:flex-row md:items-center justify-between gap-4 text-left animate-in fade-in">
+          <div className="flex items-start gap-3.5">
+            <div className="w-12 h-12 bg-amber-500/10 border border-amber-500/20 text-amber-600 rounded-2xl flex items-center justify-center shrink-0">
+              <ShieldAlert className="w-6 h-6 animate-pulse" />
+            </div>
+            <div>
+              <h4 className="font-sans font-black text-sm uppercase tracking-tight text-zinc-900 leading-none">
+                Offline Local Sandbox Active
+              </h4>
+              <p className="text-zinc-650 text-xs mt-1.5 leading-relaxed max-w-2xl font-medium">
+                Google Cloud Firestore encountered a quota read limit in a previous session. The application has loaded in local sandbox mode. **User-submitted clearance claims will not be visible** until you exit fallback mode. Click below to reconnect live!
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={resetQuotaFallback}
+            className="px-5 py-3 bg-zinc-900 hover:bg-black text-white font-extrabold text-[10px] rounded-xl transition cursor-pointer shrink-0 uppercase tracking-widest shadow-sm shadow-black/10"
+          >
+            🔌 Reconnect Live Cloud
+          </button>
+        </div>
+      )}
 
       {/* Real-Time Database Metrics Stats Grid (No sharp rectangles, rounded layout) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -1211,6 +1289,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left animate-in fade-in duration-200" id="admin-section-ads">
           {/* Ad Campaign Editor Desk (Left Column) */}
           <div className="lg:col-span-5 bg-white p-6 md:p-8 rounded-3xl shadow-sm space-y-6">
+            <CampaignMonitor ads={ads} />
             <div>
               <div className="inline-flex items-center gap-1.5 bg-orange-50 border-r border-[#1A1A1A]/5 px-3.5 py-1 text-[10px] font-sans font-bold uppercase tracking-widest text-orange-600 rounded-full mb-2">
                 <Megaphone className="w-3.5 h-3.5 shrink-0" />
