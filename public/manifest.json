@@ -1,0 +1,27 @@
+{
+  "short_name": "FreshLink",
+  "name": "FreshLink Connect",
+  "description": "Premium Social Blogging & Interest Network",
+  "start_url": "/",
+  "background_color": "#F97316",
+  "theme_color": "#F97316",
+  "display": "standalone",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/apple-touch-icon-precomposed.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    },
+    {
+      "src": "/logo.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    }
+  ]
+}
