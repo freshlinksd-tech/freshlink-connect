@@ -37,7 +37,6 @@ interface AdminPanelProps {
 }
 
 const CampaignMonitor = ({ ads }: { ads: any[] }) => {
-  const activeCustomBubble = ads.find((a: any) => a.active && a.placement === 'bubble');
   const activeWorkspaceAd = ads.find((a: any) => a.active && (a.placement || 'workspace') === 'workspace');
   
   return (
@@ -55,13 +54,6 @@ const CampaignMonitor = ({ ads }: { ads: any[] }) => {
       </div>
       <div className="space-y-4">
         <div>
-          <div className="flex justify-between text-[10px] text-zinc-400 uppercase font-mono">
-            <span>Bubble Ad</span>
-            <span className={activeCustomBubble ? "text-emerald-400" : "text-zinc-600"}>{activeCustomBubble ? "ACTIVE" : "FALLBACK"}</span>
-          </div>
-          <div className="text-xs font-bold mt-1 text-zinc-100">{activeCustomBubble?.title || "None configured"}</div>
-        </div>
-        <div className="border-t border-zinc-800 pt-3">
           <div className="flex justify-between text-[10px] text-zinc-400 uppercase font-mono">
             <span>Workspace Banner</span>
             <span className={activeWorkspaceAd ? "text-emerald-400" : "text-zinc-600"}>{activeWorkspaceAd ? "ACTIVE" : "EMPTY"}</span>
@@ -1390,83 +1382,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                     setAdError(err?.message || "Failed to save ad campaign.");
                   }
                 }} className="space-y-4">
-                  
-                  {/* Segmented Placement Toggle between Workspace & Bubble Ads */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Ad Campaign Placement type</label>
-                    <div className="grid grid-cols-2 gap-2 bg-zinc-50 p-1 rounded-2xl border border-zinc-150">
-                      <button
-                        type="button"
-                        onClick={() => setAdPlacement('workspace')}
-                        className={`py-2 px-3 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
-                          adPlacement === 'workspace'
-                            ? 'bg-black text-white shadow'
-                            : 'text-zinc-650 hover:bg-zinc-100 hover:text-zinc-900 cursor-pointer'
-                        }`}
-                      >
-                        <span>📰 Workspace Banner</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAdPlacement('bubble')}
-                        className={`py-2 px-3 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
-                          adPlacement === 'bubble'
-                            ? 'bg-black text-white shadow'
-                            : 'text-zinc-650 hover:bg-zinc-100 hover:text-zinc-900 cursor-pointer'
-                        }`}
-                      >
-                        <span>🫧 Interactive Bubble</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Conditional customizations for Bubble Welcome overlay elements */}
-                  {adPlacement === 'bubble' && (
-                    <div className="space-y-4 p-4 bg-orange-50/40 rounded-2xl border border-orange-200/50 animate-fadeIn">
-                      <div className="flex items-center gap-1.5 pb-2 border-b border-orange-200/35">
-                        <Sparkles className="w-3.5 h-3.5 text-orange-600 animate-pulse" />
-                        <span className="text-[10px] uppercase font-mono tracking-widest text-orange-700 font-extrabold">Bubble Welcome Notifications Customizer</span>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Welcome Notification Badge Tag</label>
-                        <input
-                          type="text"
-                          required
-                          value={adWelcomeBadge}
-                          onChange={(e) => setAdWelcomeBadge(e.target.value)}
-                          placeholder="e.g., Sponsored Welcome"
-                          className="w-full px-3.5 py-2 rounded-xl bg-white border border-zinc-200 focus:border-orange-500 text-xs text-zinc-800 outline-none font-sans font-bold"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Welcome Heading Title</label>
-                        <input
-                          type="text"
-                          required
-                          value={adWelcomeTitle}
-                          onChange={(e) => setAdWelcomeTitle(e.target.value)}
-                          placeholder="e.g., Active Sponsor Bubbles live!"
-                          className="w-full px-3.5 py-2 rounded-xl bg-white border border-zinc-200 focus:border-orange-500 text-xs text-zinc-800 outline-none font-sans font-black"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Welcome description copy</label>
-                        <textarea
-                          required
-                          rows={3}
-                          value={adWelcomeText}
-                          onChange={(e) => setAdWelcomeText(e.target.value)}
-                          placeholder="e.g., Pop the glossy floating spheres orbiting the workspace to test campaign previews and grab exclusive content offers."
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-zinc-200 focus:border-orange-500 text-[10px] text-zinc-800 outline-none font-sans leading-relaxed"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 mt-2">
                     <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Ad title / headline</label>
                     <input
                       type="text"
@@ -1725,13 +1641,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                                 );
                               })()}
 
-                              <span className={`text-[8.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                                a.placement === 'bubble'
-                                  ? 'text-purple-700 bg-purple-50 border-purple-100'
-                                  : 'text-blue-700 bg-blue-50 border-blue-100'
-                              }`}>
-                                {a.placement === 'bubble' ? '🫧 Interactive Bubble' : '📰 Workspace Banner'}
-                              </span>
+                             {/* Removed placement badge */}
                             </div>
                             <p className="text-[10.5px] text-zinc-500 mt-1 line-clamp-2 leading-normal">{a.description}</p>
                             
@@ -1871,12 +1781,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                                  No banner image
                                </div>
                              )}
-                             <span className={`text-[8.5px] font-black uppercase text-center block tracking-wider px-2 py-0.5 rounded ${
-                               a.placement === 'bubble'
-                                 ? 'text-purple-700 bg-purple-50 border border-purple-100'
-                                 : 'text-blue-700 bg-blue-50 border border-blue-100'
-                             }`}>
-                               {a.placement === 'bubble' ? '🫧 Floating Bubble' : '📰 Feed Banner'}
+                             <span className="text-[8.5px] font-black uppercase text-center block tracking-wider px-2 py-0.5 rounded text-blue-700 bg-blue-50 border border-blue-100">
+                               📰 Feed Banner
                              </span>
                            </div>
 

@@ -18,7 +18,6 @@ import { OnboardingSetup } from './components/OnboardingSetup';
 import { AdminPanel } from './components/AdminPanel';
 import { VerificationSetup } from './components/VerificationSetup';
 import { MonetizationPanel } from './components/MonetizationPanel';
-import { AdBubblePortal } from './components/AdBubblePortal';
 import { Notifications } from './components/Notifications';
 import { 
   Sparkles, 
@@ -33,8 +32,7 @@ import {
   Wifi,
   ShieldCheck,
   Coins,
-  Bell,
-  Gift
+  Bell
 } from 'lucide-react';
 
 function AppContent() {
@@ -45,22 +43,6 @@ function AppContent() {
   const [authOpen, setAuthOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('all');
-
-  const [showBirthdayCard, setShowBirthdayCard] = useState<boolean>(() => {
-    const dismissed = sessionStorage.getItem(`birthday_dismissed_${new Date().toDateString()}`);
-    return !dismissed;
-  });
-
-  const isBirthdayToday = React.useMemo(() => {
-    if (!currentUser?.dob) return false;
-    try {
-      const dobDate = new Date(currentUser.dob);
-      const today = new Date();
-      return dobDate.getMonth() === today.getMonth() && dobDate.getDate() === today.getDate();
-    } catch (e) {
-      return false;
-    }
-  }, [currentUser?.dob]);
   
   if (!currentUser) {
     return <LandingPage />;
@@ -95,7 +77,7 @@ function AppContent() {
     currentUser.hasSetupAccount === true && 
     currentUser.isAdmin !== true && 
     currentUser.role !== 'admin' && 
-    (!currentUser.phoneNumber || (!currentUser.panNumber && !currentUser.officialDocId) || currentUser.isApprovedByAdmin !== true);
+    (!currentUser.phoneNumber || (!currentUser.panNumber && !currentUser.officialDocId));
   if (needsVerification) {
     return <VerificationSetup />;
   }
@@ -346,56 +328,6 @@ function AppContent() {
       {/* Unified Authentication Setup Portal */}
       {authOpen && (
         <Auth onClose={() => setAuthOpen(false)} />
-      )}
-
-      {/* Interactive Ad Popping Bubble Portal System */}
-      <AdBubblePortal />
-
-      {/* AUTOMATIC BIRTHDAY CELEBRATION SENTINEL */}
-      {isBirthdayToday && showBirthdayCard && (
-        <div className="fixed inset-0 bg-[#0c0a09]/70 backdrop-blur-md flex items-center justify-center p-6 z-[200] animate-in fade-in duration-300">
-          <div className="bg-gradient-to-br from-[#1c1917] via-[#292524] to-[#1c1917] text-white border border-amber-500/30 p-8 rounded-[2rem] max-w-md w-full shadow-2xl relative overflow-hidden text-center font-sans">
-            
-            {/* Animated Celebration Background Spheres */}
-            <div className="absolute -top-12 -left-12 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
-            <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-rose-500/10 rounded-full blur-2xl pointer-events-none" />
-            
-            <div className="relative space-y-6">
-              {/* Animated Floating Present Icon */}
-              <div className="w-20 h-20 mx-auto bg-gradient-to-tr from-amber-500 to-orange-500 text-zinc-950 rounded-3xl flex items-center justify-center shadow-lg shadow-orange-500/20 transform hover:scale-110 transition duration-300">
-                <Gift className="w-10 h-10 animate-bounce" />
-              </div>
-              
-              <div className="space-y-2">
-                <span className="text-[10px] font-black uppercase tracking-widest text-amber-500 bg-amber-500/10 px-3.5 py-1 rounded-full border border-amber-500/20">
-                  HAPPY BIRTHDAY TO YOU! 🎉
-                </span>
-                <h2 className="font-sans font-black text-2xl md:text-3xl tracking-tighter uppercase leading-none mt-2">
-                  Have a great day, <br/>
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-orange-400 to-rose-400">
-                    {currentUser.name}!
-                  </span>
-                </h2>
-              </div>
-              
-              <p className="text-zinc-300 text-xs leading-relaxed max-w-sm mx-auto font-medium">
-                FreshLink Connect wishes you a marvelous day filled with peace, spectacular creations, and premium residual payouts. Your continuous stories inspire readers worldwide! 🎂✨
-              </p>
-              
-              <div className="pt-2">
-                <button
-                  onClick={() => {
-                    sessionStorage.setItem(`birthday_dismissed_${new Date().toDateString()}`, 'true');
-                    setShowBirthdayCard(false);
-                  }}
-                  className="w-full py-3.5 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:opacity-95 text-zinc-950 font-sans font-black uppercase tracking-widest text-[11px] rounded-2xl transition duration-200 cursor-pointer shadow-lg shadow-orange-500/10"
-                >
-                  🍰 Thank you so much!
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

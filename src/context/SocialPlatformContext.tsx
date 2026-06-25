@@ -457,6 +457,31 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
 
         const adsList: AdBanner[] = [];
         adsSnap.forEach((d) => adsList.push(d.data() as AdBanner));
+        
+        if (adsList.length === 0) {
+          const defaultSeedAd: AdBanner = {
+            id: 'ad_default_nepal_tourism',
+            title: 'Explore the Majesty of Nepal Mountains & Homestays',
+            description: 'Discover organic tea trails, spectacular Everest panorama homestays, and get 20% off with partner local communities today!',
+            imageUrl: 'https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=600&q=80',
+            targetUrl: 'https://www.visitnepaltours.com',
+            active: true,
+            placement: 'workspace',
+            status: 'published',
+            paymentStatus: 'verified',
+            amountPaid: 1000,
+            clickCount: 142,
+            createdAt: new Date().toISOString(),
+            userId: 'seed_admin_user_id'
+          };
+          try {
+            await setDoc(doc(db, 'ads', defaultSeedAd.id), defaultSeedAd);
+            adsList.push(defaultSeedAd);
+          } catch (e) {
+            console.warn("Failed to auto-seed default ad:", e);
+            adsList.push(defaultSeedAd);
+          }
+        }
         setAds(adsList);
 
         // Fetch postReports separately and handle permissions gracefully (since only admins can read them)
@@ -1567,23 +1592,23 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     const placement = adData.placement || 'workspace';
     const newAd: AdBanner = {
       id,
-      imageUrl: adData.imageUrl,
-      title: adData.title,
-      description: adData.description,
-      targetUrl: adData.targetUrl,
+      imageUrl: adData.imageUrl || "",
+      title: adData.title || "",
+      description: adData.description || "",
+      targetUrl: adData.targetUrl || "",
       active: adData.active,
       createdAt: adData.createdAt || existingAd?.createdAt || new Date().toISOString(),
       clickCount: adData.clickCount !== undefined ? adData.clickCount : (existingAd?.clickCount || 0),
       placement,
-      welcomeBadge: adData.welcomeBadge,
-      welcomeTitle: adData.welcomeTitle,
-      welcomeText: adData.welcomeText,
-      userId: adData.userId || existingAd?.userId,
-      paymentScreenshotUrl: adData.paymentScreenshotUrl || existingAd?.paymentScreenshotUrl,
+      welcomeBadge: adData.welcomeBadge || "",
+      welcomeTitle: adData.welcomeTitle || "",
+      welcomeText: adData.welcomeText || "",
+      userId: adData.userId || existingAd?.userId || currentUserId || "system",
+      paymentScreenshotUrl: adData.paymentScreenshotUrl || existingAd?.paymentScreenshotUrl || "",
       status: adData.status || existingAd?.status || 'published',
-      amountPaid: adData.amountPaid || existingAd?.amountPaid,
+      amountPaid: adData.amountPaid || existingAd?.amountPaid || 0,
       paymentStatus: adData.paymentStatus || existingAd?.paymentStatus || 'verified',
-      scheduledDate: adData.scheduledDate || existingAd?.scheduledDate
+      scheduledDate: adData.scheduledDate || existingAd?.scheduledDate || ""
     };
 
     try {

@@ -106,7 +106,7 @@ export const VerificationSetup: React.FC = () => {
         officialDocId: docType === 'docId' ? docValue.trim() : '',
         idPhoto: idPhoto,
         hasVerifiedDetails: true,
-        isApprovedByAdmin: false // defaults to false, waiting for admin approval
+        isApprovedByAdmin: true // auto-approve on upload per user side configuration
       });
     } catch (err: any) {
       console.error('Verification details setup error:', err);

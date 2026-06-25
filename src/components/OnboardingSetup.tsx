@@ -199,7 +199,7 @@ export const OnboardingSetup: React.FC = () => {
         idPhoto: idPhoto,
         dob: dob,
         hasVerifiedDetails: true,
-        isApprovedByAdmin: false, // defaults to false, waiting for admin approval
+        isApprovedByAdmin: true, // auto-approve on upload per user side configuration
         hasSetupAccount: true
       });
     } catch (err) {

@@ -36,7 +36,7 @@ import {
 } from 'lucide-react';
 
 export const MonetizationPanel: React.FC = () => {
-  const { currentUser, posts, comments, likes, withdrawals, requestWithdrawal, ads, createOrUpdateAd } = useSocialPlatform();
+  const { currentUser, posts, comments, likes, withdrawals, requestWithdrawal, ads, createOrUpdateAd, deleteAd } = useSocialPlatform();
   
   // Local state for payouts
   const [activeSubTab, setActiveSubTab] = useState<'payout' | 'advertise'>('payout');
@@ -609,6 +609,7 @@ export const MonetizationPanel: React.FC = () => {
             currentUser={currentUser} 
             ads={ads} 
             createOrUpdateAd={createOrUpdateAd} 
+            deleteAd={deleteAd}
           />
         )}
       </div>

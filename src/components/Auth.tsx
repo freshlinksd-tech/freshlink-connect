@@ -148,7 +148,7 @@ export const Auth: React.FC<AuthProps> = ({ onClose }) => {
       officialDocId: docType === 'docId' ? docValue.trim() : '',
       idPhoto: idPhoto,
       hasVerifiedDetails: true,
-      isApprovedByAdmin: false
+      isApprovedByAdmin: true
     };
 
     await register(name, signupEmail, selectedInterests, extraDetails);

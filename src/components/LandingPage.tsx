@@ -162,7 +162,7 @@ export const LandingPage: React.FC = () => {
       officialDocId: docType === 'docId' ? docValue.trim() : '',
       idPhoto: idPhoto,
       hasVerifiedDetails: true,
-      isApprovedByAdmin: false
+      isApprovedByAdmin: true
     };
 
     await register(name, signupEmail, selectedInterests, extraDetails);

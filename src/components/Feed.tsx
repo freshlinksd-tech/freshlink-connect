@@ -2143,7 +2143,7 @@ export const Feed: React.FC<FeedProps> = ({
               <div className="flex items-center gap-4">
                 <div className="relative">
                   <img
-                    src={currentUser.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
+                    src={currentUser.profileImage || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
                     alt={currentUser.name}
                     referrerPolicy="no-referrer"
                     className="w-14 h-14 rounded-2xl object-cover border border-stone-200"
@@ -2222,50 +2222,6 @@ export const Feed: React.FC<FeedProps> = ({
                   {cat.name}
                 </button>
               ))}
-            </div>
-          </div>
-
-          {/* Ad Sponsor Campaigns */}
-          <div className="bg-gradient-to-br from-zinc-900 to-black text-white rounded-3xl p-6 shadow-md border border-orange-500/15 text-left relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-orange-500/10 rounded-full blur-2xl pointer-events-none" />
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-orange-500 font-mono flex items-center gap-2">
-              <Megaphone className="w-4 h-4 animate-bounce" />
-              <span>Sponsor Campaign</span>
-            </h3>
-            <p className="text-zinc-200 text-xs mt-3 leading-relaxed font-sans font-medium">
-              Want to promote your brand to thousands of creators and bloggers in Nepal? Tap into active ad slots!
-            </p>
-            <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between">
-              <span className="text-[9.5px] font-mono text-zinc-400">Rs. 50 / 1000 Views</span>
-              <span className="text-[10px] bg-orange-600/25 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-md font-bold uppercase tracking-wide">
-                Clearance Ok
-              </span>
-            </div>
-          </div>
-
-          {/* Network System Health & Quota Statistics */}
-          <div className="bg-stone-50/50 border border-stone-200/60 rounded-3xl p-6 shadow-xs space-y-4 text-left">
-            <h3 className="text-[10px] font-black uppercase tracking-wider text-zinc-500 font-sans flex items-center gap-1.5">
-              <Clock className="w-4 h-4 text-zinc-400" />
-              <span>Connection Parameters</span>
-            </h3>
-            
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between text-[11px] font-mono">
-                <span className="text-zinc-500">Live Server Status</span>
-                <span className="text-emerald-600 font-bold flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  OK
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-[11px] font-mono">
-                <span className="text-zinc-500">Data Sync</span>
-                <span className="text-zinc-700 font-bold">100% SECURE</span>
-              </div>
-              <div className="flex items-center justify-between text-[11px] font-mono">
-                <span className="text-zinc-500">Node Location</span>
-                <span className="text-zinc-700 font-bold">KATHMANDU, NP</span>
-              </div>
             </div>
           </div>
         </aside>

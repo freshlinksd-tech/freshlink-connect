@@ -24,9 +24,10 @@ interface AdPortalProps {
   currentUser: User;
   ads: AdBanner[];
   createOrUpdateAd: (ad: any) => Promise<void>;
+  deleteAd?: (adId: string) => Promise<void>;
 }
 
-export const AdPortal: React.FC<AdPortalProps> = ({ currentUser, ads, createOrUpdateAd }) => {
+export const AdPortal: React.FC<AdPortalProps> = ({ currentUser, ads, createOrUpdateAd, deleteAd }) => {
   // Local state
   const [adStep, setAdStep] = useState<1 | 2>(1);
   const [adTitle, setAdTitle] = useState('');
@@ -192,35 +193,6 @@ export const AdPortal: React.FC<AdPortalProps> = ({ currentUser, ads, createOrUp
           {adStep === 1 ? (
             <div className="space-y-5">
               
-              {/* Choose Ad Type Placement */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Ad Placement Format</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setAdPlacement('workspace')}
-                    className={`py-3 px-4 text-xs font-bold rounded-xl transition border text-center flex items-center justify-center gap-2 ${
-                      adPlacement === 'workspace' 
-                        ? 'bg-zinc-950 text-white border-zinc-950 shadow-sm' 
-                        : 'bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100 cursor-pointer'
-                    }`}
-                  >
-                    <span>📰 Feed Banner</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAdPlacement('bubble')}
-                    className={`py-3 px-4 text-xs font-bold rounded-xl transition border text-center flex items-center justify-center gap-2 ${
-                      adPlacement === 'bubble' 
-                        ? 'bg-zinc-950 text-white border-zinc-950 shadow-sm' 
-                        : 'bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100 cursor-pointer'
-                    }`}
-                  >
-                    <span>🫧 Floating Bubble</span>
-                  </button>
-                </div>
-              </div>
-
               {/* Campaign Duration Tier */}
               <div className="space-y-1.5">
                 <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Campaign Duration & Pricing Tier</label>
@@ -612,14 +584,6 @@ export const AdPortal: React.FC<AdPortalProps> = ({ currentUser, ads, createOrUp
                         <span className="font-mono font-black text-zinc-650 bg-zinc-100 border border-zinc-200 px-1.5 py-0.5 rounded">
                           Rs. {campaign.amountPaid || 500}
                         </span>
-                        
-                        <span className={`px-1.5 py-0.5 rounded border uppercase text-[8px] font-bold ${
-                          campaign.placement === 'bubble'
-                            ? 'text-purple-700 bg-purple-50 border-purple-100'
-                            : 'text-blue-700 bg-blue-50 border-blue-100'
-                        }`}>
-                          {campaign.placement === 'bubble' ? 'Bubble' : 'Banner'}
-                        </span>
                       </div>
 
                       <span className={`text-[8.5px] font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded border ${
@@ -648,6 +612,57 @@ export const AdPortal: React.FC<AdPortalProps> = ({ currentUser, ads, createOrUp
                         🎯 Click rate: <span className="text-zinc-800 font-extrabold">{campaign.clickCount || 0}</span> redirection clicks
                       </div>
                     )}
+
+                    {/* Action controls for testing & managing */}
+                    <div className="flex gap-2.5 pt-2 border-t border-zinc-150/30">
+                      {campaign.status !== 'published' && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await createOrUpdateAd({
+                              ...campaign,
+                              status: 'published',
+                              active: true
+                            });
+                            setAdSuccess(`Published campaign "${campaign.title}" successfully!`);
+                          }}
+                          className="flex-1 py-1 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-sans font-black uppercase text-[9px] tracking-wider rounded-lg transition text-center cursor-pointer"
+                        >
+                          🚀 Publish Ad
+                        </button>
+                      )}
+                      {campaign.status === 'published' && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await createOrUpdateAd({
+                              ...campaign,
+                              active: !campaign.active
+                            });
+                          }}
+                          className={`flex-1 py-1 px-2.5 font-sans font-black uppercase text-[9px] tracking-wider rounded-lg transition text-center cursor-pointer ${
+                            campaign.active 
+                              ? 'bg-zinc-200 hover:bg-zinc-300 text-zinc-700' 
+                              : 'bg-emerald-650 hover:bg-emerald-750 text-white'
+                          }`}
+                        >
+                          {campaign.active ? '⏸️ Pause' : '▶️ Resume'}
+                        </button>
+                      )}
+                      {deleteAd && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (confirm(`Are you sure you want to delete campaign "${campaign.title}"?`)) {
+                              await deleteAd(campaign.id);
+                            }
+                          }}
+                          className="py-1 px-2.5 bg-red-50 hover:bg-red-150 text-red-700 border border-red-200 font-sans font-black uppercase text-[9px] tracking-wider rounded-lg transition text-center cursor-pointer"
+                        >
+                          🗑️ Delete
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))
               )}
