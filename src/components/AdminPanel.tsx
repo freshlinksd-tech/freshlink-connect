@@ -367,7 +367,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 select-none" id="admin-panel-stage">
+    <div className="max-w-7xl mx-auto px-4 py-8 select-none" id="admin-panel-stage">
       
       {/* Admin Panel Header Section with No Borders */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8 bg-white p-8 rounded-3xl shadow-sm">

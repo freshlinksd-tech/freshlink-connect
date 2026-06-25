@@ -179,7 +179,7 @@ export const LandingPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-stone-50 text-zinc-900 flex flex-col lg:flex-row relative select-none font-sans overflow-x-hidden" id="nexus-landing-page">
+    <div className="min-h-screen bg-stone-50 text-zinc-900 relative select-none font-sans overflow-y-auto" id="nexus-landing-page">
       
       {/* Absolute Low-Opacity Background Typography Watermarks */}
       <div className="absolute top-[18%] left-10 text-[11rem] md:text-[14rem] font-black tracking-tighter text-stone-200/20 pointer-events-none select-none font-display uppercase leading-none hidden lg:block">
@@ -189,8 +189,8 @@ export const LandingPage: React.FC = () => {
         CREATORS
       </div>
 
-      {/* Main Content Area: Spacious Hero and Bento Screenshot Showcases (60% width on Desktop) */}
-      <section className="flex-1 p-6 md:p-10 lg:p-12 flex flex-col gap-y-10 relative z-10 overflow-y-auto">
+      {/* Main Content Area: Spacious Hero and Bento Screenshot Showcases (Symmetrical wide on Desktop) */}
+      <div className="w-full max-w-7xl mx-auto p-6 md:p-10 lg:p-12 flex flex-col gap-y-12 relative z-10">
         
         {/* Transparent Premium Top Header */}
         <header className="flex flex-col sm:flex-row gap-4 sm:items-center justify-between pb-6 border-b border-stone-200/30">
@@ -235,41 +235,355 @@ export const LandingPage: React.FC = () => {
           </div>
         </header>
 
-        {/* Top Banner Notice - Clean & Modern */}
-        <div className="p-3.5 bg-orange-500/5 rounded-2xl border border-orange-500/10 flex items-center justify-between text-[11px] font-sans font-semibold text-zinc-800">
-          <div className="flex items-center gap-2">
-            <span className="flex h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
-            <span>Discover Nepal's premier interest-driven digital creator hub.</span>
+        {/* Symmetrical Hero & Forms Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start mt-4">
+          
+          {/* Left Column: Hero Content & Notice */}
+          <div className="lg:col-span-7 flex flex-col gap-y-8">
+            {/* Top Banner Notice - Clean & Modern */}
+            <div className="p-3.5 bg-orange-500/5 rounded-2xl border border-orange-500/10 flex items-center justify-between text-[11px] font-sans font-semibold text-zinc-800 relative">
+              <div className="flex items-center gap-2">
+                <span className="flex h-2 w-2 rounded-full bg-orange-500 animate-pulse shrink-0" />
+                <span>Discover Nepal's premier interest-driven digital creator hub.</span>
+              </div>
+              <span className="font-mono text-[9px] uppercase tracking-wider bg-orange-500/10 text-orange-600 px-2 py-0.5 rounded-md font-bold">LIVE HUB</span>
+            </div>
+
+            {/* 1. Large Visual Dominant Hero Section with Extra White Space */}
+            <div className="space-y-6 text-left">
+              <h1 className="font-display font-black text-4xl md:text-5xl lg:text-6xl xl:text-7xl text-zinc-950 uppercase tracking-tighter leading-[1.0] transition-smooth">
+                Where great <span className="text-orange-500 font-display lowercase font-black tracking-tighter">minds</span> find their <span className="underline decoration-orange-500/40 decoration-wavy underline-offset-10">audience</span>
+              </h1>
+
+              <p className="text-zinc-500 font-sans text-xs md:text-sm leading-relaxed font-medium max-w-2xl">
+                FreshLink Connect coordinates content recommendations by analyzing tag categorization, chosen categories, and your personal interests. Build followers, chat seamlessly, and earn dynamic badges for platform milestone achievements.
+              </p>
+
+              <div className="pt-6 border-t border-stone-200/60 grid grid-cols-3 gap-6 max-w-xl">
+                <div>
+                  <span className="block font-display font-black text-2xl text-orange-500 leading-none">100%</span>
+                  <span className="text-[10px] text-zinc-400 font-mono uppercase tracking-wider block mt-1.5 font-bold">Privacy Secured</span>
+                </div>
+                <div>
+                  <span className="block font-display font-black text-2xl text-zinc-900 leading-none">Nepal</span>
+                  <span className="text-[10px] text-zinc-400 font-mono uppercase tracking-wider block mt-1.5 font-bold">Creator Network</span>
+                </div>
+                <div>
+                  <span className="block font-display font-black text-2xl text-zinc-900 leading-none">Zero</span>
+                  <span className="text-[10px] text-zinc-400 font-mono uppercase tracking-wider block mt-1.5 font-bold">Database Lag</span>
+                </div>
+              </div>
+            </div>
           </div>
-          <span className="font-mono text-[9px] uppercase tracking-wider bg-orange-500/10 text-orange-600 px-2 py-0.5 rounded-md font-bold">LIVE HUB</span>
-        </div>
 
-        {/* 1. Large Visual Dominant Hero Section with Extra White Space */}
-        <div className="max-w-2xl space-y-6 text-left">
-          <h1 className="font-display font-black text-4xl md:text-5xl lg:text-7xl text-zinc-950 uppercase tracking-tighter leading-[0.9] transition-smooth">
-            Where great <br />
-            <span className="text-orange-500 font-display lowercase font-black tracking-tighter">minds</span> find their <br />
-            <span className="underline decoration-orange-500/40 decoration-wavy underline-offset-10">audience</span>
-          </h1>
+          {/* Right Column: Dynamic Login and Signup directly on the first fold */}
+          <div className="lg:col-span-5 w-full max-w-md mx-auto lg:mx-0">
+            <div className="bg-white border border-stone-200/45 rounded-[2.5rem] p-8 md:p-10 shadow-md hover:shadow-lg transition-smooth">
+              
+              {/* Real Auth via Google Sign-In */}
+              <button
+                type="button"
+                id="land-google-signin-btn"
+                onClick={async () => {
+                  await loginWithGoogle();
+                }}
+                className="w-full flex items-center justify-center gap-3 py-3.5 border border-zinc-200/80 hover:border-zinc-400 hover:bg-stone-50 text-zinc-850 font-sans font-bold uppercase tracking-widest text-[10px] rounded-2xl transition-smooth cursor-pointer mb-4 shadow-xs"
+              >
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+                </svg>
+                <span className="font-sans font-extrabold tracking-widest">Sign in with Google</span>
+              </button>
 
-          <p className="text-zinc-500 font-sans text-xs md:text-sm leading-relaxed font-medium max-w-lg">
-            FreshLink Connect coordinates content recommendations by analyzing tag categorization, chosen categories, and your personal interests. Build followers, chat seamlessly, and earn dynamic badges for platform milestone achievements.
-          </p>
+              <div className="relative flex py-2 items-center mb-6">
+                <div className="flex-grow border-t border-stone-100"></div>
+                <span className="flex-shrink mx-4 text-[9px] font-mono uppercase text-zinc-400 tracking-widest font-extrabold">Or Use Direct Email</span>
+                <div className="flex-grow border-t border-stone-100"></div>
+              </div>
 
-          <div className="pt-6 border-t border-stone-200/60 grid grid-cols-3 gap-6 max-w-lg">
-            <div>
-              <span className="block font-display font-black text-2xl text-orange-500 leading-none">100%</span>
-              <span className="text-[10px] text-zinc-400 font-mono uppercase tracking-wider block mt-1.5 font-bold">Privacy Secured</span>
-            </div>
-            <div>
-              <span className="block font-display font-black text-2xl text-zinc-900 leading-none">Nepal</span>
-              <span className="text-[10px] text-zinc-400 font-mono uppercase tracking-wider block mt-1.5 font-bold">Creator Network</span>
-            </div>
-            <div>
-              <span className="block font-display font-black text-2xl text-zinc-900 leading-none">Zero</span>
-              <span className="text-[10px] text-zinc-400 font-mono uppercase tracking-wider block mt-1.5 font-bold">Database Lag</span>
+              {/* Authenticate Forms box */}
+              <div className="space-y-4">
+                {isSignUp ? (
+                  <form onSubmit={handleSignupSubmit} className="space-y-4" id="land-signup-form">
+                    <div>
+                      <h2 className="font-display font-black text-xl uppercase tracking-tighter text-zinc-950 leading-tight">Create Creator Profile</h2>
+                      <p className="text-zinc-400 text-[10px] mt-1 leading-snug">Become part of the FreshLink Connect interests feed network.</p>
+                    </div>
+                    
+                    {signupError && (
+                      <div className="p-3 bg-red-50 text-red-700 text-xs rounded-xl border border-red-100 flex items-center gap-2 animate-bounce-short" id="land-signup-error">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span className="font-sans font-semibold">{signupError}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Pick Display Name</label>
+                      <div className="relative">
+                        <UserIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <input
+                          type="text"
+                          required
+                          id="land-signup-name-input"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          placeholder="Alice Springs"
+                          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-bold bg-stone-50/40 focus:bg-white focus:border-orange-500 focus:outline-none transition-all text-zinc-800"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Your Email Address</label>
+                      <div className="relative">
+                        <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <input
+                          type="email"
+                          required
+                          id="land-signup-email-input"
+                          value={signupEmail}
+                          onChange={(e) => setSignupEmail(e.target.value)}
+                          placeholder="alice@domain.com"
+                          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 text-xs text-zinc-800 font-sans outline-none bg-stone-50/40 focus:bg-white focus:border-orange-500 transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Phone Number <span className="text-orange-500 font-bold">*</span></label>
+                      <div className="relative">
+                        <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <input
+                          type="tel"
+                          required
+                          id="land-signup-phone-input"
+                          value={phoneNumber}
+                          onChange={(e) => setPhoneNumber(e.target.value)}
+                          placeholder="e.g. +91 98765 43210"
+                          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 text-xs text-zinc-800 font-sans outline-none bg-stone-50/40 focus:bg-white focus:border-orange-500 transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Identity Document <span className="text-orange-500 font-bold">*</span></label>
+                      <div className="flex gap-2 mb-1.5">
+                        <button
+                          type="button"
+                          onClick={() => { setDocType('pan'); setDocValue(''); }}
+                          className={`flex-1 py-1 text-center text-[9px] font-bold rounded-lg transition-all border ${
+                            docType === 'pan' ? 'bg-orange-600 text-white border-orange-600 font-black' : 'bg-white text-zinc-500 border-zinc-200'
+                          }`}
+                        >
+                          PAN Number
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setDocType('docId'); setDocValue(''); }}
+                          className={`flex-1 py-1 text-center text-[9px] font-bold rounded-lg transition-all border ${
+                            docType === 'docId' ? 'bg-orange-600 text-white border-orange-600 font-black' : 'bg-white text-zinc-500 border-zinc-200'
+                          }`}
+                        >
+                          Official ID
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <CreditCard className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <input
+                          type="text"
+                          required
+                          id="land-signup-doc-input"
+                          value={docValue}
+                          onChange={(e) => setDocValue(e.target.value)}
+                          placeholder={docType === 'pan' ? 'e.g. ABCDE1234F' : 'e.g. Passport/National ID No.'}
+                          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 text-xs text-zinc-800 font-sans outline-none bg-stone-50/40 focus:bg-white focus:border-orange-500 transition-all uppercase"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Secure Physical ID Document Upload */}
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">
+                        Upload Physical ID Photo <span className="text-orange-500 font-bold">*</span>
+                      </label>
+                      <div 
+                        onDragOver={onDragOverForSignup}
+                        onDragLeave={onDragLeaveForSignup}
+                        onDrop={onDropForSignup}
+                        onClick={() => fileInputRefForSignup.current?.click()}
+                        className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-smooth ${
+                          isDragging 
+                            ? 'border-orange-500 bg-orange-50/40' 
+                            : idPhoto 
+                              ? 'border-emerald-500/40 bg-emerald-50/10' 
+                              : 'border-zinc-200 hover:border-orange-400 bg-zinc-50/50'
+                        }`}
+                      >
+                        <input 
+                          type="file" 
+                          ref={fileInputRefForSignup}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleFileChangeForSignup(file);
+                          }}
+                          accept="image/*"
+                          className="hidden" 
+                        />
+                        {idPhoto ? (
+                          <div className="flex flex-col items-center">
+                            <div className="w-full h-24 overflow-hidden rounded-lg mb-1.5 relative">
+                              <img src={idPhoto} alt="Verification ID preview" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                <span className="text-[9px] text-white font-bold bg-black/60 px-2 py-0.5 rounded">
+                                  Tap to reset
+                                </span>
+                              </div>
+                            </div>
+                            <span className="text-[9.5px] text-emerald-600 font-bold max-w-full truncate">
+                              ✓ Attached: {idPhotoName || 'identity_doc.png'}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center py-1">
+                            <Upload className="w-6 h-6 text-zinc-400 mb-1" />
+                            <p className="text-[10px] font-bold text-zinc-700">Drag ID photo or click to browse</p>
+                            <p className="text-[8px] text-zinc-400 font-semibold mt-0.5 font-mono">PNG, JPG (Max 1.5MB)</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Interests checklists */}
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">
+                        Select Interests <span className="text-orange-500 font-bold">*</span>
+                      </label>
+                      
+                      <div className="grid grid-cols-2 gap-1.5 max-h-[140px] overflow-y-auto p-1.5 border border-zinc-150 bg-stone-50/50 rounded-2xl" id="land-interest-selection">
+                        {INTEREST_OPTIONS.map((opt) => {
+                          const isSelected = selectedInterests.includes(opt.id);
+                          return (
+                            <button
+                              type="button"
+                              key={opt.id}
+                              id={`land-interest-opt-${opt.id}`}
+                              onClick={() => toggleInterest(opt.id)}
+                              className={`p-2.5 rounded-xl border text-left transition-smooth cursor-pointer ${
+                                isSelected
+                                  ? 'border-orange-500 bg-orange-500/10 text-zinc-850 font-bold shadow-xs'
+                                  : 'border-transparent bg-white hover:bg-zinc-100 text-zinc-500 font-medium'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-sans text-[10px]">{opt.name}</span>
+                                {isSelected ? (
+                                  <div className="w-3.5 h-3.5 rounded-full bg-orange-600 text-white flex items-center justify-center shrink-0">
+                                    <Check className="w-2 h-2 font-black" />
+                                  </div>
+                                ) : (
+                                  <div className="w-3.5 h-3.5 rounded-full border border-zinc-200 shrink-0" />
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      id="land-signup-submit-btn"
+                      className="w-full py-3.5 bg-zinc-950 hover:bg-orange-600 text-white font-sans font-bold uppercase tracking-widest text-[10px] rounded-2xl transition-smooth shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      Assemble Profile
+                      <ArrowRight className="w-3.5 h-3.5 animate-pulse" />
+                    </button>
+
+                    <p className="text-center text-xs text-zinc-400 pt-2 font-medium">
+                      Already registered?{' '}
+                      <button
+                        type="button"
+                        id="land-switch-to-login"
+                        onClick={() => setIsSignUp(false)}
+                        className="text-orange-600 font-bold uppercase tracking-wider hover:underline"
+                      >
+                        Sign In
+                      </button>
+                    </p>
+                  </form>
+                ) : (
+                  <form onSubmit={handleLoginSubmit} className="space-y-4" id="land-login-form">
+                    <div>
+                      <h2 className="font-display font-black text-xl uppercase tracking-tighter text-zinc-950 leading-tight">Welcome Back</h2>
+                      <p className="text-zinc-400 text-[10px] mt-1 leading-snug">Authenticate to read, publish drafts, and track badges.</p>
+                    </div>
+
+                    {loginError && (
+                      <div className="p-3 bg-red-50 text-red-700 text-xs rounded-xl border border-red-150 flex items-center gap-2 shadow-sm animate-flicker-short" id="land-login-error">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span className="font-sans font-semibold">{loginError}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Your Registered Email</label>
+                      <div className="relative">
+                        <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <input
+                          type="email"
+                          required
+                          id="land-login-email-input"
+                          value={loginEmail}
+                          onChange={(e) => setLoginEmail(e.target.value)}
+                          placeholder="e.g. alice@nexus.com"
+                          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 text-xs text-zinc-805 font-sans outline-none bg-stone-50/40 focus:bg-white focus:border-orange-500 transition-all animate-flicker-short"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Passphrase Lock</label>
+                      <div className="relative">
+                        <Shield className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <input
+                          type="password"
+                          disabled
+                          placeholder="•••••••• (Bypassed for sandbox)"
+                          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-150 text-xs bg-stone-50/40 text-zinc-400 cursor-not-allowed uppercase font-mono outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      id="land-login-submit-btn"
+                      className="w-full py-3.5 bg-zinc-950 hover:bg-orange-600 text-white font-sans font-bold uppercase tracking-widest text-[10px] rounded-2xl transition-smooth shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      Access Account
+                      <ArrowRight className="w-3.5 h-3.5 animate-pulse" />
+                    </button>
+
+                    <p className="text-center text-xs text-zinc-400 pt-2 font-medium">
+                      New creator?{' '}
+                      <button
+                        type="button"
+                        id="land-switch-to-signup"
+                        onClick={() => setIsSignUp(true)}
+                        className="text-orange-600 font-bold uppercase tracking-wider hover:underline"
+                      >
+                        Create Account
+                      </button>
+                    </p>
+                  </form>
+                )}
+              </div>
+
             </div>
           </div>
+
         </div>
 
         {/* 2. Bento-Style Live Feature Preview Grid (Showcasing real platform content and screenshots) */}
@@ -391,7 +705,7 @@ export const LandingPage: React.FC = () => {
                   </span>
                 </div>
 
-                <p className="text-[10.5px] text-zinc-500 font-medium max-w-xl leading-relaxed">
+                <p className="text-[10.5px] text-zinc-500 font-medium max-w-3xl leading-relaxed">
                   Discover curated networks matching your exact location interests. From tech-driven spaces in Kathmandu to scenic storyboards in Pokhara and cultural chronicles in Lalitpur, find local creators instantly.
                 </p>
 
@@ -433,7 +747,7 @@ export const LandingPage: React.FC = () => {
             <h3 className="font-display font-black text-xl text-zinc-950 uppercase tracking-tight">
               Blazing Fast Performance, Zero Resource Waste
             </h3>
-            <p className="text-xs text-zinc-500 font-medium max-w-xl">
+            <p className="text-xs text-zinc-500 font-medium max-w-3xl">
               FreshLink Connect uses an advanced real-time subscription model designed to minimize server resources. Our hybrid architecture keeps Firebase quota costs low while delivering instant creator-to-fan connections.
             </p>
           </div>
@@ -478,318 +792,7 @@ export const LandingPage: React.FC = () => {
           <span>DISCOVER • CONNECT • CREATE</span>
           <span>NEPAL HUB</span>
         </footer>
-      </section>
-
-      {/* Interactive Right Column: Forms and Sign-In (Symmetrical off-white frame with depth) */}
-      <section className="w-full lg:w-[480px] shrink-0 bg-stone-50/50 p-8 md:p-12 lg:p-16 flex flex-col justify-center border-l border-stone-200/50 shadow-xs overflow-y-auto max-h-screen lg:max-h-none relative z-10">
-        
-        {/* Floating Auth Card Layout to create Depth */}
-        <div className="bg-white border border-stone-200/45 rounded-[2.5rem] p-8 md:p-10 card-shadow transition-smooth hover:shadow-lg">
-          
-          {/* Real Auth via Google Sign-In */}
-          <button
-            type="button"
-            id="land-google-signin-btn"
-            onClick={async () => {
-              await loginWithGoogle();
-            }}
-            className="w-full flex items-center justify-center gap-3 py-3.5 border border-zinc-200/80 hover:border-zinc-400 hover:bg-stone-50 text-zinc-850 font-sans font-bold uppercase tracking-widest text-[10px] rounded-2xl transition-smooth cursor-pointer mb-4 shadow-xs"
-          >
-            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
-            </svg>
-            <span className="font-sans font-extrabold tracking-widest">Sign in with Google</span>
-          </button>
-
-          <div className="relative flex py-2 items-center mb-6">
-            <div className="flex-grow border-t border-stone-100"></div>
-            <span className="flex-shrink mx-4 text-[9px] font-mono uppercase text-zinc-400 tracking-widest font-extrabold">Or Use Direct Email</span>
-            <div className="flex-grow border-t border-stone-100"></div>
-          </div>
-
-          {/* Authenticate Forms box */}
-          <div className="space-y-4">
-            {isSignUp ? (
-              <form onSubmit={handleSignupSubmit} className="space-y-4" id="land-signup-form">
-                <div>
-                  <h2 className="font-display font-black text-xl uppercase tracking-tighter text-zinc-950 leading-tight">Create Creator Profile</h2>
-                  <p className="text-zinc-400 text-[10px] mt-1 leading-snug">Become part of the FreshLink Connect interests feed network.</p>
-                </div>
-                
-                {signupError && (
-                  <div className="p-3 bg-red-50 text-red-700 text-xs rounded-xl border border-red-100 flex items-center gap-2 animate-bounce-short" id="land-signup-error">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span className="font-sans font-semibold">{signupError}</span>
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Pick Display Name</label>
-                  <div className="relative">
-                    <UserIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                    <input
-                      type="text"
-                      required
-                      id="land-signup-name-input"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Alice Springs"
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-bold bg-stone-50/40 focus:bg-white focus:border-orange-500 focus:outline-none transition-all text-zinc-800"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Your Email Address</label>
-                  <div className="relative">
-                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                    <input
-                      type="email"
-                      required
-                      id="land-signup-email-input"
-                      value={signupEmail}
-                      onChange={(e) => setSignupEmail(e.target.value)}
-                      placeholder="alice@domain.com"
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 text-xs text-zinc-800 font-sans outline-none bg-stone-50/40 focus:bg-white focus:border-orange-500 transition-all"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Phone Number <span className="text-orange-500 font-bold">*</span></label>
-                  <div className="relative">
-                    <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                    <input
-                      type="tel"
-                      required
-                      id="land-signup-phone-input"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      placeholder="e.g. +91 98765 43210"
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 text-xs text-zinc-800 font-sans outline-none bg-stone-50/40 focus:bg-white focus:border-orange-500 transition-all"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Identity Document <span className="text-orange-500 font-bold">*</span></label>
-                  <div className="flex gap-2 mb-1.5">
-                    <button
-                      type="button"
-                      onClick={() => { setDocType('pan'); setDocValue(''); }}
-                      className={`flex-1 py-1 text-center text-[9px] font-bold rounded-lg transition-all border ${
-                        docType === 'pan' ? 'bg-orange-600 text-white border-orange-600 font-black' : 'bg-white text-zinc-500 border-zinc-200'
-                      }`}
-                    >
-                      PAN Number
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setDocType('docId'); setDocValue(''); }}
-                      className={`flex-1 py-1 text-center text-[9px] font-bold rounded-lg transition-all border ${
-                        docType === 'docId' ? 'bg-orange-600 text-white border-orange-600 font-black' : 'bg-white text-zinc-500 border-zinc-200'
-                      }`}
-                    >
-                      Official ID
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <CreditCard className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                    <input
-                      type="text"
-                      required
-                      id="land-signup-doc-input"
-                      value={docValue}
-                      onChange={(e) => setDocValue(e.target.value)}
-                      placeholder={docType === 'pan' ? 'e.g. ABCDE1234F' : 'e.g. Passport/National ID No.'}
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 text-xs text-zinc-800 font-sans outline-none bg-stone-50/40 focus:bg-white focus:border-orange-500 transition-all uppercase"
-                    />
-                  </div>
-                </div>
-
-                {/* Secure Physical ID Document Upload */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">
-                    Upload Physical ID Photo <span className="text-orange-500 font-bold">*</span>
-                  </label>
-                  <div 
-                    onDragOver={onDragOverForSignup}
-                    onDragLeave={onDragLeaveForSignup}
-                    onDrop={onDropForSignup}
-                    onClick={() => fileInputRefForSignup.current?.click()}
-                    className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-smooth ${
-                      isDragging 
-                        ? 'border-orange-500 bg-orange-50/40' 
-                        : idPhoto 
-                          ? 'border-emerald-500/40 bg-emerald-50/10' 
-                          : 'border-zinc-200 hover:border-orange-400 bg-zinc-50/50'
-                    }`}
-                  >
-                    <input 
-                      type="file" 
-                      ref={fileInputRefForSignup}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleFileChangeForSignup(file);
-                      }}
-                      accept="image/*"
-                      className="hidden" 
-                    />
-                    {idPhoto ? (
-                      <div className="flex flex-col items-center">
-                        <div className="w-full h-24 overflow-hidden rounded-lg mb-1.5 relative">
-                          <img src={idPhoto} alt="Verification ID preview" className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                            <span className="text-[9px] text-white font-bold bg-black/60 px-2 py-0.5 rounded">
-                              Tap to reset
-                            </span>
-                          </div>
-                        </div>
-                        <span className="text-[9.5px] text-emerald-600 font-bold max-w-full truncate">
-                          ✓ Attached: {idPhotoName || 'identity_doc.png'}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center py-1">
-                        <Upload className="w-6 h-6 text-zinc-400 mb-1" />
-                        <p className="text-[10px] font-bold text-zinc-700">Drag ID photo or click to browse</p>
-                        <p className="text-[8px] text-zinc-400 font-semibold mt-0.5 font-mono">PNG, JPG (Max 1.5MB)</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Interests checklists */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">
-                    Select Interests <span className="text-orange-500 font-bold">*</span>
-                  </label>
-                  
-                  <div className="grid grid-cols-2 gap-1.5 max-h-[140px] overflow-y-auto p-1.5 border border-zinc-150 bg-stone-50/50 rounded-2xl" id="land-interest-selection">
-                    {INTEREST_OPTIONS.map((opt) => {
-                      const isSelected = selectedInterests.includes(opt.id);
-                      return (
-                        <button
-                          type="button"
-                          key={opt.id}
-                          id={`land-interest-opt-${opt.id}`}
-                          onClick={() => toggleInterest(opt.id)}
-                          className={`p-2.5 rounded-xl border text-left transition-smooth cursor-pointer ${
-                            isSelected
-                              ? 'border-orange-500 bg-orange-500/10 text-zinc-850 font-bold shadow-xs'
-                              : 'border-transparent bg-white hover:bg-zinc-100 text-zinc-500 font-medium'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-sans text-[10px]">{opt.name}</span>
-                            {isSelected ? (
-                              <div className="w-3.5 h-3.5 rounded-full bg-orange-600 text-white flex items-center justify-center shrink-0">
-                                <Check className="w-2 h-2 font-black" />
-                              </div>
-                            ) : (
-                              <div className="w-3.5 h-3.5 rounded-full border border-zinc-200 shrink-0" />
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  id="land-signup-submit-btn"
-                  className="w-full py-3.5 bg-zinc-950 hover:bg-orange-600 text-white font-sans font-bold uppercase tracking-widest text-[10px] rounded-2xl transition-smooth shadow-xs flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  Assemble Profile
-                  <ArrowRight className="w-3.5 h-3.5 animate-pulse" />
-                </button>
-
-                <p className="text-center text-xs text-zinc-400 pt-2 font-medium">
-                  Already registered?{' '}
-                  <button
-                    type="button"
-                    id="land-switch-to-login"
-                    onClick={() => setIsSignUp(false)}
-                    className="text-orange-600 font-bold uppercase tracking-wider hover:underline"
-                  >
-                    Sign In
-                  </button>
-                </p>
-              </form>
-            ) : (
-              <form onSubmit={handleLoginSubmit} className="space-y-4" id="land-login-form">
-                <div>
-                  <h2 className="font-display font-black text-xl uppercase tracking-tighter text-zinc-950 leading-tight">Welcome Back</h2>
-                  <p className="text-zinc-400 text-[10px] mt-1 leading-snug">Authenticate to read, publish drafts, and track badges.</p>
-                </div>
-
-                {loginError && (
-                  <div className="p-3 bg-red-50 text-red-700 text-xs rounded-xl border border-red-150 flex items-center gap-2 shadow-sm animate-flicker-short" id="land-login-error">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span className="font-sans font-semibold">{loginError}</span>
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Your Registered Email</label>
-                  <div className="relative">
-                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                    <input
-                      type="email"
-                      required
-                      id="land-login-email-input"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      placeholder="e.g. alice@nexus.com"
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 text-xs text-zinc-805 font-sans outline-none bg-stone-50/40 focus:bg-white focus:border-orange-500 transition-all animate-flicker-short"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Passphrase Lock</label>
-                  <div className="relative">
-                    <Shield className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                    <input
-                      type="password"
-                      disabled
-                      placeholder="•••••••• (Bypassed for sandbox)"
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-150 text-xs bg-stone-50/40 text-zinc-400 cursor-not-allowed uppercase font-mono outline-none"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  id="land-login-submit-btn"
-                  className="w-full py-3.5 bg-zinc-950 hover:bg-orange-600 text-white font-sans font-bold uppercase tracking-widest text-[10px] rounded-2xl transition-smooth shadow-xs flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  Access Account
-                  <ArrowRight className="w-3.5 h-3.5 animate-pulse" />
-                </button>
-
-                <p className="text-center text-xs text-zinc-400 pt-2 font-medium">
-                  New creator?{' '}
-                  <button
-                    type="button"
-                    id="land-switch-to-signup"
-                    onClick={() => setIsSignUp(true)}
-                    className="text-orange-600 font-bold uppercase tracking-wider hover:underline"
-                  >
-                    Create Account
-                  </button>
-                </p>
-              </form>
-            )}
-          </div>
-
-        </div>
-      </section>
-
+      </div>
     </div>
   );
 };

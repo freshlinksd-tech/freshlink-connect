@@ -416,7 +416,7 @@ export const Profiles: React.FC<ProfilesProps> = ({
   const followingCurrent = isFollowing(activeProfile.id);
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 py-8 space-y-8 select-none" id="profile-dashboard-layout">
+    <div className="w-full max-w-7xl mx-auto px-4 py-8 space-y-8 select-none" id="profile-dashboard-layout">
       
       {/* Top Banner & Profile Header */}
       <section className="bg-white border border-stone-200/45 rounded-[2rem] card-shadow overflow-hidden">

@@ -229,7 +229,7 @@ export const Chat: React.FC<ChatProps> = ({ onSelectUser, targetChatUserId, setT
   }
 
   return (
-    <div className="flex bg-white border border-black rounded-none overflow-hidden h-[85vh] max-w-5xl mx-auto select-none" id="chat-dashboard-container">
+    <div className="flex bg-white border border-black rounded-none overflow-hidden h-[85vh] max-w-7xl mx-auto select-none" id="chat-dashboard-container">
       
       {/* Sidebar panel */}
       <aside className="w-80 border-r border-[#1A1A1A]/10 flex flex-col h-full shrink-0 bg-white">

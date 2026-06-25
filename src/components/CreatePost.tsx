@@ -290,7 +290,7 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
   const tagsArr = tagsString.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean);
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8 select-none" id="create-post-container">
+    <div className="max-w-7xl mx-auto px-4 py-8 select-none" id="create-post-container">
       {/* Tab toggle block: Write vs Preview */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 border-b border-zinc-200/60 pb-6" id="create-post-header">
         <div>

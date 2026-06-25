@@ -187,7 +187,7 @@ export const MonetizationPanel: React.FC = () => {
         <div className="absolute top-0 right-0 opacity-10 transform translate-x-12 translate-y-2 pointer-events-none">
           <Sparkles className="w-96 h-96" />
         </div>
-        <div className="relative max-w-5xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6 text-left">
+        <div className="relative max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6 text-left">
           <div>
             <div className="text-[10px] font-black uppercase tracking-widest bg-white/20 inline-block px-3 py-1 rounded-full mb-3 border border-white/10">
               FRESHLINK CREATOR PARTNER PROGRAM
@@ -216,7 +216,7 @@ export const MonetizationPanel: React.FC = () => {
 
       {/* Sub-Tab Navigation Toggle */}
       <div className="bg-white border-b border-zinc-200 sticky top-0 z-10 shadow-xs">
-        <div className="max-w-5xl mx-auto px-6 flex gap-6">
+        <div className="max-w-7xl mx-auto px-6 flex gap-6">
           <button
             onClick={() => setActiveSubTab('payout')}
             className={`py-4 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
@@ -242,7 +242,7 @@ export const MonetizationPanel: React.FC = () => {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto p-6 md:p-8 space-y-8">
+      <div className="max-w-7xl mx-auto p-6 md:p-8 space-y-8">
         {activeSubTab === 'payout' ? (
           <>
             {/* Partner Program Conditions Information Widget */}

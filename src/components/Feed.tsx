@@ -41,7 +41,8 @@ import {
   ShieldAlert,
   Lock,
   Coins,
-  Cake
+  Cake,
+  Compass
 } from 'lucide-react';
 
 const COVER_SUGGESTIONS: Record<string, string[]> = {
@@ -463,7 +464,10 @@ export const Feed: React.FC<FeedProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-6 w-full max-w-3xl mx-auto px-4 py-8 select-none">
+    <div className="w-full max-w-7xl mx-auto px-4 md:px-6 py-8 select-none" id="feed-screen-container">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+        {/* Left Side: Main Feed Column */}
+        <div className="xl:col-span-8 flex flex-col gap-6">
       
       {/* Dynamic Quota Fallback Mode Notice Badge */}
       {isQuotaFallbackMode && (
@@ -2128,6 +2132,144 @@ export const Feed: React.FC<FeedProps> = ({
           </div>
         )}
       </AnimatePresence>
+        </div>
+
+        {/* Right Side: Sticky Interactive Sidebar */}
+        <aside className="hidden xl:flex xl:col-span-4 flex-col gap-6 sticky top-8" id="feed-sidebar-aside">
+          
+          {/* User Profile Glance */}
+          {currentUser && (
+            <div className="bg-white border border-stone-200/60 rounded-3xl p-6 shadow-sm space-y-4 text-left">
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <img
+                    src={currentUser.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
+                    alt={currentUser.name}
+                    referrerPolicy="no-referrer"
+                    className="w-14 h-14 rounded-2xl object-cover border border-stone-200"
+                  />
+                  <span className="absolute -bottom-1.5 -right-1.5 bg-emerald-500 text-white p-0.5 px-1 rounded-full text-[8px] font-mono font-bold border-2 border-white leading-none uppercase">
+                    active
+                  </span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-zinc-900 font-sans font-black text-xs uppercase tracking-wider truncate">
+                    {currentUser.name}
+                  </h4>
+                  <p className="text-zinc-500 font-mono text-[9.5px] truncate font-medium">
+                    {currentUser.email}
+                  </p>
+                </div>
+              </div>
+
+              {currentUser.bio && (
+                <p className="text-zinc-600 text-xs leading-normal font-sans font-medium line-clamp-2">
+                  {currentUser.bio}
+                </p>
+              )}
+
+              <div className="grid grid-cols-3 gap-2.5 pt-3 border-t border-stone-100 text-center">
+                <div>
+                  <span className="block text-zinc-400 font-mono text-[8.5px] uppercase tracking-wider">Posts</span>
+                  <span className="text-xs font-black text-zinc-900 font-sans mt-0.5 block">
+                    {posts.filter(p => p.authorId === currentUser.id).length}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-zinc-400 font-mono text-[8.5px] uppercase tracking-wider">Following</span>
+                  <span className="text-xs font-black text-zinc-900 font-sans mt-0.5 block">
+                    {currentUser.followingCount || 0}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-zinc-400 font-mono text-[8.5px] uppercase tracking-wider">Followers</span>
+                  <span className="text-xs font-black text-zinc-900 font-sans mt-0.5 block">
+                    {currentUser.followersCount || 0}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Quick-select Interests Grid */}
+          <div className="bg-white border border-stone-200/60 rounded-3xl p-6 shadow-sm space-y-4 text-left">
+            <h3 className="text-[10px] font-black uppercase tracking-wider text-orange-600 font-sans flex items-center gap-2">
+              <Compass className="w-4 h-4 text-orange-500 shrink-0" />
+              <span>Trending Interests</span>
+            </h3>
+            
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setActiveCategoryFilter('all')}
+                className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
+                  activeCategoryFilter === 'all'
+                    ? 'bg-zinc-900 text-white font-extrabold'
+                    : 'bg-stone-50 border border-stone-200/60 text-zinc-600 hover:bg-stone-100'
+                }`}
+              >
+                All Topics
+              </button>
+              {INTEREST_OPTIONS.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setActiveCategoryFilter(cat.id)}
+                  className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
+                    activeCategoryFilter === cat.id
+                      ? 'bg-zinc-900 text-white font-extrabold'
+                      : 'bg-stone-50 border border-stone-200/60 text-zinc-600 hover:bg-stone-100'
+                  }`}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Ad Sponsor Campaigns */}
+          <div className="bg-gradient-to-br from-zinc-900 to-black text-white rounded-3xl p-6 shadow-md border border-orange-500/15 text-left relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-orange-500/10 rounded-full blur-2xl pointer-events-none" />
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-orange-500 font-mono flex items-center gap-2">
+              <Megaphone className="w-4 h-4 animate-bounce" />
+              <span>Sponsor Campaign</span>
+            </h3>
+            <p className="text-zinc-200 text-xs mt-3 leading-relaxed font-sans font-medium">
+              Want to promote your brand to thousands of creators and bloggers in Nepal? Tap into active ad slots!
+            </p>
+            <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between">
+              <span className="text-[9.5px] font-mono text-zinc-400">Rs. 50 / 1000 Views</span>
+              <span className="text-[10px] bg-orange-600/25 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-md font-bold uppercase tracking-wide">
+                Clearance Ok
+              </span>
+            </div>
+          </div>
+
+          {/* Network System Health & Quota Statistics */}
+          <div className="bg-stone-50/50 border border-stone-200/60 rounded-3xl p-6 shadow-xs space-y-4 text-left">
+            <h3 className="text-[10px] font-black uppercase tracking-wider text-zinc-500 font-sans flex items-center gap-1.5">
+              <Clock className="w-4 h-4 text-zinc-400" />
+              <span>Connection Parameters</span>
+            </h3>
+            
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between text-[11px] font-mono">
+                <span className="text-zinc-500">Live Server Status</span>
+                <span className="text-emerald-600 font-bold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  OK
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] font-mono">
+                <span className="text-zinc-500">Data Sync</span>
+                <span className="text-zinc-700 font-bold">100% SECURE</span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] font-mono">
+                <span className="text-zinc-500">Node Location</span>
+                <span className="text-zinc-700 font-bold">KATHMANDU, NP</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
     </div>
   );
 };
