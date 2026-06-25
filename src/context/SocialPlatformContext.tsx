@@ -136,7 +136,9 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   const [activeChatPartnerId, setActiveChatPartnerId] = useState<string | null>(null);
   const activeChatPartnerRef = useRef<string | null>(null);
 
-  const [isQuotaFallbackMode, setIsQuotaFallbackMode] = useState<boolean>(false);
+  const [isQuotaFallbackMode, setIsQuotaFallbackMode] = useState<boolean>(
+    localStorage.getItem('freshlink_quota_fallback') === 'true'
+  );
   const [securityBlock, setSecurityBlock] = useState<{ actionType: string; remainingMs: number } | null>(null);
 
   const resolveSecurityChallenge = () => {
@@ -268,16 +270,17 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     let authUnsub = () => {};
 
     const syncAuthAndUser = async () => {
-      try {
-        // Authenticate anonymously if no current session exists
-        if (!auth.currentUser) {
-          await signInAnonymously(auth);
-        }
-      } catch (err) {
-        console.warn("Silent anonymous authentication skipped (use Google Sign-In or sandbox accounts):", err);
-      }
-
       authUnsub = onAuthStateChanged(auth, async (user) => {
+        if (!user) {
+          try {
+            // Authenticate anonymously only if no session (Google or Anonymous) is active
+            await signInAnonymously(auth);
+          } catch (err) {
+            console.warn("Silent anonymous authentication skipped (use Google Sign-In or sandbox accounts):", err);
+          }
+          return;
+        }
+
         if (user) {
           setCurrentUserId(user.uid);
           localStorage.setItem('freshlink_current_user_id', user.uid);
@@ -537,6 +540,19 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       return;
     }
 
+    if (isQuotaFallbackMode) {
+      // Offline/Sandbox Mode: read cached local messages instead of subscribing to Firestore
+      const cachedMsgsStr = localStorage.getItem('freshlink_loc_messages');
+      if (cachedMsgsStr) {
+        try {
+          setMessages(JSON.parse(cachedMsgsStr));
+        } catch (e) {}
+      } else {
+        setMessages(SEED_MESSAGES);
+      }
+      return;
+    }
+
     // Load messages where user is the sender
     const qSender = query(collection(db, 'messages'), where('senderId', '==', currentUserId));
     const unsubSender = onSnapshot(qSender, (snap) => {
@@ -590,7 +606,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       unsubSender();
       unsubReceiver();
     };
-  }, [currentUserId]);
+  }, [currentUserId, isQuotaFallbackMode]);
 
    const rawCurrentUser = users.find(u => u.id === currentUserId) || null;
   const currentUser = React.useMemo(() => {
@@ -1555,6 +1571,12 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     welcomeBadge?: string;
     welcomeTitle?: string;
     welcomeText?: string;
+    userId?: string;
+    paymentScreenshotUrl?: string;
+    status?: 'pending' | 'approved' | 'rejected' | 'published';
+    amountPaid?: number;
+    paymentStatus?: 'pending' | 'verified' | 'failed';
+    scheduledDate?: string;
   }) => {
     const id = adData.id || `ad_${Date.now()}`;
     const existingAd = ads.find(a => a.id === id);
@@ -1571,11 +1593,21 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       placement,
       welcomeBadge: adData.welcomeBadge,
       welcomeTitle: adData.welcomeTitle,
-      welcomeText: adData.welcomeText
+      welcomeText: adData.welcomeText,
+      userId: adData.userId || existingAd?.userId,
+      paymentScreenshotUrl: adData.paymentScreenshotUrl || existingAd?.paymentScreenshotUrl,
+      status: adData.status || existingAd?.status || 'published',
+      amountPaid: adData.amountPaid || existingAd?.amountPaid,
+      paymentStatus: adData.paymentStatus || existingAd?.paymentStatus || 'verified',
+      scheduledDate: adData.scheduledDate || existingAd?.scheduledDate
     };
 
     try {
       await setDoc(doc(db, 'ads', id), newAd);
+      setAds(prev => {
+        const otherAds = prev.filter(a => a.id !== id);
+        return [...otherAds, newAd];
+      });
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `ads/${id}`);
     }
@@ -1584,6 +1616,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   const deleteAd = async (adId: string) => {
     try {
       await deleteDoc(doc(db, 'ads', adId));
+      setAds(prev => prev.filter(a => a.id !== adId));
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `ads/${adId}`);
     }
@@ -1597,6 +1630,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       if (adSnapshot.exists()) {
         const currentCount = adSnapshot.data().clickCount || 0;
         await updateDoc(adDocRef, { clickCount: currentCount + 1 });
+        setAds(prev => prev.map(a => a.id === adId ? { ...a, clickCount: currentCount + 1 } : a));
       }
     } catch (err) {
       console.error("Failed to increment click count:", err);
@@ -1610,6 +1644,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         batch.update(doc(db, 'ads', ad.id), { active });
       });
       await batch.commit();
+      setAds(prev => prev.map(ad => ({ ...ad, active })));
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'ads');
     }

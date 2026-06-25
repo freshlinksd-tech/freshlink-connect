@@ -65,17 +65,17 @@ export const Navigation: React.FC<NavigationProps> = ({
   };
 
   return (
-    <aside className="w-64 bg-white border-r border-zinc-100 flex flex-col h-screen sticky top-0 shrink-0 select-none">
+    <aside className="w-64 bg-white border-r border-stone-200/50 flex flex-col h-screen sticky top-0 shrink-0 select-none">
       {/* Platform Branding */}
-      <div className="p-5 border-b border-zinc-100 flex items-center justify-between">
-        <div className="flex flex-col gap-1" id="brand-logo">
+      <div className="p-6 border-b border-stone-200/40 flex items-center justify-between">
+        <div className="flex flex-col gap-1.5" id="brand-logo">
           <div className="flex items-center gap-2">
-            <FreshLinkLogo className="w-8 h-8" />
-            <span className="font-sans font-black text-base tracking-tighter text-zinc-900">
-              FRESHLINK CONNECT
+            <FreshLinkLogo className="w-8 h-8 text-orange-500 transform hover:scale-105 transition-smooth" />
+            <span className="font-display font-black text-lg tracking-tight text-zinc-950 block">
+              FRESHLINK <span className="text-orange-500">CONNECT</span>
             </span>
           </div>
-          <p className="text-[10px] uppercase tracking-widest text-zinc-405 text-zinc-400 font-semibold">Connect & Publish</p>
+          <p className="text-[9px] uppercase tracking-widest text-zinc-400 font-bold">Connect & Publish</p>
         </div>
       </div>
 
@@ -90,25 +90,25 @@ export const Navigation: React.FC<NavigationProps> = ({
                 key={item.id}
                 id={`nav-tab-${item.id}`}
                 onClick={() => setActiveTab(item.id)}
-                whileTap={{ scale: 0.96 }}
+                whileTap={{ scale: 0.97 }}
                 transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-                className={`w-full flex items-center justify-between px-4 py-3 font-sans text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between px-4 py-3 font-sans text-xs font-semibold rounded-xl transition-smooth cursor-pointer ${
                   isActive
-                    ? 'bg-orange-500/10 text-orange-600 shadow-sm shadow-orange-500/5'
-                    : 'text-zinc-650 hover:text-zinc-900 hover:bg-zinc-50'
+                    ? 'bg-zinc-950 text-white shadow-sm shadow-zinc-950/10 font-bold'
+                    : 'text-zinc-600 hover:text-zinc-950 hover:bg-stone-100/60'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-orange-600' : 'text-zinc-400'}`} />
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-zinc-400'}`} />
                   <span>{item.name}</span>
                 </div>
                 {item.id === 'chat' && unreadCount > 0 && (
-                  <span className="bg-orange-600 text-white font-mono text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+                  <span className={`font-mono text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse ${isActive ? 'bg-orange-500 text-white' : 'bg-orange-600 text-white'}`}>
                     {unreadCount}
                   </span>
                 )}
                 {item.id === 'notifications' && unreadNotificationsCount > 0 && (
-                  <span className="bg-orange-600 text-white font-mono text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+                  <span className={`font-mono text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse ${isActive ? 'bg-orange-500 text-white' : 'bg-orange-600 text-white'}`}>
                     {unreadNotificationsCount}
                   </span>
                 )}
@@ -121,15 +121,15 @@ export const Navigation: React.FC<NavigationProps> = ({
             <motion.button
               id="nav-tab-profile"
               onClick={handleProfileClick}
-              whileTap={{ scale: 0.96 }}
+              whileTap={{ scale: 0.97 }}
               transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-              className={`w-full flex items-center gap-3 px-4 py-3 font-sans text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+              className={`w-full flex items-center gap-3 px-4 py-3 font-sans text-xs font-semibold rounded-xl transition-smooth cursor-pointer ${
                 activeTab === 'profile'
-                  ? 'bg-orange-500/10 text-orange-600 shadow-sm shadow-orange-500/5'
-                  : 'text-zinc-650 hover:text-zinc-900 hover:bg-zinc-50'
+                  ? 'bg-zinc-950 text-white shadow-sm shadow-zinc-950/10 font-bold'
+                  : 'text-zinc-600 hover:text-zinc-950 hover:bg-stone-100/60'
               }`}
             >
-              <User className={`w-4 h-4 ${activeTab === 'profile' ? 'text-orange-600' : 'text-zinc-400'}`} />
+              <User className={`w-4 h-4 ${activeTab === 'profile' ? 'text-white' : 'text-zinc-400'}`} />
               My Profile
             </motion.button>
           )}

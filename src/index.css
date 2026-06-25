@@ -1,24 +1,28 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,700;0,900;1,400;1,700&family=Playfair+Display:ital,wght@0,700;0,900;1,700;1,900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,900;1,400;1,700&family=Playfair+Display:ital,wght@0,700;0,900;1,700;1,900&family=Space+Grotesk:wght@400;500;700&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", -apple-system, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
   --font-serif: "Playfair Display", Georgia, serif;
   --font-mono: "Fira Code", ui-monospace, SFMono-Regular, monospace;
 }
 
 /* Override body styles for the warm paper layout */
 body {
-  background-color: #F8F7F4;
-  color: #1A1A1A;
+  background-color: #FAFAF9; /* Crisp cream white for a highly elegant premium background */
+  color: #1c1917;
   font-family: var(--font-sans);
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Accent highlight and typographic classes */
+/* Premium Typography Accents */
 .hero-text {
+  font-family: var(--font-display);
   font-size: clamp(2.5rem, 6vw, 5.5rem);
   line-height: 0.9;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.05em;
   font-weight: 900;
 }
 
@@ -29,17 +33,23 @@ body {
 }
 
 .sidebar-border {
-  border-right: 1px solid rgba(0, 0, 0, 0.1);
+  border-right: 1px solid rgba(28, 25, 23, 0.05);
 }
 
+/* Luxury shadows inspired by Apple and Pinterest */
 .card-shadow {
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.02), 0 1px 3px rgba(0, 0, 0, 0.01);
 }
 
+.card-shadow-hover:hover {
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.015);
+  transform: translateY(-2px);
+}
+
+/* Modern navigation and tabs active line indicators */
 .nav-active {
-  font-weight: 900 !important;
-  border-left: 3px solid #1A1A1A;
-  padding-left: 12px;
+  font-weight: 700 !important;
+  color: #c2410c !important; /* warm orange accent */
 }
 
 /* Custom scrollbars and hidden layouts */
@@ -49,6 +59,20 @@ body {
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Soft transitions */
+.transition-smooth {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Glow effects for badges */
+.glow-badge-orange {
+  box-shadow: 0 0 12px rgba(234, 88, 12, 0.15);
+}
+
+.glow-badge-emerald {
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
 }
 
 @keyframes spin-slow {
@@ -63,3 +87,18 @@ body {
 .animate-spin-hover:hover {
   animation: spin-slow 2s linear infinite;
 }
+
+/* Pulse animation for premium signals */
+.pulse-light {
+  animation: pulse-key 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse-key {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: .6;
+  }
+}
+

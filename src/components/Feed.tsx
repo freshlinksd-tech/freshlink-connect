@@ -740,14 +740,14 @@ export const Feed: React.FC<FeedProps> = ({
       </div>
 
       {/* Categories Horizontal Scrolling tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide" id="categories-filter-bar">
+      <div className="flex items-center gap-2.5 overflow-x-auto pb-3 scrollbar-hide select-none" id="categories-filter-bar">
         <button
           id="category-tab-all"
           onClick={() => setActiveCategoryFilter('all')}
-          className={`px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider transition-all rounded-full ${
+          className={`px-4.5 py-2 text-[10.5px] font-extrabold uppercase tracking-widest transition-smooth rounded-full cursor-pointer ${
             activeCategoryFilter === 'all'
-              ? 'bg-orange-600 text-white shadow-md shadow-orange-600/15'
-              : 'bg-white border border-zinc-205/85 hover:border-zinc-300 text-zinc-650 hover:bg-zinc-50'
+              ? 'bg-zinc-950 text-white shadow-xs'
+              : 'bg-white border border-stone-200/60 hover:border-zinc-300 text-zinc-600 hover:bg-stone-50'
           }`}
         >
           All Topics
@@ -757,10 +757,10 @@ export const Feed: React.FC<FeedProps> = ({
             key={cat.id}
             id={`category-tab-${cat.id}`}
             onClick={() => setActiveCategoryFilter(cat.id)}
-            className={`px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 rounded-full ${
+            className={`px-4.5 py-2 text-[10.5px] font-extrabold uppercase tracking-widest transition-smooth flex items-center gap-1.5 rounded-full cursor-pointer ${
               activeCategoryFilter === cat.id
-                ? 'bg-orange-600 text-white shadow-md shadow-orange-600/15'
-                : 'bg-white border border-zinc-205/85 hover:border-zinc-300 text-zinc-650 hover:bg-zinc-50'
+                ? 'bg-zinc-950 text-white shadow-xs'
+                : 'bg-white border border-stone-200/60 hover:border-zinc-300 text-zinc-600 hover:bg-stone-50'
             }`}
           >
             <span>{cat.name}</span>
@@ -860,10 +860,10 @@ export const Feed: React.FC<FeedProps> = ({
               <article
                 key={post.id}
                 id={`post-card-${post.id}`}
-                className="bg-white border border-zinc-100 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
+                className="bg-white border border-stone-200/45 rounded-[2rem] card-shadow card-shadow-hover transition-smooth overflow-hidden"
               >
                 {/* Author Info row */}
-                <div className="p-5 flex items-center justify-between border-b border-zinc-100/60 bg-white">
+                <div className="p-6 flex items-center justify-between border-b border-stone-100/50 bg-white">
                   <div className="flex items-center gap-3">
                     <button
                       id={`post-${post.id}-author-avatar`}
@@ -929,40 +929,45 @@ export const Feed: React.FC<FeedProps> = ({
                   <div
                     id={`post-${post.id}-cover-gallery`}
                     onClick={() => setSelectedPost(post)}
-                    className="cursor-pointer p-4 pb-0"
+                    className="cursor-pointer px-6 pt-4"
                   >
-                    <MultiPhotosLayout 
-                      images={[post.mediaUrl, ...post.mediaUrls].filter(Boolean) as string[]} 
-                    />
+                    <div className="rounded-2xl overflow-hidden border border-stone-200/40">
+                      <MultiPhotosLayout 
+                        images={[post.mediaUrl, ...post.mediaUrls].filter(Boolean) as string[]} 
+                      />
+                    </div>
                   </div>
                 ) : post.mediaUrl ? (
-                  <div 
-                    id={`post-${post.id}-cover`}
-                    onClick={() => setSelectedPost(post)}
-                    className="cursor-pointer overflow-hidden aspect-video relative bg-zinc-50 border-b border-zinc-100 group"
-                  >
-                    <img
-                      src={post.mediaUrl}
-                      alt={post.title}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover transition-all duration-750 group-hover:scale-[1.012]"
-                    />
-                    <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-md text-zinc-850 py-1.5 px-3 text-[10px] tracking-wider rounded-full font-bold shadow-sm border border-zinc-200/10">
-                      #{post.category}
-                    </div>
-                    {post.videoUrl && (
-                      <div className="absolute bottom-4 right-4 bg-orange-600 text-white flex items-center gap-1 py-1.5 px-3 text-[9px] tracking-wider uppercase rounded-full font-extrabold shadow-md border border-orange-500/20">
-                        <Video className="w-3 h-3 text-white animate-pulse" />
-                        <span>Has Video</span>
+                  <div className="px-6 pt-4">
+                    <div 
+                      id={`post-${post.id}-cover`}
+                      onClick={() => setSelectedPost(post)}
+                      className="cursor-pointer overflow-hidden aspect-video relative bg-stone-100 rounded-2xl border border-stone-200/45 group"
+                    >
+                      <img
+                        src={post.mediaUrl}
+                        alt={post.title}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover transition-smooth group-hover:scale-[1.015]"
+                      />
+                      <div className="absolute top-4 left-4 bg-zinc-950/90 backdrop-blur-md text-white py-1.5 px-3 text-[10px] tracking-widest uppercase rounded-full font-extrabold shadow-sm">
+                        #{post.category}
                       </div>
-                    )}
+                      {post.videoUrl && (
+                        <div className="absolute bottom-4 right-4 bg-orange-600 text-white flex items-center gap-1 py-1.5 px-3 text-[9px] tracking-wider uppercase rounded-full font-extrabold shadow-md border border-orange-500/20">
+                          <Video className="w-3 h-3 text-white animate-pulse" />
+                          <span>Has Video</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ) : post.videoUrl ? (
-                  <div 
-                    id={`post-${post.id}-video-cover`}
-                    onClick={() => setSelectedPost(post)}
-                    className="cursor-pointer overflow-hidden aspect-[3/4] max-h-[440px] relative bg-black border-b border-zinc-100 flex items-center justify-center group"
-                  >
+                  <div className="px-6 pt-4">
+                    <div 
+                      id={`post-${post.id}-video-cover`}
+                      onClick={() => setSelectedPost(post)}
+                      className="cursor-pointer overflow-hidden aspect-[3/4] max-h-[440px] relative bg-zinc-950 rounded-2xl border border-stone-200/45 flex items-center justify-center group"
+                    >
                     <video
                       src={post.videoUrl}
                       className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
@@ -979,6 +984,7 @@ export const Feed: React.FC<FeedProps> = ({
                     <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-md text-zinc-850 py-1.5 px-3 text-[10px] tracking-wider rounded-full font-bold shadow-sm">
                       #{post.category}
                     </div>
+                  </div>
                   </div>
                 ) : null}
 

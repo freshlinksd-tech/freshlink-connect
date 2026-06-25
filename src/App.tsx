@@ -33,7 +33,8 @@ import {
   Wifi,
   ShieldCheck,
   Coins,
-  Bell
+  Bell,
+  Gift
 } from 'lucide-react';
 
 function AppContent() {
@@ -44,6 +45,22 @@ function AppContent() {
   const [authOpen, setAuthOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('all');
+
+  const [showBirthdayCard, setShowBirthdayCard] = useState<boolean>(() => {
+    const dismissed = sessionStorage.getItem(`birthday_dismissed_${new Date().toDateString()}`);
+    return !dismissed;
+  });
+
+  const isBirthdayToday = React.useMemo(() => {
+    if (!currentUser?.dob) return false;
+    try {
+      const dobDate = new Date(currentUser.dob);
+      const today = new Date();
+      return dobDate.getMonth() === today.getMonth() && dobDate.getDate() === today.getDate();
+    } catch (e) {
+      return false;
+    }
+  }, [currentUser?.dob]);
   
   if (!currentUser) {
     return <LandingPage />;
@@ -103,7 +120,7 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F7F4] text-[#1A1A1A] flex flex-col md:flex-row font-sans antialiased">
+    <div className="min-h-screen bg-stone-50 text-zinc-900 flex flex-col md:flex-row font-sans antialiased">
       
       {/* Real-time Setup Wizard Portal for First Login */}
       {currentUser.hasSetupAccount === false && (
@@ -111,11 +128,11 @@ function AppContent() {
       )}
       
       {/* Mobile Top Header */}
-      <header className="md:hidden bg-white border-b border-black/10 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
-        <div className="flex items-center gap-2">
-          <FreshLinkLogo className="w-8 h-8" />
-          <span className="font-sans font-black text-xl tracking-tighter text-black uppercase">
-            FRESHLINK CONNECT
+      <header className="md:hidden bg-white/95 backdrop-blur-md border-b border-stone-200/50 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
+        <div className="flex items-center gap-2.5">
+          <FreshLinkLogo className="w-8 h-8 text-orange-500 transform hover:scale-105 transition-smooth" />
+          <span className="font-display font-black text-lg tracking-tight text-zinc-950 uppercase">
+            FRESHLINK <span className="text-orange-500">CONNECT</span>
           </span>
         </div>
 
@@ -333,6 +350,53 @@ function AppContent() {
 
       {/* Interactive Ad Popping Bubble Portal System */}
       <AdBubblePortal />
+
+      {/* AUTOMATIC BIRTHDAY CELEBRATION SENTINEL */}
+      {isBirthdayToday && showBirthdayCard && (
+        <div className="fixed inset-0 bg-[#0c0a09]/70 backdrop-blur-md flex items-center justify-center p-6 z-[200] animate-in fade-in duration-300">
+          <div className="bg-gradient-to-br from-[#1c1917] via-[#292524] to-[#1c1917] text-white border border-amber-500/30 p-8 rounded-[2rem] max-w-md w-full shadow-2xl relative overflow-hidden text-center font-sans">
+            
+            {/* Animated Celebration Background Spheres */}
+            <div className="absolute -top-12 -left-12 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-rose-500/10 rounded-full blur-2xl pointer-events-none" />
+            
+            <div className="relative space-y-6">
+              {/* Animated Floating Present Icon */}
+              <div className="w-20 h-20 mx-auto bg-gradient-to-tr from-amber-500 to-orange-500 text-zinc-950 rounded-3xl flex items-center justify-center shadow-lg shadow-orange-500/20 transform hover:scale-110 transition duration-300">
+                <Gift className="w-10 h-10 animate-bounce" />
+              </div>
+              
+              <div className="space-y-2">
+                <span className="text-[10px] font-black uppercase tracking-widest text-amber-500 bg-amber-500/10 px-3.5 py-1 rounded-full border border-amber-500/20">
+                  HAPPY BIRTHDAY TO YOU! 🎉
+                </span>
+                <h2 className="font-sans font-black text-2xl md:text-3xl tracking-tighter uppercase leading-none mt-2">
+                  Have a great day, <br/>
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-orange-400 to-rose-400">
+                    {currentUser.name}!
+                  </span>
+                </h2>
+              </div>
+              
+              <p className="text-zinc-300 text-xs leading-relaxed max-w-sm mx-auto font-medium">
+                FreshLink Connect wishes you a marvelous day filled with peace, spectacular creations, and premium residual payouts. Your continuous stories inspire readers worldwide! 🎂✨
+              </p>
+              
+              <div className="pt-2">
+                <button
+                  onClick={() => {
+                    sessionStorage.setItem(`birthday_dismissed_${new Date().toDateString()}`, 'true');
+                    setShowBirthdayCard(false);
+                  }}
+                  className="w-full py-3.5 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:opacity-95 text-zinc-950 font-sans font-black uppercase tracking-widest text-[11px] rounded-2xl transition duration-200 cursor-pointer shadow-lg shadow-orange-500/10"
+                >
+                  🍰 Thank you so much!
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

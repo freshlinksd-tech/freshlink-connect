@@ -182,13 +182,13 @@ export const Auth: React.FC<AuthProps> = ({ onClose }) => {
         {/* Header decoration banner */}
         <div className="bg-gradient-to-br from-zinc-950 to-zinc-900 p-8 text-white text-center select-none relative">
           <div className="absolute top-6 left-6">
-            <span className="text-[10px] font-mono tracking-widest text-[#F1F5F9]/40 uppercase font-black">FRESHLINK CONNECT</span>
+            <span className="text-[10px] font-mono tracking-widest text-[#F1F5F9]/40 uppercase font-black">FRESHLINK <span className="text-orange-500">CONNECT</span></span>
           </div>
           <div className="flex items-center justify-center mx-auto mb-3">
             <FreshLinkLogo className="w-12 h-12 shadow-md shadow-orange-600/20" />
           </div>
           <h2 className="font-sans font-black text-2xl uppercase tracking-tighter">
-            Access FRESHLINK CONNECT
+            Access FRESHLINK <span className="text-orange-500">CONNECT</span>
           </h2>
           <p className="text-zinc-400 text-xs mt-1 font-medium max-w-xs mx-auto leading-relaxed">
             Connect and discover articles across shared interest horizons.

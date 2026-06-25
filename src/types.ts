@@ -157,5 +157,11 @@ export interface AdBanner {
   welcomeBadge?: string;             // Custom welcome badge text, e.g. "Sponsored Welcome"
   welcomeTitle?: string;             // Custom welcome title, e.g. "Active Sponsor Bubbles live!"
   welcomeText?: string;              // Custom welcome body text
+  userId?: string;                   // The user who submitted this ad request
+  paymentScreenshotUrl?: string;     // URL of the uploaded eSewa transaction receipt screenshot
+  status?: 'pending' | 'approved' | 'rejected' | 'published'; // Ad processing workflow status
+  amountPaid?: number;               // Cost of the advertisement in NPR
+  paymentStatus?: 'pending' | 'verified' | 'failed'; // Verification of eSewa receipt
+  scheduledDate?: string;            // The date planned for the ad to go live (YYYY-MM-DD)
 }
 

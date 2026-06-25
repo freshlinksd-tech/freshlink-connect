@@ -5,6 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useSocialPlatform } from '../context/SocialPlatformContext';
+import { AdPortal } from './AdPortal';
 import { 
   Sparkles, 
   DollarSign, 
@@ -22,19 +23,43 @@ import {
   AlertCircle, 
   FileText,
   Check,
-  XCircle
+  XCircle,
+  Megaphone,
+  QrCode,
+  Calendar,
+  Upload,
+  ArrowRight,
+  ArrowLeft,
+  ExternalLink,
+  Tv,
+  Image as ImageIcon
 } from 'lucide-react';
 
 export const MonetizationPanel: React.FC = () => {
-  const { currentUser, posts, comments, likes, withdrawals, requestWithdrawal } = useSocialPlatform();
+  const { currentUser, posts, comments, likes, withdrawals, requestWithdrawal, ads, createOrUpdateAd } = useSocialPlatform();
   
-  // Local state
+  // Local state for payouts
+  const [activeSubTab, setActiveSubTab] = useState<'payout' | 'advertise'>('payout');
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [payoutGateway, setPayoutGateway] = useState<'eSewa' | 'Khalti' | 'Bank Transfer'>('eSewa');
   const [destinationDetails, setDestinationDetails] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Local state for eSewa advertising portal
+  const [adStep, setAdStep] = useState<1 | 2>(1);
+  const [adTitle, setAdTitle] = useState('');
+  const [adDescription, setAdDescription] = useState('');
+  const [adTargetUrl, setAdTargetUrl] = useState('');
+  const [adPlacement, setAdPlacement] = useState<'workspace' | 'bubble'>('workspace');
+  const [adImageUrl, setAdImageUrl] = useState('');
+  const [adDurationTier, setAdDurationTier] = useState<'7' | '15' | '30'>('7');
+  const [scheduledDate, setScheduledDate] = useState('');
+  const [paymentScreenshotUrl, setPaymentScreenshotUrl] = useState('');
+  const [adSuccess, setAdSuccess] = useState('');
+  const [adError, setAdError] = useState('');
+  const [isAdSubmitting, setIsAdSubmitting] = useState(false);
 
   if (!currentUser) {
     return (
@@ -189,9 +214,38 @@ export const MonetizationPanel: React.FC = () => {
         </div>
       </div>
 
+      {/* Sub-Tab Navigation Toggle */}
+      <div className="bg-white border-b border-zinc-200 sticky top-0 z-10 shadow-xs">
+        <div className="max-w-5xl mx-auto px-6 flex gap-6">
+          <button
+            onClick={() => setActiveSubTab('payout')}
+            className={`py-4 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+              activeSubTab === 'payout'
+                ? 'border-orange-650 text-orange-650'
+                : 'border-transparent text-zinc-500 hover:text-zinc-800'
+            }`}
+            id="subtab-payout-btn"
+          >
+            💰 Creator Revenue Payout
+          </button>
+          <button
+            onClick={() => setActiveSubTab('advertise')}
+            className={`py-4 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+              activeSubTab === 'advertise'
+                ? 'border-orange-650 text-orange-650'
+                : 'border-transparent text-zinc-500 hover:text-zinc-800'
+            }`}
+            id="subtab-advertise-btn"
+          >
+            📢 eSewa Ad Promotion Portal
+          </button>
+        </div>
+      </div>
+
       <div className="max-w-5xl mx-auto p-6 md:p-8 space-y-8">
-        
-        {/* Partner Program Conditions Information Widget */}
+        {activeSubTab === 'payout' ? (
+          <>
+            {/* Partner Program Conditions Information Widget */}
         <div className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-3xl p-5 md:p-6 border border-amber-250/60 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-left">
           <div className="space-y-1">
             <h3 className="text-sm font-black text-amber-900 flex items-center gap-2 uppercase tracking-wider">
@@ -549,7 +603,14 @@ export const MonetizationPanel: React.FC = () => {
           </div>
 
         </div>
-
+          </>
+        ) : (
+          <AdPortal 
+            currentUser={currentUser} 
+            ads={ads} 
+            createOrUpdateAd={createOrUpdateAd} 
+          />
+        )}
       </div>
     </div>
   );

@@ -150,6 +150,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
   const [adError, setAdError] = useState<string | null>(null);
   const [adSuccess, setAdSuccess] = useState<string | null>(null);
 
+  // User eSewa Ad request states
+  const [adSubTab, setAdSubTab] = useState<'builder' | 'requests'>('builder');
+  const [adFilterState, setAdFilterState] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'published'>('pending');
+  const [rejectAdId, setRejectAdId] = useState<string | null>(null);
+  const [adRejectReason, setAdRejectReason] = useState('');
+
   const filteredWithdrawals = useMemo(() => {
     return [...withdrawals]
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -1286,496 +1292,745 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
       )}
 
       {activeTab === 'ads' && (
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left animate-in fade-in duration-200" id="admin-section-ads">
-          {/* Ad Campaign Editor Desk (Left Column) */}
-          <div className="lg:col-span-5 bg-white p-6 md:p-8 rounded-3xl shadow-sm space-y-6">
-            <CampaignMonitor ads={ads} />
-            <div>
-              <div className="inline-flex items-center gap-1.5 bg-orange-50 border-r border-[#1A1A1A]/5 px-3.5 py-1 text-[10px] font-sans font-bold uppercase tracking-widest text-orange-600 rounded-full mb-2">
-                <Megaphone className="w-3.5 h-3.5 shrink-0" />
-                <span>SPONSORED CAMPAIGN BUILDER</span>
-              </div>
-              <h2 className="font-sans font-black text-lg uppercase tracking-tight text-zinc-900 font-bold">
-                {adEditingId ? 'Edit Campaign' : 'Create Campaign'}
-              </h2>
-              <p className="text-zinc-650 text-xs mt-1 leading-relaxed">
-                Configure tailored promotional campaigns. Select **Workspace Banners** to insert static ads inside the top Feed white space, or select **Interactive Bubbles** to spawn sleek floating spheres with customized welcome overlays.
-              </p>
-            </div>
-
-            {adSuccess && (
-              <div className="p-3 bg-emerald-50 text-emerald-800 text-xs font-bold rounded-2xl text-center border border-emerald-100">
-                {adSuccess}
-              </div>
-            )}
-
-            {adError && (
-              <div className="p-3 bg-red-50 text-red-800 text-xs font-bold rounded-2xl text-center border border-red-150">
-                {adError}
-              </div>
-            )}
-
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              if (!adTitle.trim() || !adDescription.trim() || !adTargetUrl.trim() || !adImageUrl.trim()) {
-                setAdError("Please fill out all ad campaign fields including image, title, description and target URL!");
-                return;
-              }
-              try {
-                setAdError(null);
-                await createOrUpdateAd({
-                  id: adEditingId || undefined,
-                  title: adTitle.trim(),
-                  description: adDescription.trim(),
-                  imageUrl: adImageUrl.trim(),
-                  targetUrl: adTargetUrl.trim(),
-                  active: adActive,
-                  placement: adPlacement,
-                  welcomeBadge: adPlacement === 'bubble' ? adWelcomeBadge.trim() : undefined,
-                  welcomeTitle: adPlacement === 'bubble' ? adWelcomeTitle.trim() : undefined,
-                  welcomeText: adPlacement === 'bubble' ? adWelcomeText.trim() : undefined
-                });
-                setAdSuccess(adEditingId ? "Campaign successfully updated!" : "Ad campaign successfully queued and published!");
-                // Clear the states
-                setAdTitle('');
-                setAdDescription('');
-                setAdImageUrl('');
-                setAdTargetUrl('');
-                setAdActive(true);
-                setAdPlacement('workspace');
-                setAdWelcomeBadge('Sponsored Welcome');
-                setAdWelcomeTitle('Active Sponsor Bubbles live!');
-                setAdWelcomeText('Pop the glossy floating spheres orbiting the workspace to test campaign previews and grab exclusive content offers.');
-                setAdEditingId(null);
-                setTimeout(() => setAdSuccess(null), 3000);
-              } catch (err: any) {
-                setAdError(err?.message || "Failed to save ad campaign.");
-              }
-            }} className="space-y-4">
-              
-              {/* Segmented Placement Toggle between Workspace & Bubble Ads */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Ad Campaign Placement type</label>
-                <div className="grid grid-cols-2 gap-2 bg-zinc-50 p-1 rounded-2xl border border-zinc-150">
-                  <button
-                    type="button"
-                    onClick={() => setAdPlacement('workspace')}
-                    className={`py-2 px-3 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
-                      adPlacement === 'workspace'
-                        ? 'bg-black text-white shadow'
-                        : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 cursor-pointer'
-                    }`}
-                  >
-                    <span>📰 Workspace Banner</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAdPlacement('bubble')}
-                    className={`py-2 px-3 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
-                      adPlacement === 'bubble'
-                        ? 'bg-black text-white shadow'
-                        : 'text-zinc-650 hover:bg-zinc-100 hover:text-zinc-900 cursor-pointer'
-                    }`}
-                  >
-                    <span>🫧 Interactive Bubble</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Conditional customizations for Bubble Welcome overlay elements */}
-              {adPlacement === 'bubble' && (
-                <div className="space-y-4 p-4 bg-orange-50/40 rounded-2xl border border-orange-200/50 animate-fadeIn">
-                  <div className="flex items-center gap-1.5 pb-2 border-b border-orange-200/35">
-                    <Sparkles className="w-3.5 h-3.5 text-orange-600 animate-pulse" />
-                    <span className="text-[10px] uppercase font-mono tracking-widest text-orange-700 font-extrabold">Bubble Welcome Notifications Customizer</span>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Welcome Notification Badge Tag</label>
-                    <input
-                      type="text"
-                      required
-                      value={adWelcomeBadge}
-                      onChange={(e) => setAdWelcomeBadge(e.target.value)}
-                      placeholder="e.g., Sponsored Welcome"
-                      className="w-full px-3.5 py-2 rounded-xl bg-white border border-zinc-200 focus:border-orange-500 text-xs text-zinc-800 outline-none font-sans font-bold"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Welcome Heading Title</label>
-                    <input
-                      type="text"
-                      required
-                      value={adWelcomeTitle}
-                      onChange={(e) => setAdWelcomeTitle(e.target.value)}
-                      placeholder="e.g., Active Sponsor Bubbles live!"
-                      className="w-full px-3.5 py-2 rounded-xl bg-white border border-zinc-200 focus:border-orange-500 text-xs text-zinc-800 outline-none font-sans font-black"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Welcome description copy</label>
-                    <textarea
-                      required
-                      rows={3}
-                      value={adWelcomeText}
-                      onChange={(e) => setAdWelcomeText(e.target.value)}
-                      placeholder="e.g., Pop the glossy floating spheres orbiting the workspace to test campaign previews and grab exclusive content offers."
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-zinc-200 focus:border-orange-500 text-[10px] text-zinc-800 outline-none font-sans leading-relaxed"
-                    />
-                  </div>
-                </div>
+        <section className="space-y-6 text-left animate-in fade-in duration-200" id="admin-section-ads">
+          
+          {/* Sub-Tabs for Ads Panel: Builder vs User Requests */}
+          <div className="flex gap-4 border-b border-zinc-200 pb-1">
+            <button
+              onClick={() => setAdSubTab('builder')}
+              className={`pb-3 text-xs font-mono font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+                adSubTab === 'builder'
+                  ? 'border-indigo-650 text-indigo-650'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-650'
+              }`}
+            >
+              🛠️ Platform Campaign Builder
+            </button>
+            <button
+              onClick={() => setAdSubTab('requests')}
+              className={`pb-3 text-xs font-mono font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer relative ${
+                adSubTab === 'requests'
+                  ? 'border-indigo-650 text-indigo-650'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-650'
+              }`}
+            >
+              📢 User eSewa Ad Requests
+              {ads.filter(a => a.userId && (a.status || 'pending') === 'pending').length > 0 && (
+                <span className="absolute -top-1.5 -right-2 bg-rose-600 text-white font-mono text-[8px] font-bold h-4 min-w-4 px-1 rounded-full flex items-center justify-center animate-bounce">
+                  {ads.filter(a => a.userId && (a.status || 'pending') === 'pending').length}
+                </span>
               )}
+            </button>
+          </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Ad title / headline</label>
-                <input
-                  type="text"
-                  required
-                  value={adTitle}
-                  onChange={(e) => setAdTitle(e.target.value)}
-                  placeholder="e.g. FreshLink Premium Creators Club"
-                  className="w-full px-4 py-2.5 rounded-xl bg-zinc-50 border border-zinc-150 focus:bg-white text-xs font-bold text-zinc-800 outline-none"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Target Redirection Link</label>
-                <input
-                  type="url"
-                  required
-                  value={adTargetUrl}
-                  onChange={(e) => setAdTargetUrl(e.target.value)}
-                  placeholder="e.g. https://freshlinks.co/join-monetization"
-                  className="w-full px-4 py-2.5 rounded-xl bg-zinc-50 border border-zinc-150 focus:bg-white text-xs font-mono text-zinc-800 outline-none"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Description / Action Headline</label>
-                <textarea
-                  required
-                  rows={3}
-                  value={adDescription}
-                  onChange={(e) => setAdDescription(e.target.value)}
-                  placeholder="e.g. Register your business clearance, get monetized at Rs 0.25 per read, and share premium stories!"
-                  className="w-full px-4 py-3 rounded-xl bg-zinc-50 border border-zinc-150 focus:bg-white text-xs font-sans text-zinc-800 outline-none"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block flex-1">Banner Image URL</label>
-                  <span className="text-[9px] font-mono text-zinc-400 uppercase">Input or click a stock preset below</span>
+          {adSubTab === 'builder' ? (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left animate-in fade-in duration-200" id="admin-section-ads-builder">
+              {/* Ad Campaign Editor Desk (Left Column) */}
+              <div className="lg:col-span-5 bg-white p-6 md:p-8 rounded-3xl shadow-sm space-y-6">
+                <CampaignMonitor ads={ads} />
+                <div>
+                  <div className="inline-flex items-center gap-1.5 bg-orange-50 border-r border-[#1A1A1A]/5 px-3.5 py-1 text-[10px] font-sans font-bold uppercase tracking-widest text-orange-600 rounded-full mb-2">
+                    <Megaphone className="w-3.5 h-3.5 shrink-0" />
+                    <span>SPONSORED CAMPAIGN BUILDER</span>
+                  </div>
+                  <h2 className="font-sans font-black text-lg uppercase tracking-tight text-zinc-900 font-bold">
+                    {adEditingId ? 'Edit Campaign' : 'Create Campaign'}
+                  </h2>
+                  <p className="text-zinc-650 text-xs mt-1 leading-relaxed">
+                    Configure tailored promotional campaigns. Select **Workspace Banners** to insert static ads inside the top Feed white space, or select **Interactive Bubbles** to spawn sleek floating spheres with customized welcome overlays.
+                  </p>
                 </div>
-                <input
-                  type="text"
-                  required
-                  value={adImageUrl}
-                  onChange={(e) => setAdImageUrl(e.target.value)}
-                  placeholder="e.g. https://images.unsplash.com/..."
-                  className="w-full px-4 py-2.5 rounded-xl bg-zinc-50 border border-zinc-150 focus:bg-white text-xs font-mono text-zinc-800 outline-none"
-                />
 
-                {/* Convenient Unsplash High Quality Stock Presets */}
-                <div className="grid grid-cols-4 gap-2 pt-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setAdImageUrl('https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=600&q=80')}
-                    className="h-10 rounded-lg overflow-hidden border border-zinc-200 cursor-pointer hover:ring-2 hover:ring-orange-600 transition"
-                    title="Workspace Tech Setup Ad Banner"
-                  >
-                    <img src="https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=150&q=80" alt="Preset 1" className="w-full h-full object-cover" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAdImageUrl('https://images.unsplash.com/photo-1498049794561-7780e7231661?auto=format&fit=crop&w=600&q=80')}
-                    className="h-10 rounded-lg overflow-hidden border border-zinc-200 cursor-pointer hover:ring-2 hover:ring-orange-600 transition"
-                    title="Modern Gadgets Concept Ad Banner"
-                  >
-                    <img src="https://images.unsplash.com/photo-1498049794561-7780e7231661?auto=format&fit=crop&w=150&q=80" alt="Preset 2" className="w-full h-full object-cover" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAdImageUrl('https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=600&q=80')}
-                    className="h-10 rounded-lg overflow-hidden border border-zinc-200 cursor-pointer hover:ring-2 hover:ring-orange-600 transition"
-                    title="Creators Workshop Ad Banner"
-                  >
-                    <img src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=150&q=80" alt="Preset 3" className="w-full h-full object-cover" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAdImageUrl('https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=600&q=80')}
-                    className="h-10 rounded-lg overflow-hidden border border-zinc-200 cursor-pointer hover:ring-2 hover:ring-orange-600 transition"
-                    title="Global Adventure Ad Banner"
-                  >
-                    <img src="https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=150&q=80" alt="Preset 4" className="w-full h-full object-cover" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Set Active Instantly checkbox */}
-              <div className="flex items-center gap-2 p-3 bg-zinc-50 rounded-2xl border border-zinc-100">
-                <input
-                  type="checkbox"
-                  id="adActiveToggle"
-                  checked={adActive}
-                  onChange={(e) => setAdActive(e.target.checked)}
-                  className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500 border-zinc-300 pointer"
-                />
-                <label htmlFor="adActiveToggle" className="text-xs font-bold text-zinc-700 cursor-pointer">
-                  Activate Ad Campaign immediately inside the Feed whitespace
-                </label>
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  className="flex-1 py-3 bg-black hover:bg-orange-600 text-white font-sans font-bold uppercase tracking-widest text-[10px] rounded-2xl transition duration-200 flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Plus className="w-4 h-4 shrink-0" />
-                  {adEditingId ? 'Save Campaign Changes' : 'Publish Ad Campaign'}
-                </button>
-                {adEditingId && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAdEditingId(null);
-                      setAdTitle('');
-                      setAdDescription('');
-                      setAdImageUrl('');
-                      setAdTargetUrl('');
-                      setAdActive(true);
-                      setAdPlacement('workspace');
-                      setAdWelcomeBadge('Sponsored Welcome');
-                      setAdWelcomeTitle('Active Sponsor Bubbles live!');
-                      setAdWelcomeText('Pop the glossy floating spheres orbiting the workspace to test campaign previews and grab exclusive content offers.');
-                      setAdError(null);
-                    }}
-                    className="px-4 py-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-sans font-bold uppercase tracking-widest text-[10px] rounded-2xl transition"
-                  >
-                    Cancel
-                  </button>
+                {adSuccess && (
+                  <div className="p-3 bg-emerald-50 text-emerald-800 text-xs font-bold rounded-2xl text-center border border-emerald-100">
+                    {adSuccess}
+                  </div>
                 )}
-              </div>
-            </form>
 
-            {/* LIVE SIMULATED PREVIEW PANEL */}
-            <div className="border border-zinc-150 rounded-3xl p-4 bg-zinc-50/50 mt-4">
-              <h4 className="text-[10px] font-mono font-bold uppercase text-zinc-400 tracking-wider mb-3">
-                Live Feed Simulator Preview
-              </h4>
-              {adTitle || adDescription || adImageUrl ? (
-                <div 
-                  className="bg-white border border-amber-200/60 rounded-3xl p-4 flex flex-col md:flex-row items-center gap-4 shadow-xs overflow-hidden relative text-left"
-                >
-                  <div className="absolute top-2 right-3 bg-zinc-900 text-white font-mono uppercase text-[8px] font-semibold px-2 py-0.5 rounded-full tracking-widest flex items-center gap-1">
-                    <Megaphone className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
-                    <span>SPONSORED AD</span>
+                {adError && (
+                  <div className="p-3 bg-red-50 text-red-800 text-xs font-bold rounded-2xl text-center border border-red-150">
+                    {adError}
+                  </div>
+                )}
+
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!adTitle.trim() || !adDescription.trim() || !adTargetUrl.trim() || !adImageUrl.trim()) {
+                    setAdError("Please fill out all ad campaign fields including image, title, description and target URL!");
+                    return;
+                  }
+                  try {
+                    setAdError(null);
+                    await createOrUpdateAd({
+                      id: adEditingId || undefined,
+                      title: adTitle.trim(),
+                      description: adDescription.trim(),
+                      imageUrl: adImageUrl.trim(),
+                      targetUrl: adTargetUrl.trim(),
+                      active: adActive,
+                      placement: adPlacement,
+                      welcomeBadge: adPlacement === 'bubble' ? adWelcomeBadge.trim() : undefined,
+                      welcomeTitle: adPlacement === 'bubble' ? adWelcomeTitle.trim() : undefined,
+                      welcomeText: adPlacement === 'bubble' ? adWelcomeText.trim() : undefined
+                    });
+                    setAdSuccess(adEditingId ? "Campaign successfully updated!" : "Ad campaign successfully queued and published!");
+                    // Clear the states
+                    setAdTitle('');
+                    setAdDescription('');
+                    setAdImageUrl('');
+                    setAdTargetUrl('');
+                    setAdActive(true);
+                    setAdPlacement('workspace');
+                    setAdWelcomeBadge('Sponsored Welcome');
+                    setAdWelcomeTitle('Active Sponsor Bubbles live!');
+                    setAdWelcomeText('Pop the glossy floating spheres orbiting the workspace to test campaign previews and grab exclusive content offers.');
+                    setAdEditingId(null);
+                    setTimeout(() => setAdSuccess(null), 3000);
+                  } catch (err: any) {
+                    setAdError(err?.message || "Failed to save ad campaign.");
+                  }
+                }} className="space-y-4">
+                  
+                  {/* Segmented Placement Toggle between Workspace & Bubble Ads */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Ad Campaign Placement type</label>
+                    <div className="grid grid-cols-2 gap-2 bg-zinc-50 p-1 rounded-2xl border border-zinc-150">
+                      <button
+                        type="button"
+                        onClick={() => setAdPlacement('workspace')}
+                        className={`py-2 px-3 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
+                          adPlacement === 'workspace'
+                            ? 'bg-black text-white shadow'
+                            : 'text-zinc-650 hover:bg-zinc-100 hover:text-zinc-900 cursor-pointer'
+                        }`}
+                      >
+                        <span>📰 Workspace Banner</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAdPlacement('bubble')}
+                        className={`py-2 px-3 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
+                          adPlacement === 'bubble'
+                            ? 'bg-black text-white shadow'
+                            : 'text-zinc-650 hover:bg-zinc-100 hover:text-zinc-900 cursor-pointer'
+                        }`}
+                      >
+                        <span>🫧 Interactive Bubble</span>
+                      </button>
+                    </div>
                   </div>
 
-                  {adImageUrl && (
-                    <div className="w-20 h-20 rounded-xl overflow-hidden shrink-0 border border-zinc-200 bg-zinc-100">
-                      <img src={adImageUrl} alt="Preview" className="w-full h-full object-cover" />
+                  {/* Conditional customizations for Bubble Welcome overlay elements */}
+                  {adPlacement === 'bubble' && (
+                    <div className="space-y-4 p-4 bg-orange-50/40 rounded-2xl border border-orange-200/50 animate-fadeIn">
+                      <div className="flex items-center gap-1.5 pb-2 border-b border-orange-200/35">
+                        <Sparkles className="w-3.5 h-3.5 text-orange-600 animate-pulse" />
+                        <span className="text-[10px] uppercase font-mono tracking-widest text-orange-700 font-extrabold">Bubble Welcome Notifications Customizer</span>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Welcome Notification Badge Tag</label>
+                        <input
+                          type="text"
+                          required
+                          value={adWelcomeBadge}
+                          onChange={(e) => setAdWelcomeBadge(e.target.value)}
+                          placeholder="e.g., Sponsored Welcome"
+                          className="w-full px-3.5 py-2 rounded-xl bg-white border border-zinc-200 focus:border-orange-500 text-xs text-zinc-800 outline-none font-sans font-bold"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Welcome Heading Title</label>
+                        <input
+                          type="text"
+                          required
+                          value={adWelcomeTitle}
+                          onChange={(e) => setAdWelcomeTitle(e.target.value)}
+                          placeholder="e.g., Active Sponsor Bubbles live!"
+                          className="w-full px-3.5 py-2 rounded-xl bg-white border border-zinc-200 focus:border-orange-500 text-xs text-zinc-800 outline-none font-sans font-black"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Welcome description copy</label>
+                        <textarea
+                          required
+                          rows={3}
+                          value={adWelcomeText}
+                          onChange={(e) => setAdWelcomeText(e.target.value)}
+                          placeholder="e.g., Pop the glossy floating spheres orbiting the workspace to test campaign previews and grab exclusive content offers."
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-zinc-200 focus:border-orange-500 text-[10px] text-zinc-800 outline-none font-sans leading-relaxed"
+                        />
+                      </div>
                     </div>
                   )}
 
-                  <div className="flex-1 min-w-0 text-left">
-                    <h3 className="font-sans font-bold text-sm text-zinc-900 truncate">
-                      {adTitle || 'Your Campaign Headline Title'}
-                    </h3>
-                    <p className="font-sans text-[11px] text-zinc-500 mt-0.5 line-clamp-2 leading-snug">
-                      {adDescription || 'Your promotional text, action offer, benefits, or custom product marketing tags...'}
-                    </p>
-                    <div className="flex items-center gap-1 text-orange-600 font-mono text-[9px] font-bold mt-1">
-                      <span>{adTargetUrl ? `Redirecting to Ad Target` : 'Target link redirect URL'}</span>
-                      <ExternalLink className="w-3 h-3" />
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Ad title / headline</label>
+                    <input
+                      type="text"
+                      required
+                      value={adTitle}
+                      onChange={(e) => setAdTitle(e.target.value)}
+                      placeholder="e.g. FreshLink Premium Creators Club"
+                      className="w-full px-4 py-2.5 rounded-xl bg-zinc-50 border border-zinc-150 focus:bg-white text-xs font-bold text-zinc-800 outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Target Redirection Link</label>
+                    <input
+                      type="url"
+                      required
+                      value={adTargetUrl}
+                      onChange={(e) => setAdTargetUrl(e.target.value)}
+                      placeholder="e.g. https://freshlinks.co/join-monetization"
+                      className="w-full px-4 py-2.5 rounded-xl bg-zinc-50 border border-zinc-150 focus:bg-white text-xs font-mono text-zinc-800 outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Description / Action Headline</label>
+                    <textarea
+                      required
+                      rows={3}
+                      value={adDescription}
+                      onChange={(e) => setAdDescription(e.target.value)}
+                      placeholder="e.g. Register your business clearance, get monetized at Rs 0.25 per read, and share premium stories!"
+                      className="w-full px-4 py-3 rounded-xl bg-zinc-50 border border-zinc-150 focus:bg-white text-xs font-sans text-zinc-800 outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block flex-1">Banner Image URL</label>
+                      <span className="text-[9px] font-mono text-zinc-400 uppercase">Input or click a stock preset below</span>
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      value={adImageUrl}
+                      onChange={(e) => setAdImageUrl(e.target.value)}
+                      placeholder="e.g. https://images.unsplash.com/..."
+                      className="w-full px-4 py-2.5 rounded-xl bg-zinc-50 border border-zinc-150 focus:bg-white text-xs font-mono text-zinc-800 outline-none"
+                    />
+
+                    {/* Convenient Unsplash High Quality Stock Presets */}
+                    <div className="grid grid-cols-4 gap-2 pt-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setAdImageUrl('https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=600&q=80')}
+                        className="h-10 rounded-lg overflow-hidden border border-zinc-200 cursor-pointer hover:ring-2 hover:ring-orange-600 transition"
+                        title="Workspace Tech Setup Ad Banner"
+                      >
+                        <img src="https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=150&q=80" alt="Preset 1" className="w-full h-full object-cover" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAdImageUrl('https://images.unsplash.com/photo-1498049794561-7780e7231661?auto=format&fit=crop&w=600&q=80')}
+                        className="h-10 rounded-lg overflow-hidden border border-zinc-200 cursor-pointer hover:ring-2 hover:ring-orange-600 transition"
+                        title="Modern Gadgets Concept Ad Banner"
+                      >
+                        <img src="https://images.unsplash.com/photo-1498049794561-7780e7231661?auto=format&fit=crop&w=150&q=80" alt="Preset 2" className="w-full h-full object-cover" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAdImageUrl('https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=600&q=80')}
+                        className="h-10 rounded-lg overflow-hidden border border-zinc-200 cursor-pointer hover:ring-2 hover:ring-orange-600 transition"
+                        title="Creators Workshop Ad Banner"
+                      >
+                        <img src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=150&q=80" alt="Preset 3" className="w-full h-full object-cover" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAdImageUrl('https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=600&q=80')}
+                        className="h-10 rounded-lg overflow-hidden border border-zinc-200 cursor-pointer hover:ring-2 hover:ring-orange-600 transition"
+                        title="Global Adventure Ad Banner"
+                      >
+                        <img src="https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=150&q=80" alt="Preset 4" className="w-full h-full object-cover" />
+                      </button>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-zinc-400 text-xs">
-                  Fill in details to visualize the placement banner.
-                </div>
-              )}
-            </div>
-          </div>
 
-          {/* Ad campaigns list (Right Column) */}
-          <div className="lg:col-span-7 bg-white p-6 md:p-8 rounded-3xl shadow-sm space-y-6">
-            <div>
-              <h2 className="font-sans font-black text-lg uppercase tracking-tight text-zinc-900 flex items-center gap-2">
-                <Tv className="w-5 h-5 text-indigo-600" />
-                Scheduled Campaigns Archive
-              </h2>
-              <p className="text-zinc-400 text-xs mt-1">
-                View all past, present, active, and inactive sponsored placements. Only one ad banner can be active at a time to keep UI pristine.
-              </p>
-            </div>
+                  {/* Set Active Instantly checkbox */}
+                  <div className="flex items-center gap-2 p-3 bg-zinc-50 rounded-2xl border border-zinc-100">
+                    <input
+                      type="checkbox"
+                      id="adActiveToggle"
+                      checked={adActive}
+                      onChange={(e) => setAdActive(e.target.checked)}
+                      className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500 border-zinc-300 pointer"
+                    />
+                    <label htmlFor="adActiveToggle" className="text-xs font-bold text-zinc-700 cursor-pointer">
+                      Activate Ad Campaign immediately inside the Feed whitespace
+                    </label>
+                  </div>
 
-            {/* Quick Actions Bar to Pause or Activate All campaigns */}
-            {ads && ads.length > 0 && (
-              <div className="grid grid-cols-2 gap-3 bg-zinc-50 p-3 rounded-2xl border border-zinc-150">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (confirm("Are you sure you want to pause all advertisement campaigns?")) {
-                      await toggleAllAds(false);
-                    }
-                  }}
-                  className="py-2.5 text-[9.5px] uppercase font-black tracking-widest bg-white hover:bg-zinc-100 text-zinc-700 border border-zinc-250 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span>⏸️ Pause All Ads</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (confirm("Are you sure you want to activate all advertisement campaigns?")) {
-                      await toggleAllAds(true);
-                    }
-                  }}
-                  className="py-2.5 text-[9.5px] uppercase font-black tracking-widest bg-zinc-900 hover:bg-black text-white rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span>▶️ Activate All Ads</span>
-                </button>
-              </div>
-            )}
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      className="flex-1 py-3 bg-black hover:bg-orange-600 text-white font-sans font-bold uppercase tracking-widest text-[10px] rounded-2xl transition duration-200 flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4 shrink-0" />
+                      {adEditingId ? 'Save Campaign Changes' : 'Publish Ad Campaign'}
+                    </button>
+                    {adEditingId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAdEditingId(null);
+                          setAdTitle('');
+                          setAdDescription('');
+                          setAdImageUrl('');
+                          setAdTargetUrl('');
+                          setAdActive(true);
+                          setAdPlacement('workspace');
+                          setAdWelcomeBadge('Sponsored Welcome');
+                          setAdWelcomeTitle('Active Sponsor Bubbles live!');
+                          setAdWelcomeText('Pop the glossy floating spheres orbiting the workspace to test campaign previews and grab exclusive content offers.');
+                          setAdError(null);
+                        }}
+                        className="px-4 py-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-sans font-bold uppercase tracking-widest text-[10px] rounded-2xl transition"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </form>
 
-            <div className="space-y-4 max-h-[700px] overflow-y-auto pr-2">
-              {ads && ads.length > 0 ? (
-                [...ads]
-                  .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-                  .map(a => (
-                    <div key={a.id} className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row items-start md:items-center gap-4 ${
-                      a.active ? 'bg-gradient-to-r from-orange-50/50 to-amber-50/30 border-amber-200' : 'bg-zinc-50/50 border-zinc-150'
-                    }`}>
-                      {/* Image */}
-                      {a.imageUrl && (
-                        <div className="w-20 h-16 rounded-xl overflow-hidden shrink-0 border border-zinc-200 bg-white shadow-xs">
-                          <img src={a.imageUrl} alt={a.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                {/* LIVE SIMULATED PREVIEW PANEL */}
+                <div className="border border-zinc-150 rounded-3xl p-4 bg-zinc-50/50 mt-4">
+                  <h4 className="text-[10px] font-mono font-bold uppercase text-zinc-400 tracking-wider mb-3">
+                    Live Feed Simulator Preview
+                  </h4>
+                  {adTitle || adDescription || adImageUrl ? (
+                    <div 
+                      className="bg-white border border-amber-200/60 rounded-3xl p-4 flex flex-col md:flex-row items-center gap-4 shadow-xs overflow-hidden relative text-left"
+                    >
+                      <div className="absolute top-2 right-3 bg-zinc-900 text-white font-mono uppercase text-[8px] font-semibold px-2 py-0.5 rounded-full tracking-widest flex items-center gap-1">
+                        <Megaphone className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
+                        <span>SPONSORED AD</span>
+                      </div>
+
+                      {adImageUrl && (
+                        <div className="w-20 h-20 rounded-xl overflow-hidden shrink-0 border border-zinc-200 bg-zinc-100">
+                          <img src={adImageUrl} alt="Preview" className="w-full h-full object-cover" />
                         </div>
                       )}
 
-                      {/* Details */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="text-xs font-black text-zinc-800 truncate max-w-[200px] md:max-w-xs">{a.title}</h4>
-                          {(() => {
-                            const hoursElapsed = (Date.now() - new Date(a.createdAt).getTime()) / (1000 * 60 * 60);
-                            const hoursRemaining = 24 - hoursElapsed;
-                            if (a.active) {
-                              if (hoursRemaining <= 0) {
-                                return (
-                                  <span className="text-[8.5px] font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded-full border text-red-700 bg-red-50 border-red-100">
-                                    EXPIRED (24H Over)
-                                  </span>
-                                );
-                              }
-                              const h = Math.floor(hoursRemaining);
-                              const m = Math.floor((hoursRemaining - h) * 60);
-                              return (
-                                <span className="text-[8.5px] font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded-full border text-emerald-700 bg-emerald-50 border-emerald-100 animate-pulse">
-                                  RUNNING • {h}h {m}m LEFT
-                                </span>
-                              );
-                            }
-                            return (
-                              <span className="text-[8.5px] font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded-full border text-zinc-500 bg-zinc-100 border-zinc-100">
-                                PAUSED / STOPPED
-                              </span>
-                            );
-                          })()}
-
-                          <span className={`text-[8.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                            a.placement === 'bubble'
-                              ? 'text-purple-700 bg-purple-50 border-purple-100'
-                              : 'text-blue-700 bg-blue-50 border-blue-100'
-                          }`}>
-                            {a.placement === 'bubble' ? '🫧 Interactive Bubble' : '📰 Workspace Banner'}
-                          </span>
+                      <div className="flex-1 min-w-0 text-left">
+                        <h3 className="font-sans font-bold text-sm text-zinc-900 truncate">
+                          {adTitle || 'Your Campaign Headline Title'}
+                        </h3>
+                        <p className="font-sans text-[11px] text-zinc-500 mt-0.5 line-clamp-2 leading-snug">
+                          {adDescription || 'Your promotional text, action offer, benefits, or custom product marketing tags...'}
+                        </p>
+                        <div className="flex items-center gap-1 text-orange-600 font-mono text-[9px] font-bold mt-1">
+                          <span>{adTargetUrl ? `Redirecting to Ad Target` : 'Target link redirect URL'}</span>
+                          <ExternalLink className="w-3 h-3" />
                         </div>
-                        <p className="text-[10.5px] text-zinc-500 mt-1 line-clamp-2 leading-normal">{a.description}</p>
-                        
-                        <div className="flex items-center gap-1 text-zinc-400 font-mono text-[9px] mt-1.5 overflow-hidden text-ellipsis whitespace-nowrap">
-                          <span className="font-bold text-zinc-500">Destination:</span>
-                          <a href={a.targetUrl} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline inline-flex items-center gap-0.5">
-                            {a.targetUrl} <ExternalLink className="w-3 h-3 shrink-0" />
-                          </a>
-                        </div>
-
-                        <div className="flex gap-4 items-center mt-2 text-zinc-500 text-[10px] font-mono flex-wrap">
-                          <div className="flex items-center gap-1 bg-zinc-100/70 border border-zinc-150 px-2 py-0.5 rounded-lg text-zinc-700 font-bold">
-                            <span className="text-orange-600">🎯</span> Click Rate: <span className="text-zinc-900 font-black">{a.clickCount || 0}</span> redirections
-                          </div>
-                          <div className="text-[9.5px]">
-                            Created: <span className="font-semibold text-zinc-650">{new Date(a.createdAt).toLocaleString()}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex items-center gap-1.5 shrink-0 ml-auto pt-3 md:pt-0">
-                        <button
-                          onClick={() => {
-                            // Toggle active state
-                            createOrUpdateAd({
-                              ...a,
-                              active: !a.active
-                            });
-                          }}
-                          className={`px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer ${
-                            a.active
-                              ? 'bg-zinc-100 text-zinc-650 hover:bg-zinc-200'
-                              : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                          }`}
-                          title={a.active ? "Pause Campaign" : "Set Active immediately"}
-                        >
-                          {a.active ? 'Pause' : 'Activate'}
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            // Load edit
-                            setAdEditingId(a.id);
-                            setAdTitle(a.title);
-                            setAdDescription(a.description);
-                            setAdImageUrl(a.imageUrl);
-                            setAdTargetUrl(a.targetUrl);
-                            setAdActive(a.active);
-                            setAdPlacement(a.placement || 'workspace');
-                            setAdWelcomeBadge(a.welcomeBadge || 'Sponsored Welcome');
-                            setAdWelcomeTitle(a.welcomeTitle || 'Active Sponsor Bubbles live!');
-                            setAdWelcomeText(a.welcomeText || 'Pop the glossy floating spheres orbiting the workspace to test campaign previews and grab exclusive content offers.');
-                          }}
-                          className="px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider text-zinc-600 hover:bg-zinc-100 bg-zinc-50 rounded-xl transition cursor-pointer"
-                        >
-                          Edit
-                        </button>
-
-                        <button
-                          onClick={async () => {
-                            if (confirm(`Do you want to permanently delete ad campaign "${a.title}"?`)) {
-                              await deleteAd(a.id);
-                            }
-                          }}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-xl transition cursor-pointer"
-                          title="Delete Placement permanently"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
                       </div>
                     </div>
-                  ))
-              ) : (
-                <div className="text-center p-12 bg-zinc-50 rounded-2xl border border-dashed border-zinc-200">
-                  <Megaphone className="w-8 h-8 text-zinc-300 mx-auto mb-2" />
-                  <p className="text-xs text-zinc-400 font-bold">No registered advertisement banners found.</p>
-                  <p className="text-[10px] text-zinc-400/80 mt-1">Create one using the Sponsor ad form on the left!</p>
+                  ) : (
+                    <div className="text-center py-8 text-zinc-400 text-xs">
+                      Fill in details to visualize the placement banner.
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+
+              {/* Ad campaigns list (Right Column) */}
+              <div className="lg:col-span-7 bg-white p-6 md:p-8 rounded-3xl shadow-sm space-y-6">
+                <div>
+                  <h2 className="font-sans font-black text-lg uppercase tracking-tight text-zinc-900 flex items-center gap-2">
+                    <Tv className="w-5 h-5 text-indigo-600" />
+                    Scheduled Campaigns Archive
+                  </h2>
+                  <p className="text-zinc-400 text-xs mt-1">
+                    View all past, present, active, and inactive sponsored placements. Only one ad banner can be active at a time to keep UI pristine.
+                  </p>
+                </div>
+
+                {/* Quick Actions Bar to Pause or Activate All campaigns */}
+                {ads && ads.length > 0 && (
+                  <div className="grid grid-cols-2 gap-3 bg-zinc-50 p-3 rounded-2xl border border-zinc-150">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (confirm("Are you sure you want to pause all advertisement campaigns?")) {
+                          await toggleAllAds(false);
+                        }
+                      }}
+                      className="py-2.5 text-[9.5px] uppercase font-black tracking-widest bg-white hover:bg-zinc-100 text-zinc-700 border border-zinc-250 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <span>⏸️ Pause All Ads</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (confirm("Are you sure you want to activate all advertisement campaigns?")) {
+                          await toggleAllAds(true);
+                        }
+                      }}
+                      className="py-2.5 text-[9.5px] uppercase font-black tracking-widest bg-zinc-900 hover:bg-black text-white rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <span>▶️ Activate All Ads</span>
+                    </button>
+                  </div>
+                )}
+
+                <div className="space-y-4 max-h-[700px] overflow-y-auto pr-2">
+                  {ads && ads.length > 0 ? (
+                    [...ads]
+                      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+                      .map(a => (
+                        <div key={a.id} className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row items-start md:items-center gap-4 ${
+                          a.active ? 'bg-gradient-to-r from-orange-50/50 to-amber-50/30 border-amber-200' : 'bg-zinc-50/50 border-zinc-150'
+                        }`}>
+                          {/* Image */}
+                          {a.imageUrl && (
+                            <div className="w-20 h-16 rounded-xl overflow-hidden shrink-0 border border-zinc-200 bg-white shadow-xs">
+                              <img src={a.imageUrl} alt={a.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            </div>
+                          )}
+
+                          {/* Details */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="text-xs font-black text-zinc-800 truncate max-w-[200px] md:max-w-xs">{a.title}</h4>
+                              {(() => {
+                                const hoursElapsed = (Date.now() - new Date(a.createdAt).getTime()) / (1000 * 60 * 60);
+                                const hoursRemaining = 24 - hoursElapsed;
+                                if (a.active) {
+                                  if (hoursRemaining <= 0) {
+                                    return (
+                                      <span className="text-[8.5px] font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded-full border text-red-700 bg-red-50 border-red-100">
+                                        EXPIRED (24H Over)
+                                      </span>
+                                    );
+                                  }
+                                  const h = Math.floor(hoursRemaining);
+                                  const m = Math.floor((hoursRemaining - h) * 60);
+                                  return (
+                                    <span className="text-[8.5px] font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded-full border text-emerald-700 bg-emerald-50 border-emerald-100 animate-pulse">
+                                      RUNNING • {h}h {m}m LEFT
+                                    </span>
+                                  );
+                                }
+                                return (
+                                  <span className="text-[8.5px] font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded-full border text-zinc-500 bg-zinc-100 border-zinc-100">
+                                    PAUSED / STOPPED
+                                  </span>
+                                );
+                              })()}
+
+                              <span className={`text-[8.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                                a.placement === 'bubble'
+                                  ? 'text-purple-700 bg-purple-50 border-purple-100'
+                                  : 'text-blue-700 bg-blue-50 border-blue-100'
+                              }`}>
+                                {a.placement === 'bubble' ? '🫧 Interactive Bubble' : '📰 Workspace Banner'}
+                              </span>
+                            </div>
+                            <p className="text-[10.5px] text-zinc-500 mt-1 line-clamp-2 leading-normal">{a.description}</p>
+                            
+                            <div className="flex items-center gap-1 text-zinc-400 font-mono text-[9px] mt-1.5 overflow-hidden text-ellipsis whitespace-nowrap">
+                              <span className="font-bold text-zinc-500">Destination:</span>
+                              <a href={a.targetUrl} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline inline-flex items-center gap-0.5">
+                                {a.targetUrl} <ExternalLink className="w-3 h-3 shrink-0" />
+                              </a>
+                            </div>
+
+                            <div className="flex gap-4 items-center mt-2 text-zinc-500 text-[10px] font-mono flex-wrap">
+                              <div className="flex items-center gap-1 bg-zinc-100/70 border border-zinc-150 px-2 py-0.5 rounded-lg text-zinc-700 font-bold">
+                                <span className="text-orange-600">🎯</span> Click Rate: <span className="text-zinc-900 font-black">{a.clickCount || 0}</span> redirections
+                              </div>
+                              <div className="text-[9.5px]">
+                                Created: <span className="font-semibold text-zinc-650">{new Date(a.createdAt).toLocaleString()}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex items-center gap-1.5 shrink-0 ml-auto pt-3 md:pt-0">
+                            <button
+                              onClick={() => {
+                                // Toggle active state
+                                createOrUpdateAd({
+                                  ...a,
+                                  active: !a.active
+                                });
+                              }}
+                              className={`px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer ${
+                                a.active
+                                  ? 'bg-zinc-100 text-zinc-650 hover:bg-zinc-200'
+                                  : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                              }`}
+                              title={a.active ? "Pause Campaign" : "Set Active immediately"}
+                            >
+                              {a.active ? 'Pause' : 'Activate'}
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                // Load edit
+                                setAdEditingId(a.id);
+                                setAdTitle(a.title);
+                                setAdDescription(a.description);
+                                setAdImageUrl(a.imageUrl);
+                                setAdTargetUrl(a.targetUrl);
+                                setAdActive(a.active);
+                                setAdPlacement(a.placement || 'workspace');
+                                setAdWelcomeBadge(a.welcomeBadge || 'Sponsored Welcome');
+                                setAdWelcomeTitle(a.welcomeTitle || 'Active Sponsor Bubbles live!');
+                                setAdWelcomeText(a.welcomeText || 'Pop the glossy floating spheres orbiting the workspace to test campaign previews and grab exclusive content offers.');
+                              }}
+                              className="px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider text-zinc-600 hover:bg-zinc-100 bg-zinc-50 rounded-xl transition cursor-pointer"
+                            >
+                              Edit
+                            </button>
+
+                            <button
+                              onClick={async () => {
+                                if (confirm(`Do you want to permanently delete ad campaign "${a.title}"?`)) {
+                                  await deleteAd(a.id);
+                                }
+                              }}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-xl transition cursor-pointer"
+                              title="Delete Placement permanently"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                  ) : (
+                    <div className="text-center p-12 bg-zinc-50 rounded-2xl border border-dashed border-zinc-200">
+                      <Megaphone className="w-8 h-8 text-zinc-300 mx-auto mb-2" />
+                      <p className="text-xs text-zinc-400 font-bold">No registered advertisement banners found.</p>
+                      <p className="text-[10px] text-zinc-400/80 mt-1">Create one using the Sponsor ad form on the left!</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
+          ) : (
+             <div className="bg-white p-6 md:p-8 rounded-3xl border border-zinc-250 space-y-6 text-left animate-in fade-in duration-200" id="admin-user-ad-requests-section">
+               <div>
+                 <h2 className="font-sans font-black text-lg uppercase tracking-tight text-zinc-900 flex items-center gap-2 font-bold">
+                   <Megaphone className="w-5 h-5 text-emerald-600" />
+                   User eSewa Campaign Approvals Desk
+                 </h2>
+                 <p className="text-zinc-400 text-xs mt-1">
+                   Review, verify, and approve advertisement campaigns submitted by platform creators. Cross-reference uploaded eSewa payment proof screenshots before scheduling the launch.
+                 </p>
+               </div>
+
+               {/* Filter pills */}
+               <div className="flex gap-2 bg-zinc-50 p-1 rounded-2xl border border-zinc-150 w-fit">
+                 {['all', 'pending', 'approved', 'rejected', 'published'].map((status) => (
+                   <button
+                     key={status}
+                     onClick={() => setAdFilterState(status as any)}
+                     className={`px-3 py-1.5 text-[9px] font-mono font-black uppercase tracking-wider rounded-xl transition cursor-pointer ${
+                       adFilterState === status
+                         ? 'bg-zinc-900 text-white shadow-xs'
+                         : 'text-zinc-500 hover:bg-zinc-150'
+                     }`}
+                   >
+                     {status} ({ads.filter(a => a.userId && (status === 'all' ? true : (a.status || 'pending') === status)).length})
+                   </button>
+                 ))}
+               </div>
+
+               <div className="space-y-4">
+                 {ads.filter(a => a.userId && (adFilterState === 'all' ? true : (a.status || 'pending') === adFilterState)).length === 0 ? (
+                   <div className="text-center py-16 bg-zinc-50 border border-dashed border-zinc-200 rounded-3xl text-zinc-400">
+                     <Tv className="w-10 h-10 mx-auto text-zinc-300 mb-2" />
+                     <p className="text-xs font-bold">No user campaigns found in this status tier.</p>
+                   </div>
+                 ) : (
+                   ads
+                     .filter(a => a.userId && (adFilterState === 'all' ? true : (a.status || 'pending') === adFilterState))
+                     .sort((a,b) => b.createdAt.localeCompare(a.createdAt))
+                     .map(a => {
+                       const requestor = users.find(u => u.id === a.userId);
+                       return (
+                         <div key={a.id} className="p-5 bg-zinc-50 border border-zinc-200 rounded-3xl flex flex-col lg:flex-row gap-5 items-start">
+                           
+                           {/* Ad Banner Preview */}
+                           <div className="w-full lg:w-44 shrink-0 space-y-2">
+                             <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-zinc-400 block text-left">Ad Banner Creative</span>
+                             {a.imageUrl ? (
+                               <div className="h-24 rounded-xl overflow-hidden border border-zinc-200 bg-white">
+                                 <img src={a.imageUrl} alt={a.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                               </div>
+                             ) : (
+                               <div className="h-24 bg-zinc-100 border rounded-xl flex items-center justify-center text-[10px] text-zinc-400 font-bold">
+                                 No banner image
+                               </div>
+                             )}
+                             <span className={`text-[8.5px] font-black uppercase text-center block tracking-wider px-2 py-0.5 rounded ${
+                               a.placement === 'bubble'
+                                 ? 'text-purple-700 bg-purple-50 border border-purple-100'
+                                 : 'text-blue-700 bg-blue-50 border border-blue-100'
+                             }`}>
+                               {a.placement === 'bubble' ? '🫧 Floating Bubble' : '📰 Feed Banner'}
+                             </span>
+                           </div>
+
+                           {/* Campaign Copy Details */}
+                           <div className="flex-1 min-w-0 space-y-2 text-left w-full">
+                             <div>
+                               <h4 className="text-xs font-black text-zinc-900 font-bold">{a.title}</h4>
+                               <p className="text-[10px] text-zinc-500 mt-0.5 font-medium leading-relaxed">{a.description}</p>
+                             </div>
+
+                             <div className="text-[9.5px] font-mono space-y-1 bg-white/75 border border-zinc-200 p-2.5 rounded-2xl text-zinc-600">
+                               <p>🎯 <span className="font-bold text-zinc-450">Target Link:</span> <a href={a.targetUrl} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline inline-flex items-center gap-0.5">{a.targetUrl} <ExternalLink className="w-2.5 h-2.5 shrink-0" /></a></p>
+                               <p>👤 <span className="font-bold text-zinc-450">Requested by:</span> <span className="text-zinc-800 font-extrabold">{requestor?.email || 'Unknown Client'}</span> ({requestor?.nickname || 'ID: ' + a.userId})</p>
+                               <p>📅 <span className="font-bold text-zinc-450">Schedule Date:</span> <span className="text-zinc-850 font-black">{a.scheduledDate || 'Immediate'}</span></p>
+                               <p>💰 <span className="font-bold text-zinc-450">eSewa Paid:</span> <span className="text-emerald-750 font-black">Rs. {a.amountPaid || 500} NPR</span></p>
+                             </div>
+                           </div>
+
+                           {/* paymentScreenshotUrl and Status/Actions Panel */}
+                           <div className="w-full lg:w-56 shrink-0 space-y-3 flex flex-col justify-between text-left border-t lg:border-t-0 lg:border-l border-zinc-200 pt-4 lg:pt-0 lg:pl-5">
+                             <div>
+                               <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-zinc-400 block mb-1.5">ESewa Payment Proof</span>
+                               {a.paymentScreenshotUrl ? (
+                                 <button
+                                   onClick={() => setSelectedPhotoUrl(a.paymentScreenshotUrl)}
+                                   className="w-full p-2 bg-white hover:bg-zinc-100 border border-zinc-200 rounded-2xl flex items-center gap-2.5 transition text-left cursor-pointer shadow-xs"
+                                 >
+                                   <div className="w-10 h-10 rounded overflow-hidden border border-zinc-200 bg-zinc-50 shrink-0">
+                                     <img src={a.paymentScreenshotUrl} alt="eSewa receipt" className="w-full h-full object-cover" />
+                                   </div>
+                                   <span className="text-[9px] font-black text-indigo-650 hover:underline">View Proof screenshot ➜</span>
+                                 </button>
+                               ) : (
+                                 <div className="p-3 bg-red-50 border border-red-100/50 text-red-700 rounded-xl text-[9.5px] font-bold">
+                                   ⚠️ No payment screenshot receipt uploaded!
+                                 </div>
+                               )}
+                             </div>
+
+                             {/* Status row and actions */}
+                             <div className="space-y-2 pt-2 border-t border-zinc-150">
+                               <div className="flex justify-between items-center text-[10px]">
+                                 <span className="text-zinc-400 uppercase font-mono font-bold text-[9px]">Workflow Status:</span>
+                                 <span className={`text-[8px] font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded border ${
+                                   a.status === 'published'
+                                     ? 'text-emerald-700 bg-emerald-50 border-emerald-100'
+                                     : a.status === 'approved'
+                                     ? 'text-indigo-700 bg-indigo-50 border-indigo-100'
+                                     : a.status === 'rejected'
+                                     ? 'text-red-700 bg-red-50 border-red-100'
+                                     : 'text-amber-700 bg-amber-50 border-amber-100 animate-pulse'
+                                 }`}>
+                                   {a.status || 'pending'}
+                                 </span>
+                               </div>
+
+                               {/* Action button toggles */}
+                               <div className="grid grid-cols-2 gap-1.5 pt-1">
+                                 {/* Approve & Publish / Schedule */}
+                                 {(a.status || 'pending') !== 'published' && (a.status || 'pending') !== 'approved' && (
+                                   <>
+                                     <button
+                                       onClick={async () => {
+                                         if (confirm(`Approve campaign "${a.title}"? This will activate the ad and publish it.`)) {
+                                           await createOrUpdateAd({
+                                             ...a,
+                                             status: 'published',
+                                             active: true
+                                           });
+                                         }
+                                       }}
+                                       className="py-1.5 text-[9px] font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition text-center cursor-pointer flex items-center justify-center gap-1"
+                                     >
+                                       <span>✔️ Approve</span>
+                                     </button>
+                                     <button
+                                       onClick={() => {
+                                         setRejectAdId(a.id);
+                                         setAdRejectReason('');
+                                       }}
+                                       className="py-1.5 text-[9px] font-black uppercase tracking-widest bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg transition text-center cursor-pointer"
+                                     >
+                                       <span>❌ Reject</span>
+                                     </button>
+                                   </>
+                                 )}
+
+                                 {/* Pause if published */}
+                                 {a.status === 'published' && (
+                                   <button
+                                     onClick={async () => {
+                                       await createOrUpdateAd({
+                                         ...a,
+                                         active: !a.active
+                                       });
+                                     }}
+                                     className={`col-span-2 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-lg transition text-center cursor-pointer ${
+                                       a.active ? 'bg-zinc-100 hover:bg-zinc-205 text-zinc-700' : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                     }`}
+                                   >
+                                     <span>{a.active ? '⏸️ Pause Campaign' : '▶️ Resume Campaign'}</span>
+                                   </button>
+                                 )}
+
+                                 {/* If reject reason drawer is active for this ad */}
+                                 {rejectAdId === a.id && (
+                                   <div className="col-span-2 p-3 bg-red-50 rounded-xl border border-red-100 space-y-2 mt-2 animate-fadeIn text-left">
+                                     <span className="text-[8px] font-black uppercase text-red-800 tracking-wider block">Specify Rejection Remarks</span>
+                                     <textarea
+                                       value={adRejectReason}
+                                       onChange={(e) => setAdRejectReason(e.target.value)}
+                                       placeholder="e.g. Blurry receipt. Please re-upload proof with clear transaction reference number."
+                                       rows={2}
+                                       className="w-full p-2 bg-white text-xs border border-red-250 rounded-lg outline-none focus:border-red-500"
+                                     />
+                                     <div className="flex gap-1.5 justify-end">
+                                       <button
+                                         onClick={() => setRejectAdId(null)}
+                                         className="px-2 py-1 text-[8.5px] font-black text-zinc-500 hover:bg-red-100/50 rounded uppercase cursor-pointer"
+                                       >
+                                         Cancel
+                                       </button>
+                                       <button
+                                         onClick={async () => {
+                                           if (!adRejectReason.trim()) return;
+                                           await createOrUpdateAd({
+                                             ...a,
+                                             status: 'rejected',
+                                             welcomeText: adRejectReason.trim(), // Save reject remarks here
+                                             active: false
+                                           });
+                                           setRejectAdId(null);
+                                         }}
+                                         className="px-3 py-1 text-[8.5px] font-black text-white bg-red-650 hover:bg-red-750 rounded uppercase cursor-pointer"
+                                       >
+                                         Confirm
+                                       </button>
+                                     </div>
+                                   </div>
+                                 )}
+                               </div>
+
+                             </div>
+
+                           </div>
+
+                         </div>
+                       );
+                     })
+                 )}
+               </div>
+
+            </div>
+          )}
         </section>
       )}
 

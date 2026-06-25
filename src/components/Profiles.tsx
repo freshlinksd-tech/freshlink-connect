@@ -419,18 +419,18 @@ export const Profiles: React.FC<ProfilesProps> = ({
     <div className="w-full max-w-4xl mx-auto px-4 py-8 space-y-8 select-none" id="profile-dashboard-layout">
       
       {/* Top Banner & Profile Header */}
-      <section className="bg-white border border-zinc-200/50 rounded-3xl overflow-hidden shadow-sm">
+      <section className="bg-white border border-stone-200/45 rounded-[2rem] card-shadow overflow-hidden">
         {/* Cover image area */}
-        <div className="h-44 md:h-56 bg-zinc-100 relative">
+        <div className="h-44 md:h-56 bg-stone-100 relative">
           {activeProfile.coverImage && (
             <img
               src={activeProfile.coverImage}
               alt="Cover Banner"
               referrerPolicy="no-referrer"
-              className="w-full h-full object-cover grayscale brightness-95"
+              className="w-full h-full object-cover brightness-95 hover:brightness-100 transition-smooth"
             />
           )}
-          <div className="absolute inset-0 bg-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent pointer-events-none" />
         </div>
 
         {/* Profile Card Contents */}
@@ -442,7 +442,7 @@ export const Profiles: React.FC<ProfilesProps> = ({
                 src={activeProfile.profileImage}
                 alt={activeProfile.name}
                 referrerPolicy="no-referrer"
-                className="w-28 h-28 sm:w-36 sm:h-36 rounded-2xl object-cover border-4 border-white shadow-md bg-white"
+                className="w-28 h-28 sm:w-36 sm:h-36 rounded-full object-cover border-4 border-white shadow-md bg-white transform hover:scale-102 transition-smooth"
               />
             </div>
 
