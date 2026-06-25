@@ -136,10 +136,13 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   const [activeChatPartnerId, setActiveChatPartnerId] = useState<string | null>(null);
   const activeChatPartnerRef = useRef<string | null>(null);
 
-  const [isQuotaFallbackMode, setIsQuotaFallbackMode] = useState<boolean>(
-    localStorage.getItem('freshlink_quota_fallback') === 'true'
-  );
+  const [isQuotaFallbackMode, setIsQuotaFallbackMode] = useState<boolean>(false);
   const [securityBlock, setSecurityBlock] = useState<{ actionType: string; remainingMs: number } | null>(null);
+
+  // Clear any previously persisted quota fallback state on load
+  useEffect(() => {
+    localStorage.removeItem('freshlink_quota_fallback');
+  }, []);
 
   const resolveSecurityChallenge = () => {
     if (securityBlock) {
@@ -148,34 +151,9 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     }
   };
 
-  // Helper to load all stored local data or seed if empty
+  // Helper is disabled to prevent going into offline mode per user instruction
   const triggerLocalQuotaFallback = () => {
-    localStorage.setItem('freshlink_quota_fallback', 'true');
-    setIsQuotaFallbackMode(true);
-
-    const getOrSeed = <T,>(key: string, seed: T[]): T[] => {
-      const stored = localStorage.getItem(`freshlink_loc_${key}`);
-      if (stored) {
-        try {
-          return JSON.parse(stored);
-        } catch (e) {
-          console.error("Local storage fallback retrieve fail for key:", key, e);
-        }
-      }
-      return seed;
-    };
-
-    setUsers(getOrSeed('users', SEED_USERS));
-    setPosts(getOrSeed('posts', SEED_POSTS));
-    setFollowers(getOrSeed('followers', SEED_FOLLOWERS));
-    setComments(getOrSeed('comments', SEED_COMMENTS));
-    setMessages(getOrSeed('messages', SEED_MESSAGES));
-    setLikes(getOrSeed('likes', []));
-    setWithdrawals(getOrSeed('withdrawals', []));
-    setNotifications(getOrSeed('notifications', []));
-    setPostReports(getOrSeed('postReports', []));
-    setAds(getOrSeed('ads', []));
-    setLoading(false);
+    console.warn("Firebase Quota Limit reached, but offline fallback mode is strictly disabled per configuration.");
   };
 
   const resetQuotaFallback = () => {
@@ -448,14 +426,13 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       try {
         setLoading(true);
         // Execute single-round concurrent reads instead of maintaining heavy, permanent wide-collection listeners
-        const [usersSnap, postsSnap, likesSnap, commentsSnap, followersSnap, adsSnap, reportsSnap] = await Promise.all([
+        const [usersSnap, postsSnap, likesSnap, commentsSnap, followersSnap, adsSnap] = await Promise.all([
           getDocs(collection(db, 'users')),
           getDocs(collection(db, 'posts')),
           getDocs(collection(db, 'likes')),
           getDocs(collection(db, 'comments')),
           getDocs(collection(db, 'followers')),
-          getDocs(collection(db, 'ads')),
-          getDocs(collection(db, 'postReports'))
+          getDocs(collection(db, 'ads'))
         ]);
 
         const usersList: User[] = [];
@@ -482,9 +459,16 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         adsSnap.forEach((d) => adsList.push(d.data() as AdBanner));
         setAds(adsList);
 
-        const reportsList: PostReport[] = [];
-        reportsSnap.forEach((d) => reportsList.push(d.data() as PostReport));
-        setPostReports(reportsList);
+        // Fetch postReports separately and handle permissions gracefully (since only admins can read them)
+        try {
+          const reportsSnap = await getDocs(collection(db, 'postReports'));
+          const reportsList: PostReport[] = [];
+          reportsSnap.forEach((d) => reportsList.push(d.data() as PostReport));
+          setPostReports(reportsList);
+        } catch (reportErr: any) {
+          console.log("Post reports skipped or permission denied (expected for non-admins):", reportErr.message || reportErr);
+          setPostReports([]);
+        }
 
       } catch (err: any) {
         console.error("An error occurred during Firestore one-time initial load:", err);
