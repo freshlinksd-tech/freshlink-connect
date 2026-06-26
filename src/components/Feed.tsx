@@ -772,52 +772,42 @@ export const Feed: React.FC<FeedProps> = ({
         ))}
       </div>
 
-      {/* Active Ad Banner / Poster inside the top white space */}
+      {/* Active Ad Banners inside the top white space */}
       {(() => {
-        const activeAd = ads.find(a => a.active && (a.placement || 'workspace') === 'workspace');
-        if (!activeAd) return null;
+        const activeAds = ads.filter(a => a.active && (a.placement || 'workspace') === 'workspace').slice(0, 3);
+        if (activeAds.length === 0) return null;
         return (
-          <div 
-            id={`ad-banner-${activeAd.id}`}
-            className="bg-gradient-to-r from-orange-50 to-amber-50 border border-amber-200/60 rounded-3xl p-5 md:p-6 mb-8 flex flex-col md:flex-row items-center gap-6 shadow-sm overflow-hidden relative group cursor-pointer transition hover:border-amber-300"
-            onClick={() => {
-              setSelectedWorkspaceAd(activeAd);
-            }}
-          >
-            {/* Subtle Tag */}
-            <div className="absolute top-3 right-4 bg-zinc-900/90 text-white font-mono uppercase text-[9px] font-semibold px-2 py-0.5 rounded-full tracking-widest shadow-sm flex items-center gap-1 z-10">
-              <Megaphone className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
-              <span>SPONSORED AD</span>
-            </div>
-
-            {/* Ad Poster Image Column */}
-            {activeAd.imageUrl && (
-              <div className="w-full md:w-42 h-24 md:h-20 rounded-2xl overflow-hidden shrink-0 border border-zinc-200 bg-white relative">
-                <img 
-                  referrerPolicy="no-referrer"
-                  src={activeAd.imageUrl} 
-                  alt={activeAd.title}
-                  className="w-full h-full object-cover transition duration-505 group-hover:scale-105" 
-                />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            {activeAds.map(activeAd => (
+              <div 
+                key={activeAd.id}
+                id={`ad-banner-${activeAd.id}`}
+                className="bg-gradient-to-r from-orange-50 to-amber-50 border border-amber-200/60 rounded-3xl p-5 md:p-6 flex flex-col items-center gap-6 shadow-sm overflow-hidden relative group cursor-pointer transition hover:border-amber-300"
+                onClick={() => {
+                  setSelectedWorkspaceAd(activeAd);
+                }}
+              >
+                {/* Ad Poster Image Column */}
+                {activeAd.imageUrl && (
+                  <div className="w-full h-32 rounded-2xl overflow-hidden shrink-0 border border-zinc-200 bg-white relative">
+                    <img 
+                      referrerPolicy="no-referrer"
+                      src={activeAd.imageUrl} 
+                      alt={activeAd.title}
+                      className="w-full h-full object-cover transition duration-505 group-hover:scale-105" 
+                    />
+                  </div>
+                )}
+                <div className="text-center">
+                  <h4 className="font-sans font-black text-xs text-zinc-900 uppercase tracking-tighter mb-1">{activeAd.title}</h4>
+                  <p className="text-[10px] text-zinc-500 line-clamp-2">{activeAd.description}</p>
+                </div>
               </div>
-            )}
-
-            {/* Text details column */}
-            <div className="flex-1 min-w-0 flex flex-col justify-center">
-              <h3 className="font-sans font-bold text-base md:text-lg text-zinc-900 tracking-tight leading-tight group-hover:text-orange-650 transition">
-                {activeAd.title}
-              </h3>
-              <p className="font-sans text-xs text-zinc-550 mt-1 leading-relaxed">
-                {activeAd.description}
-              </p>
-              <div className="flex items-center gap-1 text-orange-600 font-mono text-[10px] font-semibold mt-2">
-                <span>View Sponsor Deal</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </div>
-            </div>
+            ))}
           </div>
         );
       })()}
+
 
       {/* Blogs / Posts Container */}
       <div className="space-y-8" id="feed-post-list">

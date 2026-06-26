@@ -26,6 +26,7 @@ export interface User {
   isBlocked?: boolean;
   role?: 'super_admin' | 'admin' | 'user';
   isAdmin?: boolean;
+  isPrivate?: boolean;
   phoneNumber?: string;
   panNumber?: string;
   officialDocId?: string;
@@ -146,22 +147,30 @@ export interface PostReport {
 
 export interface AdBanner {
   id: string;
+  userId: string;                   // The user who submitted this ad request
+  name: string;
+  purpose: string;
+  contact: string;
+  content: string;
+  location: string;
+  email: string;
   imageUrl: string;
-  title: string;
-  description: string;
-  targetUrl: string; // Redirection URL (social media post, external link, etc.)
   active: boolean;
   createdAt: string;
+  status: 'pending' | 'approved' | 'rejected' | 'published';
+  scheduledDate?: string;
   clickCount?: number;
-  placement?: 'workspace' | 'bubble'; // Ad placement type: 'workspace' or 'bubble'
-  welcomeBadge?: string;             // Custom welcome badge text, e.g. "Sponsored Welcome"
-  welcomeTitle?: string;             // Custom welcome title, e.g. "Active Sponsor Bubbles live!"
-  welcomeText?: string;              // Custom welcome body text
-  userId?: string;                   // The user who submitted this ad request
-  paymentScreenshotUrl?: string;     // URL of the uploaded eSewa transaction receipt screenshot
-  status?: 'pending' | 'approved' | 'rejected' | 'published'; // Ad processing workflow status
-  amountPaid?: number;               // Cost of the advertisement in NPR
-  paymentStatus?: 'pending' | 'verified' | 'failed'; // Verification of eSewa receipt
-  scheduledDate?: string;            // The date planned for the ad to go live (YYYY-MM-DD)
+
+  // Backwards compatibility/support for existing codes
+  title?: string;
+  description?: string;
+  targetUrl?: string;
+  placement?: string;
+  welcomeBadge?: string;
+  welcomeTitle?: string;
+  welcomeText?: string;
+  paymentScreenshotUrl?: string;
+  amountPaid?: number;
+  paymentStatus?: string;
 }
 

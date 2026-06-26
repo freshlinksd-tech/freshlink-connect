@@ -20,7 +20,8 @@ import {
   Zap,
   Clock,
   Edit3,
-  Trash2
+  Trash2,
+  ChevronLeft
 } from 'lucide-react';
 
 interface ChatProps {
@@ -229,10 +230,10 @@ export const Chat: React.FC<ChatProps> = ({ onSelectUser, targetChatUserId, setT
   }
 
   return (
-    <div className="flex bg-white border border-black rounded-none overflow-hidden h-[85vh] max-w-7xl mx-auto select-none" id="chat-dashboard-container">
+    <div className="flex flex-col md:flex-row bg-white border border-black rounded-none overflow-hidden h-[85vh] max-w-7xl mx-auto select-none" id="chat-dashboard-container">
       
       {/* Sidebar panel */}
-      <aside className="w-80 border-r border-[#1A1A1A]/10 flex flex-col h-full shrink-0 bg-white">
+      <aside className={`w-full md:w-80 border-r border-[#1A1A1A]/10 flex flex-col h-full shrink-0 bg-white ${activeContactId ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-4 border-b border-black/10 space-y-3">
           <h3 className="font-sans font-black text-xs uppercase tracking-widest text-black">Conversations</h3>
           
@@ -354,12 +355,19 @@ export const Chat: React.FC<ChatProps> = ({ onSelectUser, targetChatUserId, setT
       </aside>
 
       {/* Main Conversation Thread pane */}
-      <main className="flex-1 bg-[#F8F7F4]/20 flex flex-col h-full min-w-0" id="main-conversation-thread">
+      <main className={`flex-1 bg-[#F8F7F4]/20 flex flex-col h-full min-w-0 ${!activeContact ? 'hidden md:flex' : 'flex'}`} id="main-conversation-thread">
         {activeContact ? (
           <>
             {/* Header info */}
             <header className="bg-white border-b border-black/10 p-4 px-6 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3 min-w-0">
+                <button 
+                  onClick={() => setActiveContactId(null)}
+                  className="md:hidden flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider bg-zinc-100 hover:bg-zinc-200 border border-zinc-200/85 text-zinc-700 transition shrink-0 cursor-pointer mr-1"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Inbox</span>
+                </button>
                 <img
                   src={activeContact.profileImage}
                   alt={activeContact.name}
@@ -378,11 +386,6 @@ export const Chat: React.FC<ChatProps> = ({ onSelectUser, targetChatUserId, setT
                     {activeContact.bio}
                   </p>
                 </div>
-              </div>
-              
-              <div className="flex items-center gap-1.5 shrink-0 bg-black text-white border border-transparent px-2.5 py-1 text-[9px] font-mono tracking-wider font-extrabold uppercase">
-                <Zap className="w-3 h-3 text-orange-500 animate-pulse" />
-                <span>Simulation active</span>
               </div>
             </header>
 

@@ -470,7 +470,7 @@ export const OnboardingSetup: React.FC = () => {
               {/* ID Identification Number */}
               <div className="space-y-1.5">
                 <label className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500 block">
-                  {docType === 'pan' ? 'PAN Card Identification' : 'Official ID Identification'}
+                  {docType === 'pan' ? 'PAN Card Identification' : 'Any Optional ID / College or School ID'}
                 </label>
                 <div className="relative">
                   <CreditCard className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
@@ -480,8 +480,8 @@ export const OnboardingSetup: React.FC = () => {
                     id="verify-doc-onboard"
                     value={docValue}
                     onChange={(e) => setDocValue(e.target.value)}
-                    placeholder={docType === 'pan' ? 'ABCDE1234F' : 'Passport/ID Card Number'}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-semibold bg-zinc-50 focus:border-orange-500 focus:outline-none focus:bg-white focus:ring-4 focus:ring-orange-500/10 transition-all text-zinc-900 uppercase"
+                    placeholder={docType === 'pan' ? 'ABCDE1234F' : 'Any ID / College or School ID Number'}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-semibold bg-zinc-55 focus:border-orange-500 focus:outline-none focus:bg-white focus:ring-4 focus:ring-orange-500/10 transition-all text-zinc-900 uppercase"
                   />
                 </div>
               </div>
@@ -514,7 +514,7 @@ export const OnboardingSetup: React.FC = () => {
                         : 'bg-zinc-55 border-zinc-200 text-zinc-550 hover:bg-zinc-100'
                     }`}
                   >
-                    Official ID Card
+                    Optional ID / College / School ID
                   </button>
                 </div>
               </div>

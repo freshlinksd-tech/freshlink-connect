@@ -124,21 +124,38 @@ export const VerificationSetup: React.FC = () => {
         id="verification-pending-screen"
       >
         <div className="bg-white border border-zinc-100 max-w-md w-full shadow-2xl rounded-3xl overflow-hidden flex flex-col p-8 text-center select-none">
-          <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-5 border border-amber-100 text-amber-600 animate-pulse">
-            <Clock className="w-8 h-8" />
-          </div>
+          {currentUser.clearanceRemarks ? (
+            <>
+              <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-5 border border-red-100 text-red-600">
+                <ShieldAlert className="w-8 h-8" />
+              </div>
+              <h2 className="font-sans font-black text-xl uppercase tracking-tighter text-zinc-900 leading-none">
+                Application Denied
+              </h2>
+              <p className="text-zinc-500 text-xs mt-4 leading-relaxed font-medium">
+                Your previous application was denied. Reason: {currentUser.clearanceRemarks}
+                <strong className="block mt-2 text-zinc-700">Please re-submit your details below to continue.</strong>
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-5 border border-amber-100 text-amber-600 animate-pulse">
+                <Clock className="w-8 h-8" />
+              </div>
 
-          <h2 className="font-sans font-black text-xl uppercase tracking-tighter text-zinc-900 leading-none">
-            Review in Progress
-          </h2>
-          <p className="text-zinc-550 text-[11px] font-semibold tracking-wide uppercase mt-1 text-amber-600 bg-amber-50/70 inline-block px-3 py-1 rounded-full mx-auto">
-            Security Clearance Level: Pending
-          </p>
+              <h2 className="font-sans font-black text-xl uppercase tracking-tighter text-zinc-900 leading-none">
+                Review in Progress
+              </h2>
+              <p className="text-zinc-550 text-[11px] font-semibold tracking-wide uppercase mt-1 text-amber-600 bg-amber-50/70 inline-block px-3 py-1 rounded-full mx-auto">
+                Security Clearance Level: Pending
+              </p>
 
-          <p className="text-zinc-500 text-xs mt-4 leading-relaxed font-medium">
-            Thank you for uploading your details. The FreshLink administrative panel has received your government ID document file and verification request. Your account is currently in queue for review. 
-            <strong className="block mt-2 text-zinc-700">Verification will be processed in 3-4 hours by the Administrator. Only the administrator can verify and approve.</strong>
-          </p>
+              <p className="text-zinc-500 text-xs mt-4 leading-relaxed font-medium">
+                Thank you for uploading your details. The FreshLink administrative panel has received your government ID document file and verification request. Your account is currently in queue for review. 
+                <strong className="block mt-2 text-zinc-700">Verification will be processed in 3-4 hours by the Administrator. Only the administrator can verify and approve.</strong>
+              </p>
+            </>
+          )}
 
           <div className="mt-6 border border-zinc-150/80 rounded-2xl p-4 bg-[#F8F7F4]/60 space-y-2 text-left text-[11px] font-medium text-zinc-700">
             <div className="flex justify-between border-b border-zinc-100 pb-1.5">
@@ -166,6 +183,17 @@ export const VerificationSetup: React.FC = () => {
           </div>
 
           <div className="mt-6 space-y-2.5">
+            {currentUser.clearanceRemarks ? (
+              <button 
+                onClick={() => {
+                  // Simply clear the verified status to force re-submission flow
+                  updateProfile({ hasVerifiedDetails: false, isApprovedByAdmin: false, clearanceRemarks: "" });
+                }}
+                className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                Re-submit Documents
+              </button>
+            ) : null}
             <button 
               onClick={logout}
               className="w-full py-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-650 font-bold text-xs uppercase tracking-widest rounded-xl transition-all hover:text-zinc-800 flex items-center justify-center gap-1.5 cursor-pointer"
@@ -281,7 +309,7 @@ export const VerificationSetup: React.FC = () => {
                     : 'bg-zinc-50 border-zinc-200 text-zinc-500'
                 }`}
               >
-                Official ID
+                Optional ID / College / School ID
               </button>
             </div>
 
@@ -293,7 +321,7 @@ export const VerificationSetup: React.FC = () => {
                 id="verify-doc-input"
                 value={docValue}
                 onChange={(e) => setDocValue(e.target.value)}
-                placeholder={docType === 'pan' ? 'Enter 10-char PAN Num (e.g. ABCDE1234F)' : 'Enter Passport or Government ID Number'}
+                placeholder={docType === 'pan' ? 'Enter 10-char PAN Num (e.g. ABCDE1234F)' : 'Enter College, School or Any Optional ID Number'}
                 className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-zinc-150 focus:border-orange-500 bg-white text-xs font-bold text-zinc-800 outline-none transition-all uppercase"
               />
             </div>

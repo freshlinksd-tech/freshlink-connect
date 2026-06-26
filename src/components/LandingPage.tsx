@@ -387,7 +387,7 @@ export const LandingPage: React.FC = () => {
                             docType === 'docId' ? 'bg-orange-600 text-white border-orange-600 font-black' : 'bg-white text-zinc-500 border-zinc-200'
                           }`}
                         >
-                          Official ID
+                          Optional ID / College / School ID
                         </button>
                       </div>
                       <div className="relative">
@@ -398,7 +398,7 @@ export const LandingPage: React.FC = () => {
                           id="land-signup-doc-input"
                           value={docValue}
                           onChange={(e) => setDocValue(e.target.value)}
-                          placeholder={docType === 'pan' ? 'e.g. ABCDE1234F' : 'e.g. Passport/National ID No.'}
+                          placeholder={docType === 'pan' ? 'e.g. ABCDE1234F' : 'e.g. College/School/Optional ID No.'}
                           className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 text-xs text-zinc-800 font-sans outline-none bg-stone-50/40 focus:bg-white focus:border-orange-500 transition-all uppercase"
                         />
                       </div>

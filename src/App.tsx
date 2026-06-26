@@ -77,7 +77,7 @@ function AppContent() {
     currentUser.hasSetupAccount === true && 
     currentUser.isAdmin !== true && 
     currentUser.role !== 'admin' && 
-    (!currentUser.phoneNumber || (!currentUser.panNumber && !currentUser.officialDocId));
+    (currentUser.hasVerifiedDetails !== true || currentUser.isApprovedByAdmin !== true);
   if (needsVerification) {
     return <VerificationSetup />;
   }

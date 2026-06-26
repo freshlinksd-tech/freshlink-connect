@@ -21,7 +21,7 @@ import {
   where,
   writeBatch
 } from 'firebase/firestore';
-import { signInAnonymously, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { signInAnonymously, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 
 interface SocialPlatformContextType {
@@ -94,20 +94,7 @@ interface SocialPlatformContextType {
   markAllNotificationsAsRead: () => Promise<void>;
   reportPost: (postId: string, reason: string, remarks: string) => Promise<void>;
   resolveReport: (reportId: string, action: 'delete_post' | 'dismiss') => Promise<void>;
-  createOrUpdateAd: (ad: { 
-    id?: string; 
-    imageUrl: string; 
-    title: string; 
-    description: string; 
-    targetUrl: string; 
-    active: boolean; 
-    clickCount?: number; 
-    createdAt?: string;
-    placement?: 'workspace' | 'bubble';
-    welcomeBadge?: string;
-    welcomeTitle?: string;
-    welcomeText?: string;
-  }) => Promise<void>;
+  createOrUpdateAd: (ad: any) => Promise<void>;
   deleteAd: (adId: string) => Promise<void>;
   trackAdClick: (adId: string) => Promise<void>;
   toggleAllAds: (active: boolean) => Promise<void>;
@@ -407,6 +394,21 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     return () => authUnsub();
   }, []);
 
+  // Real-time listener for ads
+  useEffect(() => {
+    if (isQuotaFallbackMode) return;
+    const adsQuery = collection(db, 'ads');
+    const unsubAds = onSnapshot(adsQuery, (snap) => {
+      const updatedAds: AdBanner[] = [];
+      snap.forEach((doc) => updatedAds.push(doc.data() as AdBanner));
+      setAds(updatedAds);
+    }, (error) => {
+      handleSubError(error, 'ads');
+    });
+
+    return () => unsubAds();
+  }, [isQuotaFallbackMode]);
+
   // 2. High-Performance One-Time Initial Data Load & Caching
   const handleSubError = (error: any, collectionName: string) => {
     const errMsg = error instanceof Error ? error.message : String(error);
@@ -461,6 +463,12 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         if (adsList.length === 0) {
           const defaultSeedAd: AdBanner = {
             id: 'ad_default_nepal_tourism',
+            name: 'Explore the Majesty of Nepal Mountains & Homestays',
+            purpose: 'Tourism & Travel',
+            contact: '+977-1-4200000',
+            content: 'Discover organic tea trails, spectacular Everest panorama homestays, and get 20% off with partner local communities today!',
+            location: 'Nepal',
+            email: 'info@visitnepal.com',
             title: 'Explore the Majesty of Nepal Mountains & Homestays',
             description: 'Discover organic tea trails, spectacular Everest panorama homestays, and get 20% off with partner local communities today!',
             imageUrl: 'https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=600&q=80',
@@ -780,14 +788,38 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
 
   // Login via Google Sign-In (real auth session)
   const loginWithGoogle = async () => {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    
+    const isIframe = window.self !== window.top;
+
     try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
       const result = await signInWithPopup(auth, provider);
       return result.user !== null;
-    } catch (err) {
-      console.error("Google authentication failed:", err);
-      return false;
+    } catch (err: any) {
+      console.error("Google signInWithPopup failed:", err);
+      
+      const isPopupBlocked = err?.code === 'auth/popup-blocked' || 
+                             err?.message?.toLowerCase().includes('popup') || 
+                             err?.message?.toLowerCase().includes('blocked');
+
+      if (isPopupBlocked) {
+        if (isIframe) {
+          // In an iframe, Google Auth Redirect will also fail because accounts.google.com has frame ancestors restriction.
+          // Throw a specialized error so the front-end UI can guide the user.
+          throw new Error('IFRAME_POPUP_BLOCKED');
+        } else {
+          // Outside iframe, try fallback redirect
+          try {
+            await signInWithRedirect(auth, provider);
+            return false;
+          } catch (redirectErr) {
+            console.error("Google signInWithRedirect fallback failed:", redirectErr);
+            throw redirectErr;
+          }
+        }
+      }
+      throw err;
     }
   };
 
@@ -947,9 +979,9 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         } else {
           setLikes(prev => [...prev, { userId: currentUserId, postId }]);
           
-          // Notify post owner locally
+          // Notify post owner locally (only in local fallback mode)
           const post = posts.find(p => p.id === postId);
-          if (post && post.userId !== currentUserId) {
+          if (post && post.userId !== currentUserId && isQuotaFallbackMode) {
             addNotification(
               post.userId,
               'like',
@@ -1003,9 +1035,9 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       () => {
         setComments(prev => [...prev, newComment]);
 
-        // Notify post owner locally
+        // Notify post owner locally (only in local fallback mode)
         const post = posts.find(p => p.id === postId);
-        if (post && post.userId !== currentUserId) {
+        if (post && post.userId !== currentUserId && isQuotaFallbackMode) {
           addNotification(
             post.userId,
             'comment',
@@ -1084,11 +1116,13 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
           setFollowers(prev => prev.filter(f => f.followerId !== currentUserId || f.followingId !== targetUserId));
         } else {
           setFollowers(prev => [...prev, { followerId: currentUserId, followingId: targetUserId }]);
-          addNotification(
-            targetUserId,
-            'follow',
-            `started following you`
-          );
+          if (isQuotaFallbackMode) {
+            addNotification(
+              targetUserId,
+              'follow',
+              `started following you`
+            );
+          }
         }
       },
       `followers/${followId}`
@@ -1376,13 +1410,15 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       },
       () => {
         setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updateData } : u));
-        addNotification(
-          userId,
-          'report_decision',
-          approved 
-            ? `Your identity document verification request has been APPROVED by the admin.${remarks ? ` Remarks: ${remarks}` : ''}`
-            : `Your identity document verification request was REJECTED by the admin.${remarks ? ` Reason: ${remarks}` : ''}`
-        );
+        if (isQuotaFallbackMode) {
+          addNotification(
+            userId,
+            'report_decision',
+            approved 
+              ? `Your identity document verification request has been APPROVED by the admin.${remarks ? ` Remarks: ${remarks}` : ''}`
+              : `Your identity document verification request was REJECTED by the admin.${remarks ? ` Reason: ${remarks}` : ''}`
+          );
+        }
       },
       `users/${userId}`
     );
@@ -1430,7 +1466,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       () => {
         setWithdrawals(prev => prev.map(w => w.id === withdrawalId ? { ...w, status, remarks: remarks || "" } : w));
         const withdrawal = withdrawals.find(w => w.id === withdrawalId);
-        if (withdrawal) {
+        if (withdrawal && isQuotaFallbackMode) {
           addNotification(
             withdrawal.userId,
             'withdrawal_decision',
@@ -1570,9 +1606,9 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   const createOrUpdateAd = async (adData: { 
     id?: string; 
     imageUrl: string; 
-    title: string; 
-    description: string; 
-    targetUrl: string; 
+    title?: string; 
+    description?: string; 
+    targetUrl?: string; 
     active: boolean; 
     clickCount?: number; 
     createdAt?: string;
@@ -1586,6 +1622,12 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     amountPaid?: number;
     paymentStatus?: 'pending' | 'verified' | 'failed';
     scheduledDate?: string;
+    name?: string;
+    purpose?: string;
+    contact?: string;
+    content?: string;
+    location?: string;
+    email?: string;
   }) => {
     const id = adData.id || `ad_${Date.now()}`;
     const existingAd = ads.find(a => a.id === id);
@@ -1593,22 +1635,30 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     const newAd: AdBanner = {
       id,
       imageUrl: adData.imageUrl || "",
-      title: adData.title || "",
-      description: adData.description || "",
-      targetUrl: adData.targetUrl || "",
+      name: adData.name || existingAd?.name || adData.title || existingAd?.title || "",
+      purpose: adData.purpose || existingAd?.purpose || "",
+      contact: adData.contact || existingAd?.contact || "",
+      content: adData.content || existingAd?.content || adData.description || existingAd?.description || "",
+      location: adData.location || existingAd?.location || "",
+      email: adData.email || existingAd?.email || "",
       active: adData.active,
       createdAt: adData.createdAt || existingAd?.createdAt || new Date().toISOString(),
       clickCount: adData.clickCount !== undefined ? adData.clickCount : (existingAd?.clickCount || 0),
+      status: adData.status || existingAd?.status || 'published',
+      scheduledDate: adData.scheduledDate || existingAd?.scheduledDate || "",
+      
+      // Keep backwards compatibility
+      title: adData.name || existingAd?.name || adData.title || existingAd?.title || "",
+      description: adData.content || existingAd?.content || adData.description || existingAd?.description || "",
+      targetUrl: adData.targetUrl || existingAd?.targetUrl || "",
       placement,
       welcomeBadge: adData.welcomeBadge || "",
       welcomeTitle: adData.welcomeTitle || "",
       welcomeText: adData.welcomeText || "",
       userId: adData.userId || existingAd?.userId || currentUserId || "system",
       paymentScreenshotUrl: adData.paymentScreenshotUrl || existingAd?.paymentScreenshotUrl || "",
-      status: adData.status || existingAd?.status || 'published',
       amountPaid: adData.amountPaid || existingAd?.amountPaid || 0,
       paymentStatus: adData.paymentStatus || existingAd?.paymentStatus || 'verified',
-      scheduledDate: adData.scheduledDate || existingAd?.scheduledDate || ""
     };
 
     try {

@@ -1,17 +1,15 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,900;1,400;1,700&family=Playfair+Display:ital,wght@0,700;0,900;1,700;1,900&family=Space+Grotesk:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", -apple-system, system-ui, sans-serif;
-  --font-display: "Space Grotesk", sans-serif;
-  --font-serif: "Playfair Display", Georgia, serif;
-  --font-mono: "Fira Code", ui-monospace, SFMono-Regular, monospace;
+  --font-sans: "Space Grotesk", -apple-system, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
-/* Override body styles for the warm paper layout */
+/* Override body styles for a clean, technical layout */
 body {
-  background-color: #FAFAF9; /* Crisp cream white for a highly elegant premium background */
-  color: #1c1917;
+  background-color: #FFFFFF;
+  color: #171717;
   font-family: var(--font-sans);
   letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;

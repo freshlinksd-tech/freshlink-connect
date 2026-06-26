@@ -29,7 +29,8 @@ import {
   Loader2,
   Megaphone,
   ExternalLink,
-  Sparkles
+  Sparkles,
+  Upload
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -37,7 +38,7 @@ interface AdminPanelProps {
 }
 
 const CampaignMonitor = ({ ads }: { ads: any[] }) => {
-  const activeWorkspaceAd = ads.find((a: any) => a.active && (a.placement || 'workspace') === 'workspace');
+  const activeWorkspaceAds = ads.filter((a: any) => a.active && (a.placement || 'workspace') === 'workspace');
   
   return (
     <motion.div 
@@ -48,17 +49,40 @@ const CampaignMonitor = ({ ads }: { ads: any[] }) => {
       <div className="flex items-center gap-2 border-b border-zinc-800 pb-3 mb-4 justify-between">
         <div className="flex items-center gap-2">
           <Activity className="w-4 h-4 text-emerald-500" />
-          <span className="text-[11px] font-mono font-bold tracking-wider text-zinc-300 uppercase">Live Campaign Monitor</span>
+          <span className="text-[11px] font-mono font-bold tracking-wider text-zinc-300 uppercase">Live Campaigns Monitor</span>
         </div>
-        <span className="text-[9px] font-mono bg-orange-950 text-orange-400 border border-orange-500/20 px-2 py-0.5 rounded-full uppercase">LIVE</span>
+        <span className="text-[9px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full uppercase">LIVE</span>
       </div>
       <div className="space-y-4">
         <div>
           <div className="flex justify-between text-[10px] text-zinc-400 uppercase font-mono">
-            <span>Workspace Banner</span>
-            <span className={activeWorkspaceAd ? "text-emerald-400" : "text-zinc-600"}>{activeWorkspaceAd ? "ACTIVE" : "EMPTY"}</span>
+            <span>Workspace Banners ({activeWorkspaceAds.length} active)</span>
+            <span className={activeWorkspaceAds.length > 0 ? "text-emerald-400 font-extrabold" : "text-zinc-600"}>
+              {activeWorkspaceAds.length > 0 ? "ACTIVE" : "EMPTY"}
+            </span>
           </div>
-          <div className="text-xs font-bold mt-1 text-zinc-100">{activeWorkspaceAd?.title || "None configured"}</div>
+          {activeWorkspaceAds.length > 0 ? (
+            <div className="space-y-2.5 mt-2">
+              {activeWorkspaceAds.slice(0, 3).map((ad, idx) => (
+                <div key={ad.id} className="text-xs bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11.5px] font-black text-zinc-100 truncate">{ad.title || ad.name}</p>
+                    <p className="text-[9.5px] text-zinc-400 line-clamp-1 mt-0.5">{ad.description || ad.content}</p>
+                  </div>
+                  <span className="text-[8px] font-mono font-bold uppercase tracking-wider bg-emerald-950/60 border border-emerald-500/10 text-emerald-400 px-2 py-1 rounded-lg shrink-0">
+                    Slot {idx + 1}
+                  </span>
+                </div>
+              ))}
+              {activeWorkspaceAds.length > 3 && (
+                <div className="text-[9px] font-mono text-zinc-500 text-center pt-1">
+                  + {activeWorkspaceAds.length - 3} more active in queue (max 3 shown simultaneously)
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-xs font-bold mt-1 text-zinc-500 font-mono">None configured</div>
+          )}
         </div>
       </div>
     </motion.div>
@@ -135,9 +159,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
   const [adTargetUrl, setAdTargetUrl] = useState('');
   const [adActive, setAdActive] = useState(true);
   const [adPlacement, setAdPlacement] = useState<'workspace' | 'bubble'>('workspace');
-  const [adWelcomeBadge, setAdWelcomeBadge] = useState('Sponsored Welcome');
-  const [adWelcomeTitle, setAdWelcomeTitle] = useState('Active Sponsor Bubbles live!');
-  const [adWelcomeText, setAdWelcomeText] = useState('Pop the glossy floating spheres orbiting the workspace to test campaign previews and grab exclusive content offers.');
+  const [adWelcomeBadge, setAdWelcomeBadge] = useState('Welcome');
+  const [adWelcomeTitle, setAdWelcomeTitle] = useState('Active Banners live!');
+  const [adWelcomeText, setAdWelcomeText] = useState('Check out the floating banners orbiting the workspace to see campaign previews.');
   const [adEditingId, setAdEditingId] = useState<string | null>(null);
   const [adError, setAdError] = useState<string | null>(null);
   const [adSuccess, setAdSuccess] = useState<string | null>(null);
@@ -371,11 +395,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
             </div>
             {isSuperAdmin ? (
               <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 border border-amber-200 px-3 py-1 text-[10px] font-sans font-extrabold uppercase tracking-wide rounded-full">
-                👑 Super Admin (Level 2 Accredit)
+                Super Admin (Level 2 Accredit)
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 bg-indigo-100 text-indigo-800 border border-indigo-200 px-3 py-1 text-[10px] font-sans font-extrabold uppercase tracking-wide rounded-full">
-                🛡️ Community Admin (Level 1 Accredit)
+                Community Admin (Level 1 Accredit)
               </span>
             )}
           </div>
@@ -387,9 +411,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
           </p>
           <div className="mt-3.5 p-3.5 bg-zinc-50 rounded-2xl border border-zinc-150/65 text-xs text-zinc-600 max-w-2xl leading-relaxed">
             {isSuperAdmin ? (
-              <span>👑 <strong className="text-zinc-800">Super Admin Privileges Active:</strong> You have full structural security clearance over all databases. You can override system toggles, appoint or remove Community Admins, lock registrations, and manage ad spaces.</span>
+              <span><strong className="text-zinc-800">Super Admin Privileges Active:</strong> You have full structural security clearance over all databases. You can override system toggles, appoint or remove Community Admins, lock registrations, and manage ad spaces.</span>
             ) : (
-              <span>🛡️ <strong className="text-zinc-800">Community Admin Privileges Active:</strong> You can verify details, review content/reports, approve withdrawal claims, and flag regular users. System overrides and Admin appointments require Level 2 Super Admin clearance.</span>
+              <span><strong className="text-zinc-800">Community Admin Privileges Active:</strong> You can verify details, review content/reports, approve withdrawal claims, and flag regular users. System overrides and Admin appointments require Level 2 Super Admin clearance.</span>
             )}
           </div>
         </div>
@@ -433,7 +457,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
             onClick={resetQuotaFallback}
             className="px-5 py-3 bg-zinc-900 hover:bg-black text-white font-extrabold text-[10px] rounded-xl transition cursor-pointer shrink-0 uppercase tracking-widest shadow-sm shadow-black/10"
           >
-            🔌 Reconnect Live Cloud
+            Reconnect Live Cloud
           </button>
         </div>
       )}
@@ -971,7 +995,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                 Identity Clearance Desk
               </h2>
               <p className="text-zinc-400 text-xs mt-1">
-                Verify PAN, official IDs, and phone numbers for legal creator monetization compliance. Rejections reset application.
+                Verify PAN, optional/college/school IDs, and phone numbers for legal creator monetization compliance. Rejections reset application.
               </p>
             </div>
 
@@ -1296,7 +1320,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                   : 'border-transparent text-zinc-400 hover:text-zinc-650'
               }`}
             >
-              🛠️ Platform Campaign Builder
+              Platform Campaign Builder
             </button>
             <button
               onClick={() => setAdSubTab('requests')}
@@ -1306,7 +1330,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                   : 'border-transparent text-zinc-400 hover:text-zinc-650'
               }`}
             >
-              📢 User eSewa Ad Requests
+              User Campaign Ad Requests
               {ads.filter(a => a.userId && (a.status || 'pending') === 'pending').length > 0 && (
                 <span className="absolute -top-1.5 -right-2 bg-rose-600 text-white font-mono text-[8px] font-bold h-4 min-w-4 px-1 rounded-full flex items-center justify-center animate-bounce">
                   {ads.filter(a => a.userId && (a.status || 'pending') === 'pending').length}
@@ -1373,8 +1397,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                     setAdTargetUrl('');
                     setAdActive(true);
                     setAdPlacement('workspace');
-                    setAdWelcomeBadge('Sponsored Welcome');
-                    setAdWelcomeTitle('Active Sponsor Bubbles live!');
+                    setAdWelcomeBadge('Welcome');
+                    setAdWelcomeTitle('Active Banners live!');
                     setAdWelcomeText('Pop the glossy floating spheres orbiting the workspace to test campaign previews and grab exclusive content offers.');
                     setAdEditingId(null);
                     setTimeout(() => setAdSuccess(null), 3000);
@@ -1421,7 +1445,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block flex-1">Banner Image URL</label>
-                      <span className="text-[9px] font-mono text-zinc-400 uppercase">Input or click a stock preset below</span>
+                      <span className="text-[9px] font-mono text-zinc-400 uppercase">Input URL, upload, or choose preset</span>
                     </div>
                     <input
                       type="text"
@@ -1431,6 +1455,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                       placeholder="e.g. https://images.unsplash.com/..."
                       className="w-full px-4 py-2.5 rounded-xl bg-zinc-50 border border-zinc-150 focus:bg-white text-xs font-mono text-zinc-800 outline-none"
                     />
+
+                    {/* Local Image Upload Selector */}
+                    <div className="relative border border-dashed border-zinc-200 hover:border-orange-500/50 hover:bg-zinc-50/50 rounded-xl transition overflow-hidden h-14 flex items-center justify-center gap-2 p-2.5 text-center cursor-pointer mt-1.5">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 1.5 * 1024 * 1024) {
+                              setAdError("File too large. Please upload an image under 1.5MB.");
+                              return;
+                            }
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setAdImageUrl(reader.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                        className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                      />
+                      <Upload className="w-4 h-4 text-zinc-400 shrink-0" />
+                      <div className="text-left">
+                        <span className="text-[9.5px] font-bold text-zinc-700 block leading-tight">Upload local image to insert</span>
+                        <span className="text-[8.5px] text-zinc-400 block leading-tight">Supports PNG/JPEG under 1.5MB</span>
+                      </div>
+                    </div>
 
                     {/* Convenient Unsplash High Quality Stock Presets */}
                     <div className="grid grid-cols-4 gap-2 pt-1.5">
@@ -1502,8 +1554,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                           setAdTargetUrl('');
                           setAdActive(true);
                           setAdPlacement('workspace');
-                          setAdWelcomeBadge('Sponsored Welcome');
-                          setAdWelcomeTitle('Active Sponsor Bubbles live!');
+                          setAdWelcomeBadge('Welcome');
+                          setAdWelcomeTitle('Active Banners live!');
                           setAdWelcomeText('Pop the glossy floating spheres orbiting the workspace to test campaign previews and grab exclusive content offers.');
                           setAdError(null);
                         }}
@@ -1564,7 +1616,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                     Scheduled Campaigns Archive
                   </h2>
                   <p className="text-zinc-400 text-xs mt-1">
-                    View all past, present, active, and inactive sponsored placements. Only one ad banner can be active at a time to keep UI pristine.
+                    View all past, present, active, and inactive sponsored placements. Up to 3 ad banners can be active and displayed simultaneously.
                   </p>
                 </div>
 
@@ -1580,7 +1632,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                       }}
                       className="py-2.5 text-[9.5px] uppercase font-black tracking-widest bg-white hover:bg-zinc-100 text-zinc-700 border border-zinc-250 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      <span>⏸️ Pause All Ads</span>
+                                <span>Pause All Ads</span>
                     </button>
                     <button
                       type="button"
@@ -1591,7 +1643,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                       }}
                       className="py-2.5 text-[9.5px] uppercase font-black tracking-widest bg-zinc-900 hover:bg-black text-white rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      <span>▶️ Activate All Ads</span>
+                      <span>Activate All Ads</span>
                     </button>
                   </div>
                 )}
@@ -1654,7 +1706,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
 
                             <div className="flex gap-4 items-center mt-2 text-zinc-500 text-[10px] font-mono flex-wrap">
                               <div className="flex items-center gap-1 bg-zinc-100/70 border border-zinc-150 px-2 py-0.5 rounded-lg text-zinc-700 font-bold">
-                                <span className="text-orange-600">🎯</span> Click Rate: <span className="text-zinc-900 font-black">{a.clickCount || 0}</span> redirections
+                                Click Rate: <span className="text-zinc-900 font-black">{a.clickCount || 0}</span> redirections
                               </div>
                               <div className="text-[9.5px]">
                                 Created: <span className="font-semibold text-zinc-650">{new Date(a.createdAt).toLocaleString()}</span>
@@ -1692,8 +1744,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                                 setAdTargetUrl(a.targetUrl);
                                 setAdActive(a.active);
                                 setAdPlacement(a.placement || 'workspace');
-                                setAdWelcomeBadge(a.welcomeBadge || 'Sponsored Welcome');
-                                setAdWelcomeTitle(a.welcomeTitle || 'Active Sponsor Bubbles live!');
+                                setAdWelcomeBadge(a.welcomeBadge || 'Welcome');
+                                setAdWelcomeTitle(a.welcomeTitle || 'Active Banners live!');
                                 setAdWelcomeText(a.welcomeText || 'Pop the glossy floating spheres orbiting the workspace to test campaign previews and grab exclusive content offers.');
                               }}
                               className="px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider text-zinc-600 hover:bg-zinc-100 bg-zinc-50 rounded-xl transition cursor-pointer"
@@ -1719,7 +1771,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                     <div className="text-center p-12 bg-zinc-50 rounded-2xl border border-dashed border-zinc-200">
                       <Megaphone className="w-8 h-8 text-zinc-300 mx-auto mb-2" />
                       <p className="text-xs text-zinc-400 font-bold">No registered advertisement banners found.</p>
-                      <p className="text-[10px] text-zinc-400/80 mt-1">Create one using the Sponsor ad form on the left!</p>
+                      <p className="text-[10px] text-zinc-400/80 mt-1">Create one using the ad form on the left!</p>
                     </div>
                   )}
                 </div>
@@ -1782,44 +1834,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                                </div>
                              )}
                              <span className="text-[8.5px] font-black uppercase text-center block tracking-wider px-2 py-0.5 rounded text-blue-700 bg-blue-50 border border-blue-100">
-                               📰 Feed Banner
+                               Feed Banner
                              </span>
                            </div>
 
                            {/* Campaign Copy Details */}
                            <div className="flex-1 min-w-0 space-y-2 text-left w-full">
                              <div>
-                               <h4 className="text-xs font-black text-zinc-900 font-bold">{a.title}</h4>
-                               <p className="text-[10px] text-zinc-500 mt-0.5 font-medium leading-relaxed">{a.description}</p>
+                               <h4 className="text-xs font-black text-zinc-900 font-bold">{a.name || a.title}</h4>
+                               <p className="text-[10px] text-zinc-500 mt-0.5 font-medium leading-relaxed">{a.content || a.description}</p>
                              </div>
 
                              <div className="text-[9.5px] font-mono space-y-1 bg-white/75 border border-zinc-200 p-2.5 rounded-2xl text-zinc-600">
-                               <p>🎯 <span className="font-bold text-zinc-450">Target Link:</span> <a href={a.targetUrl} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline inline-flex items-center gap-0.5">{a.targetUrl} <ExternalLink className="w-2.5 h-2.5 shrink-0" /></a></p>
-                               <p>👤 <span className="font-bold text-zinc-450">Requested by:</span> <span className="text-zinc-800 font-extrabold">{requestor?.email || 'Unknown Client'}</span> ({requestor?.nickname || 'ID: ' + a.userId})</p>
-                               <p>📅 <span className="font-bold text-zinc-450">Schedule Date:</span> <span className="text-zinc-850 font-black">{a.scheduledDate || 'Immediate'}</span></p>
-                               <p>💰 <span className="font-bold text-zinc-450">eSewa Paid:</span> <span className="text-emerald-750 font-black">Rs. {a.amountPaid || 500} NPR</span></p>
+                               <p><span className="font-bold text-zinc-400 uppercase mr-1">Purpose:</span> <span className="text-zinc-800 font-bold">{a.purpose || 'Not specified'}</span></p>
+                               <p><span className="font-bold text-zinc-400 uppercase mr-1">Contact Phone:</span> <span className="text-zinc-800 font-bold">{a.contact || 'Not specified'}</span></p>
+                               <p><span className="font-bold text-zinc-400 uppercase mr-1">Contact Email:</span> <span className="text-zinc-800 font-bold">{a.email || 'Not specified'}</span></p>
+                               <p><span className="font-bold text-zinc-400 uppercase mr-1">Target Location:</span> <span className="text-zinc-800 font-bold">{a.location || 'Not specified'}</span></p>
+                               <p><span className="font-bold text-zinc-400 uppercase mr-1">Requested by:</span> <span className="text-zinc-800 font-extrabold">{requestor?.email || 'Unknown Client'}</span> ({requestor?.nickname || 'ID: ' + a.userId})</p>
+                               <p><span className="font-bold text-zinc-400 uppercase mr-1">Schedule Date:</span> <span className="text-zinc-850 font-black">{a.scheduledDate || 'Immediate'}</span></p>
                              </div>
                            </div>
 
-                           {/* paymentScreenshotUrl and Status/Actions Panel */}
+                           {/* Contact & Workflow Actions Panel */}
                            <div className="w-full lg:w-56 shrink-0 space-y-3 flex flex-col justify-between text-left border-t lg:border-t-0 lg:border-l border-zinc-200 pt-4 lg:pt-0 lg:pl-5">
                              <div>
-                               <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-zinc-400 block mb-1.5">ESewa Payment Proof</span>
-                               {a.paymentScreenshotUrl ? (
-                                 <button
-                                   onClick={() => setSelectedPhotoUrl(a.paymentScreenshotUrl)}
-                                   className="w-full p-2 bg-white hover:bg-zinc-100 border border-zinc-200 rounded-2xl flex items-center gap-2.5 transition text-left cursor-pointer shadow-xs"
-                                 >
-                                   <div className="w-10 h-10 rounded overflow-hidden border border-zinc-200 bg-zinc-50 shrink-0">
-                                     <img src={a.paymentScreenshotUrl} alt="eSewa receipt" className="w-full h-full object-cover" />
-                                   </div>
-                                   <span className="text-[9px] font-black text-indigo-650 hover:underline">View Proof screenshot ➜</span>
-                                 </button>
-                               ) : (
-                                 <div className="p-3 bg-red-50 border border-red-100/50 text-red-700 rounded-xl text-[9.5px] font-bold">
-                                   ⚠️ No payment screenshot receipt uploaded!
-                                 </div>
-                               )}
+                               <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-zinc-400 block mb-1.5">Manual Contact</span>
+                               <div className="p-3 bg-zinc-100 border border-zinc-200 text-zinc-700 rounded-xl text-[9.5px] font-medium leading-relaxed">
+                                 Please reach out directly to the client via email or phone above to coordinate payments and launch. Once aligned, select an action below.
+                               </div>
                              </div>
 
                              {/* Status row and actions */}
@@ -1856,7 +1898,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                                        }}
                                        className="py-1.5 text-[9px] font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition text-center cursor-pointer flex items-center justify-center gap-1"
                                      >
-                                       <span>✔️ Approve</span>
+                                       <span>Approve</span>
                                      </button>
                                      <button
                                        onClick={() => {
@@ -1865,7 +1907,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                                        }}
                                        className="py-1.5 text-[9px] font-black uppercase tracking-widest bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg transition text-center cursor-pointer"
                                      >
-                                       <span>❌ Reject</span>
+                                       <span>Reject</span>
                                      </button>
                                    </>
                                  )}
@@ -1883,7 +1925,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                                        a.active ? 'bg-zinc-100 hover:bg-zinc-205 text-zinc-700' : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                                      }`}
                                    >
-                                     <span>{a.active ? '⏸️ Pause Campaign' : '▶️ Resume Campaign'}</span>
+                                     <span>{a.active ? 'Pause Campaign' : 'Resume Campaign'}</span>
                                    </button>
                                  )}
 

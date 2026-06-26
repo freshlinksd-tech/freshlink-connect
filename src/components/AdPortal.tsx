@@ -29,36 +29,82 @@ interface AdPortalProps {
 
 export const AdPortal: React.FC<AdPortalProps> = ({ currentUser, ads, createOrUpdateAd, deleteAd }) => {
   // Local state
-  const [adStep, setAdStep] = useState<1 | 2>(1);
-  const [adTitle, setAdTitle] = useState('');
-  const [adDescription, setAdDescription] = useState('');
-  const [adTargetUrl, setAdTargetUrl] = useState('');
-  const [adPlacement, setAdPlacement] = useState<'workspace' | 'bubble'>('workspace');
-  const [adImageUrl, setAdImageUrl] = useState('');
-  const [adDurationTier, setAdDurationTier] = useState<'7' | '15' | '30'>('7');
-  const [scheduledDate, setScheduledDate] = useState('');
-  const [paymentScreenshotUrl, setPaymentScreenshotUrl] = useState('');
+  const [submissionMode, setSubmissionMode] = useState<'single' | 'triple'>('single');
+  const [activeAdTab, setActiveAdTab] = useState<0 | 1 | 2>(0);
+
+  // Ad 1 state (using the same variable names for seamless backward-compatibility)
+  const [adName, setAdName] = useState(() => localStorage.getItem('adName') || '');
+  const [adPurpose, setAdPurpose] = useState(() => localStorage.getItem('adPurpose') || '');
+  const [adContact, setAdContact] = useState(() => localStorage.getItem('adContact') || '');
+  const [adContent, setAdContent] = useState(() => localStorage.getItem('adContent') || '');
+  const [adLocation, setAdLocation] = useState(() => localStorage.getItem('adLocation') || '');
+  const [adEmail, setAdEmail] = useState(() => localStorage.getItem('adEmail') || '');
+  const [adImageUrl, setAdImageUrl] = useState(() => localStorage.getItem('adImageUrl') || '');
+
+  // Ad 2 state
+  const [adName2, setAdName2] = useState(() => localStorage.getItem('adName2') || '');
+  const [adPurpose2, setAdPurpose2] = useState(() => localStorage.getItem('adPurpose2') || '');
+  const [adContact2, setAdContact2] = useState(() => localStorage.getItem('adContact2') || '');
+  const [adContent2, setAdContent2] = useState(() => localStorage.getItem('adContent2') || '');
+  const [adLocation2, setAdLocation2] = useState(() => localStorage.getItem('adLocation2') || '');
+  const [adEmail2, setAdEmail2] = useState(() => localStorage.getItem('adEmail2') || '');
+  const [adImageUrl2, setAdImageUrl2] = useState(() => localStorage.getItem('adImageUrl2') || '');
+
+  // Ad 3 state
+  const [adName3, setAdName3] = useState(() => localStorage.getItem('adName3') || '');
+  const [adPurpose3, setAdPurpose3] = useState(() => localStorage.getItem('adPurpose3') || '');
+  const [adContact3, setAdContact3] = useState(() => localStorage.getItem('adContact3') || '');
+  const [adContent3, setAdContent3] = useState(() => localStorage.getItem('adContent3') || '');
+  const [adLocation3, setAdLocation3] = useState(() => localStorage.getItem('adLocation3') || '');
+  const [adEmail3, setAdEmail3] = useState(() => localStorage.getItem('adEmail3') || '');
+  const [adImageUrl3, setAdImageUrl3] = useState(() => localStorage.getItem('adImageUrl3') || '');
+
+  const [scheduledDate, setScheduledDate] = useState(() => localStorage.getItem('scheduledDate') || '');
   const [adSuccess, setAdSuccess] = useState('');
   const [adError, setAdError] = useState('');
   const [isAdSubmitting, setIsAdSubmitting] = useState(false);
+
+  // Sync state to localStorage
+  React.useEffect(() => {
+    localStorage.setItem('adName', adName);
+    localStorage.setItem('adPurpose', adPurpose);
+    localStorage.setItem('adContact', adContact);
+    localStorage.setItem('adContent', adContent);
+    localStorage.setItem('adLocation', adLocation);
+    localStorage.setItem('adEmail', adEmail);
+    localStorage.setItem('adImageUrl', adImageUrl);
+
+    localStorage.setItem('adName2', adName2);
+    localStorage.setItem('adPurpose2', adPurpose2);
+    localStorage.setItem('adContact2', adContact2);
+    localStorage.setItem('adContent2', adContent2);
+    localStorage.setItem('adLocation2', adLocation2);
+    localStorage.setItem('adEmail2', adEmail2);
+    localStorage.setItem('adImageUrl2', adImageUrl2);
+
+    localStorage.setItem('adName3', adName3);
+    localStorage.setItem('adPurpose3', adPurpose3);
+    localStorage.setItem('adContact3', adContact3);
+    localStorage.setItem('adContent3', adContent3);
+    localStorage.setItem('adLocation3', adLocation3);
+    localStorage.setItem('adEmail3', adEmail3);
+    localStorage.setItem('adImageUrl3', adImageUrl3);
+
+    localStorage.setItem('scheduledDate', scheduledDate);
+  }, [
+    adName, adPurpose, adContact, adContent, adLocation, adEmail, adImageUrl,
+    adName2, adPurpose2, adContact2, adContent2, adLocation2, adEmail2, adImageUrl2,
+    adName3, adPurpose3, adContact3, adContent3, adLocation3, adEmail3, adImageUrl3,
+    scheduledDate
+  ]);
 
   const myAdRequests = useMemo(() => {
     if (!currentUser || !ads) return [];
     return ads.filter(a => a.userId === currentUser.id);
   }, [ads, currentUser]);
 
-  const getTierDetails = (tier: string) => {
-    switch (tier) {
-      case '7': return { days: 7, price: 500, label: 'Micro Banner Spark (7 Days)' };
-      case '15': return { days: 15, price: 1000, label: 'Growth Accelerator (15 Days)' };
-      case '30': return { days: 30, price: 1800, label: 'Ecosystem Elite (30 Days)' };
-      default: return { days: 7, price: 500, label: 'Micro Banner Spark (7 Days)' };
-    }
-  };
 
-  const selectedTier = getTierDetails(adDurationTier);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, target: 'banner' | 'screenshot') => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, tabIndex: number) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 1.5 * 1024 * 1024) {
@@ -67,11 +113,10 @@ export const AdPortal: React.FC<AdPortalProps> = ({ currentUser, ads, createOrUp
       }
       const reader = new FileReader();
       reader.onloadend = () => {
-        if (target === 'banner') {
-          setAdImageUrl(reader.result as string);
-        } else {
-          setPaymentScreenshotUrl(reader.result as string);
-        }
+        const resultStr = reader.result as string;
+        if (tabIndex === 0) setAdImageUrl(resultStr);
+        else if (tabIndex === 1) setAdImageUrl2(resultStr);
+        else setAdImageUrl3(resultStr);
       };
       reader.readAsDataURL(file);
     }
@@ -82,53 +127,118 @@ export const AdPortal: React.FC<AdPortalProps> = ({ currentUser, ads, createOrUp
     setAdError('');
     setAdSuccess('');
 
-    if (!adTitle.trim() || !adDescription.trim() || !adTargetUrl.trim() || !adImageUrl) {
-      setAdError("Validation failed: Please complete all campaign creative fields.");
-      return;
-    }
-
     if (!scheduledDate) {
       setAdError("Validation failed: Please specify a target launch schedule date.");
       return;
     }
 
-    if (!paymentScreenshotUrl) {
-      setAdError("Validation failed: Please upload your eSewa transaction screenshot receipt.");
-      return;
-    }
-
     setIsAdSubmitting(true);
     try {
-      const adId = `ad_req_${Date.now()}`;
-      await createOrUpdateAd({
-        id: adId,
-        title: adTitle.trim(),
-        description: adDescription.trim(),
-        imageUrl: adImageUrl,
-        targetUrl: adTargetUrl.trim(),
-        active: false,
-        placement: adPlacement,
-        userId: currentUser.id,
-        paymentScreenshotUrl: paymentScreenshotUrl,
-        status: 'pending',
-        amountPaid: selectedTier.price,
-        paymentStatus: 'pending',
-        scheduledDate: scheduledDate,
-        createdAt: new Date().toISOString(),
-        welcomeBadge: adPlacement === 'bubble' ? 'Sponsored Welcome' : undefined,
-        welcomeTitle: adPlacement === 'bubble' ? 'Active Sponsor Bubbles live!' : undefined,
-        welcomeText: adPlacement === 'bubble' ? 'Pop this glossy bubble orbiting your feed to test and view this campaign.' : undefined
-      });
+      if (submissionMode === 'single') {
+        if (!adName.trim() || !adPurpose.trim() || !adContact.trim() || !adContent.trim() || !adLocation.trim() || !adEmail.trim() || !adImageUrl) {
+          setAdError("Validation failed: Please complete all campaign fields for Ad #1.");
+          setIsAdSubmitting(false);
+          return;
+        }
+        const adId = `ad_req_${Date.now()}`;
+        await createOrUpdateAd({
+          id: adId,
+          userId: currentUser.id,
+          name: adName.trim(),
+          purpose: adPurpose.trim(),
+          contact: adContact.trim(),
+          content: adContent.trim(),
+          location: adLocation.trim(),
+          email: adEmail.trim(),
+          imageUrl: adImageUrl,
+          active: false,
+          status: 'pending',
+          scheduledDate: scheduledDate,
+          createdAt: new Date().toISOString()
+        });
 
-      setAdSuccess(`Success! Your campaign "${adTitle}" has been queued. Admin will verify your eSewa receipt and activate it.`);
-      // Clear forms
-      setAdTitle('');
-      setAdDescription('');
-      setAdTargetUrl('');
-      setAdImageUrl('');
-      setPaymentScreenshotUrl('');
+        setAdSuccess(`Success! Your campaign "${adName}" has been submitted for review.`);
+        
+        // Clear form 1
+        setAdName('');
+        setAdPurpose('');
+        setAdContact('');
+        setAdContent('');
+        setAdLocation('');
+        setAdEmail('');
+        setAdImageUrl('');
+      } else {
+        // Validate all 3 ads
+        if (!adName.trim() || !adPurpose.trim() || !adContact.trim() || !adContent.trim() || !adLocation.trim() || !adEmail.trim() || !adImageUrl ||
+            !adName2.trim() || !adPurpose2.trim() || !adContact2.trim() || !adContent2.trim() || !adLocation2.trim() || !adEmail2.trim() || !adImageUrl2 ||
+            !adName3.trim() || !adPurpose3.trim() || !adContact3.trim() || !adContent3.trim() || !adLocation3.trim() || !adEmail3.trim() || !adImageUrl3) {
+          setAdError("Validation failed: Please complete all fields and upload images for all 3 Ads in the Triple Package.");
+          setIsAdSubmitting(false);
+          return;
+        }
+
+        const now = Date.now();
+        
+        // Save Ad 1
+        await createOrUpdateAd({
+          id: `ad_req_${now}_1`,
+          userId: currentUser.id,
+          name: adName.trim(),
+          purpose: adPurpose.trim(),
+          contact: adContact.trim(),
+          content: adContent.trim(),
+          location: adLocation.trim(),
+          email: adEmail.trim(),
+          imageUrl: adImageUrl,
+          active: false,
+          status: 'pending',
+          scheduledDate: scheduledDate,
+          createdAt: new Date().toISOString()
+        });
+
+        // Save Ad 2
+        await createOrUpdateAd({
+          id: `ad_req_${now}_2`,
+          userId: currentUser.id,
+          name: adName2.trim(),
+          purpose: adPurpose2.trim(),
+          contact: adContact2.trim(),
+          content: adContent2.trim(),
+          location: adLocation2.trim(),
+          email: adEmail2.trim(),
+          imageUrl: adImageUrl2,
+          active: false,
+          status: 'pending',
+          scheduledDate: scheduledDate,
+          createdAt: new Date().toISOString()
+        });
+
+        // Save Ad 3
+        await createOrUpdateAd({
+          id: `ad_req_${now}_3`,
+          userId: currentUser.id,
+          name: adName3.trim(),
+          purpose: adPurpose3.trim(),
+          contact: adContact3.trim(),
+          content: adContent3.trim(),
+          location: adLocation3.trim(),
+          email: adEmail3.trim(),
+          imageUrl: adImageUrl3,
+          active: false,
+          status: 'pending',
+          scheduledDate: scheduledDate,
+          createdAt: new Date().toISOString()
+        });
+
+        setAdSuccess(`Success! All 3 of your campaigns have been successfully queued and submitted for manual review.`);
+        
+        // Clear all forms
+        setAdName(''); setAdPurpose(''); setAdContact(''); setAdContent(''); setAdLocation(''); setAdEmail(''); setAdImageUrl('');
+        setAdName2(''); setAdPurpose2(''); setAdContact2(''); setAdContent2(''); setAdLocation2(''); setAdEmail2(''); setAdImageUrl2('');
+        setAdName3(''); setAdPurpose3(''); setAdContact3(''); setAdContent3(''); setAdLocation3(''); setAdEmail3(''); setAdImageUrl3('');
+        setActiveAdTab(0);
+      }
       setScheduledDate('');
-      setAdStep(1);
     } catch (err) {
       setAdError("Database clearance failed: unable to submit ad request.");
     } finally {
@@ -140,19 +250,19 @@ export const AdPortal: React.FC<AdPortalProps> = ({ currentUser, ads, createOrUp
     <div className="space-y-8 text-left animate-in fade-in duration-200" id="ad-promotion-portal-section">
       
       {/* Info and Intro Banner */}
-      <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-3xl p-5 md:p-6 border border-emerald-250/60 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-left">
+      <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-3xl p-5 md:p-6 border border-emerald-200/60 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-left">
         <div className="space-y-1">
           <h3 className="text-sm font-black text-emerald-900 flex items-center gap-2 uppercase tracking-wider">
             <Megaphone className="w-5 h-5 text-emerald-600 animate-pulse" />
-            Sponsor Ads on FreshLink Connect
+            Advertise on FreshLink Connect
           </h3>
           <p className="text-xs text-emerald-800 font-medium leading-relaxed max-w-2xl">
-            Reach our active creator community directly. Put up a prominent <strong>Workspace Feed Banner</strong> or distribute <strong>Interactive Floating Bubbles</strong>. Pay instantly via eSewa and manage your campaigns below.
+            Reach our active creator community directly. Put up a prominent <strong>Workspace Feed Banner</strong>. Submit your details below, and our administration team will review your proposal and get in touch manually to schedule activation.
           </p>
         </div>
         <div className="shrink-0 bg-white/80 backdrop-blur-md border border-emerald-200/60 px-4 py-2.5 rounded-2xl text-right">
-          <span className="text-[10px] font-bold text-emerald-900 uppercase tracking-widest block">Starts From Only</span>
-          <span className="text-sm font-black text-emerald-600">Rs. 500 <span className="text-[9.5px] font-normal text-zinc-500 font-sans tracking-normal">for 7 Days</span></span>
+          <span className="text-[10px] font-bold text-emerald-900 uppercase tracking-widest block">Review Duration</span>
+          <span className="text-sm font-black text-emerald-600">Manual review <span className="text-[9.5px] font-normal text-zinc-500 font-sans tracking-normal">within 24 hours</span></span>
         </div>
       </div>
 
@@ -179,265 +289,278 @@ export const AdPortal: React.FC<AdPortalProps> = ({ currentUser, ads, createOrUp
           <div className="flex items-center justify-between border-b border-zinc-100 pb-4">
             <div>
               <h3 className="text-sm font-black text-zinc-900 uppercase tracking-tight">
-                {adStep === 1 ? 'Step 1: Campaign Composition' : 'Step 2: eSewa Gateway Verification'}
+                Campaign Submission
               </h3>
               <p className="text-[11px] text-zinc-400 font-medium">
-                {adStep === 1 ? 'Design your advertisement banner and targeting parameters' : 'Complete the billing and upload your payment transaction screenshot receipt'}
+                Complete the details below to request a new ad campaign.
               </p>
             </div>
-            <span className="text-xs font-mono font-black text-emerald-650 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 shrink-0">
-              {adStep} / 2
-            </span>
           </div>
 
-          {adStep === 1 ? (
-            <div className="space-y-5">
-              
-              {/* Campaign Duration Tier */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Campaign Duration & Pricing Tier</label>
-                <div className="grid grid-cols-3 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setAdDurationTier('7')}
-                    className={`p-3 rounded-xl transition border text-left flex flex-col justify-between h-20 ${
-                      adDurationTier === '7' 
-                        ? 'bg-emerald-50/50 border-emerald-500 ring-1 ring-emerald-500' 
-                        : 'bg-zinc-50 border-zinc-200 hover:bg-zinc-100'
-                    }`}
-                  >
-                    <span className="text-[10px] font-extrabold uppercase text-zinc-400 tracking-wider">7 Days</span>
-                    <span className="text-xs font-black text-zinc-900">Rs. 500 NPR</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAdDurationTier('15')}
-                    className={`p-3 rounded-xl transition border text-left flex flex-col justify-between h-20 ${
-                      adDurationTier === '15' 
-                        ? 'bg-emerald-50/50 border-emerald-500 ring-1 ring-emerald-500' 
-                        : 'bg-zinc-50 border-zinc-200 hover:bg-zinc-100'
-                    }`}
-                  >
-                    <span className="text-[10px] font-extrabold uppercase text-zinc-400 tracking-wider">15 Days</span>
-                    <span className="text-xs font-black text-zinc-900">Rs. 1,000 NPR</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAdDurationTier('30')}
-                    className={`p-3 rounded-xl transition border text-left flex flex-col justify-between h-20 ${
-                      adDurationTier === '30' 
-                        ? 'bg-emerald-50/50 border-emerald-500 ring-1 ring-emerald-500' 
-                        : 'bg-zinc-50 border-zinc-200 hover:bg-zinc-100'
-                    }`}
-                  >
-                    <span className="text-[10px] font-extrabold uppercase text-zinc-400 tracking-wider">30 Days</span>
-                    <span className="text-xs font-black text-zinc-900">Rs. 1,800 NPR</span>
-                  </button>
-                </div>
-              </div>
+          {/* Campaign Mode Selector */}
+          <div className="bg-zinc-100 p-1 rounded-2xl flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setSubmissionMode('single')}
+              className={`flex-1 py-2 text-center text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
+                submissionMode === 'single'
+                  ? 'bg-white text-zinc-950 shadow-xs border border-zinc-200/40'
+                  : 'text-zinc-500 hover:text-zinc-800'
+              }`}
+            >
+              Single Ad Campaign
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSubmissionMode('triple');
+                setActiveAdTab(0);
+              }}
+              className={`flex-1 py-2 text-center text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
+                submissionMode === 'triple'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-zinc-500 hover:text-zinc-800'
+              }`}
+            >
+              Triple Ad Campaign (3 Ads Package) ✨
+            </button>
+          </div>
 
-              {/* Headline */}
+          {/* Tab Selector inside Triple Campaign Mode */}
+          {submissionMode === 'triple' && (
+            <div className="bg-zinc-50 p-2 rounded-2xl border border-zinc-200/60 flex items-center gap-1.5 flex-wrap">
+              {[0, 1, 2].map((idx) => {
+                const img = idx === 0 ? adImageUrl : idx === 1 ? adImageUrl2 : adImageUrl3;
+                const name = idx === 0 ? adName : idx === 1 ? adName2 : adName3;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setActiveAdTab(idx as 0 | 1 | 2)}
+                    className={`px-3 py-1.5 rounded-xl text-[9px] font-mono font-extrabold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer border ${
+                      activeAdTab === idx
+                        ? 'bg-zinc-900 text-white border-zinc-900 shadow-xs'
+                        : 'bg-white hover:bg-zinc-100 text-zinc-600 border-zinc-200'
+                    }`}
+                  >
+                    <span>Ad Campaign #{idx + 1}</span>
+                    {img && <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shrink-0" />}
+                    {name.trim() && <span className="text-[8px] lowercase opacity-60">({name.trim().slice(0, 6)}...)</span>}
+                  </button>
+                );
+              })}
+              
+              <button
+                type="button"
+                onClick={() => {
+                  if (!adName || !adPurpose || !adContact || !adLocation || !adEmail) {
+                    setAdError("Please fill out Ad #1 details first before copying.");
+                    return;
+                  }
+                  setAdName2(adName);
+                  setAdPurpose2(adPurpose);
+                  setAdContact2(adContact);
+                  setAdLocation2(adLocation);
+                  setAdEmail2(adEmail);
+                  
+                  setAdName3(adName);
+                  setAdPurpose3(adPurpose);
+                  setAdContact3(adContact);
+                  setAdLocation3(adLocation);
+                  setAdEmail3(adEmail);
+
+                  setAdSuccess("Successfully duplicated Ad #1 details to Ad #2 and Ad #3! You can now adjust their contents and upload images.");
+                  setTimeout(() => setAdSuccess(''), 4500);
+                }}
+                className="ml-auto text-[8.5px] font-mono font-black uppercase tracking-wider text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-xl border border-emerald-200/60 transition-all cursor-pointer"
+                title="Copy name, purpose, contact, location, and email from Ad 1 to all slots"
+              >
+                ⚡ Copy Ad #1 Info to All
+              </button>
+            </div>
+          )}
+
+            <form onSubmit={handleAdSubmit} className="space-y-5">
+              
+              {/* Campaign Details */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Ad Headline Title</label>
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">
+                    Campaign Name {submissionMode === 'triple' && `(Ad #${activeAdTab + 1})`}
+                  </label>
+                  {submissionMode === 'triple' && (
+                    <span className="text-[8.5px] font-mono text-emerald-600 font-bold uppercase">Editing Tab {activeAdTab + 1} of 3</span>
+                  )}
+                </div>
                 <input
                   type="text"
                   required
-                  value={adTitle}
-                  onChange={(e) => setAdTitle(e.target.value)}
-                  placeholder="e.g. Visit Nepal Tourism Promo"
+                  value={
+                    submissionMode === 'single'
+                      ? adName
+                      : activeAdTab === 0
+                      ? adName
+                      : activeAdTab === 1
+                      ? adName2
+                      : adName3
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (submissionMode === 'single') setAdName(val);
+                    else if (activeAdTab === 0) setAdName(val);
+                    else if (activeAdTab === 1) setAdName2(val);
+                    else setAdName3(val);
+                  }}
+                  placeholder={activeAdTab === 0 ? "e.g. Nepal Tourism" : activeAdTab === 1 ? "e.g. Pokhara Adventure Travel" : "e.g. Chitwan Wild Safari"}
                   className="w-full px-4 py-2.5 rounded-xl bg-[#F8F7F4] focus:bg-white border border-zinc-200 text-xs font-bold text-zinc-850 outline-none focus:border-emerald-500 transition-colors"
                 />
               </div>
 
-              {/* Description Copy */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Short Ad Copy (Description)</label>
+                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">
+                  Campaign Purpose {submissionMode === 'triple' && `(Ad #${activeAdTab + 1})`}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={
+                    submissionMode === 'single'
+                      ? adPurpose
+                      : activeAdTab === 0
+                      ? adPurpose
+                      : activeAdTab === 1
+                      ? adPurpose2
+                      : adPurpose3
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (submissionMode === 'single') setAdPurpose(val);
+                    else if (activeAdTab === 0) setAdPurpose(val);
+                    else if (activeAdTab === 1) setAdPurpose2(val);
+                    else setAdPurpose3(val);
+                  }}
+                  placeholder="e.g. Brand Awareness / Product Promotion"
+                  className="w-full px-4 py-2.5 rounded-xl bg-[#F8F7F4] focus:bg-white border border-zinc-200 text-xs font-bold text-zinc-850 outline-none focus:border-emerald-500 transition-colors"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">
+                  Contact Phone {submissionMode === 'triple' && `(Ad #${activeAdTab + 1})`}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={
+                    submissionMode === 'single'
+                      ? adContact
+                      : activeAdTab === 0
+                      ? adContact
+                      : activeAdTab === 1
+                      ? adContact2
+                      : adContact3
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (submissionMode === 'single') setAdContact(val);
+                    else if (activeAdTab === 0) setAdContact(val);
+                    else if (activeAdTab === 1) setAdContact2(val);
+                    else setAdContact3(val);
+                  }}
+                  placeholder="e.g. +977-98xxxxxxxx"
+                  className="w-full px-4 py-2.5 rounded-xl bg-[#F8F7F4] focus:bg-white border border-zinc-200 text-xs font-bold text-zinc-850 outline-none focus:border-emerald-500 transition-colors"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">
+                  Campaign Description {submissionMode === 'triple' && `(Ad #${activeAdTab + 1})`}
+                </label>
                 <textarea
                   required
                   rows={3}
-                  value={adDescription}
-                  onChange={(e) => setAdDescription(e.target.value)}
-                  placeholder="e.g. Discover breathtaking views, organic mountain tea, and beautiful local homestays. Get 20% off bookings today!"
+                  value={
+                    submissionMode === 'single'
+                      ? adContent
+                      : activeAdTab === 0
+                      ? adContent
+                      : activeAdTab === 1
+                      ? adContent2
+                      : adContent3
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (submissionMode === 'single') setAdContent(val);
+                    else if (activeAdTab === 0) setAdContent(val);
+                    else if (activeAdTab === 1) setAdContent2(val);
+                    else setAdContent3(val);
+                  }}
+                  placeholder="e.g. Get 20% discount on flight tickets. Limitless exploration awaits..."
                   className="w-full px-4 py-2.5 rounded-xl bg-[#F8F7F4] focus:bg-white border border-zinc-200 text-xs font-medium text-zinc-800 outline-none focus:border-emerald-500 transition-colors"
                 />
               </div>
 
-              {/* Target link */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Destination Link Redirection URL</label>
+                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">
+                  Location {submissionMode === 'triple' && `(Ad #${activeAdTab + 1})`}
+                </label>
                 <input
-                  type="url"
+                  type="text"
                   required
-                  value={adTargetUrl}
-                  onChange={(e) => setAdTargetUrl(e.target.value)}
-                  placeholder="e.g. https://www.visitnepaltours.com"
-                  className="w-full px-4 py-2.5 rounded-xl bg-[#F8F7F4] focus:bg-white border border-zinc-200 text-xs font-mono text-zinc-800 outline-none focus:border-emerald-500 transition-colors"
+                  value={
+                    submissionMode === 'single'
+                      ? adLocation
+                      : activeAdTab === 0
+                      ? adLocation
+                      : activeAdTab === 1
+                      ? adLocation2
+                      : adLocation3
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (submissionMode === 'single') setAdLocation(val);
+                    else if (activeAdTab === 0) setAdLocation(val);
+                    else if (activeAdTab === 1) setAdLocation2(val);
+                    else setAdLocation3(val);
+                  }}
+                  placeholder="e.g. Kathmandu, Nepal"
+                  className="w-full px-4 py-2.5 rounded-xl bg-[#F8F7F4] focus:bg-white border border-zinc-200 text-xs font-bold text-zinc-850 outline-none focus:border-emerald-500 transition-colors"
                 />
               </div>
 
-              {/* Banner Image file or URL selection */}
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Ad Banner Image Asset</label>
-                  <span className="text-[8.5px] font-mono text-zinc-400 uppercase">JPEG / PNG Under 1.5MB</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-zinc-50 p-3 rounded-2xl border border-zinc-150">
-                  {/* File upload click target */}
-                  <div className="relative border border-dashed border-zinc-250 hover:bg-zinc-100/50 rounded-xl transition overflow-hidden h-24 flex flex-col items-center justify-center p-3 text-center cursor-pointer">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleFileChange(e, 'banner')}
-                      className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                    />
-                    <Upload className="w-5 h-5 text-zinc-400 mb-1" />
-                    <span className="text-[9.5px] font-black text-zinc-700">Choose local image</span>
-                    <span className="text-[8.5px] text-zinc-400">or drag and drop</span>
-                  </div>
-
-                  {/* Image URL text input as fallback */}
-                  <div className="flex flex-col justify-center space-y-1">
-                    <span className="text-[8.5px] font-mono font-bold uppercase tracking-wider text-zinc-400">Or Paste Image URL</span>
-                    <input
-                      type="text"
-                      value={adImageUrl}
-                      onChange={(e) => setAdImageUrl(e.target.value)}
-                      placeholder="https://images.unsplash.com/..."
-                      className="w-full px-3 py-2 rounded-lg bg-white border border-zinc-200 text-[10px] font-mono text-zinc-850 outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Stock Preset recommendations */}
-                <div className="flex items-center gap-1.5 overflow-x-auto py-1">
-                  <span className="text-[8.5px] font-mono uppercase text-zinc-400 shrink-0 font-bold">Presets:</span>
-                  <button
-                    type="button"
-                    onClick={() => setAdImageUrl('https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=600&q=80')}
-                    className="px-2 py-0.5 rounded-md bg-zinc-100 text-[9px] text-zinc-650 hover:bg-zinc-200 border border-zinc-200 cursor-pointer shrink-0 font-bold"
-                  >
-                    Nepal Mountains 🏔️
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAdImageUrl('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=600&q=80')}
-                    className="px-2 py-0.5 rounded-md bg-zinc-100 text-[9px] text-zinc-650 hover:bg-zinc-200 border border-zinc-200 cursor-pointer shrink-0 font-bold"
-                  >
-                    Corporate Branding 🏢
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAdImageUrl('https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=600&q=80')}
-                    className="px-2 py-0.5 rounded-md bg-zinc-100 text-[9px] text-zinc-650 hover:bg-zinc-200 border border-zinc-200 cursor-pointer shrink-0 font-bold"
-                  >
-                    Startup Team 🚀
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (!adTitle.trim() || !adDescription.trim() || !adTargetUrl.trim() || !adImageUrl) {
-                    setAdError("Composition incomplete: Please fill in Title, Description, Redirect URL, and Banner Image!");
-                    return;
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">
+                  Contact Email {submissionMode === 'triple' && `(Ad #${activeAdTab + 1})`}
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={
+                    submissionMode === 'single'
+                      ? adEmail
+                      : activeAdTab === 0
+                      ? adEmail
+                      : activeAdTab === 1
+                      ? adEmail2
+                      : adEmail3
                   }
-                  setAdError('');
-                  setAdStep(2);
-                }}
-                className="w-full py-3 bg-zinc-950 hover:bg-black text-white font-sans font-black uppercase text-[10px] tracking-widest rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
-              >
-                <span>Proceed to eSewa Checkout</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={handleAdSubmit} className="space-y-5 animate-in slide-in-from-right duration-150">
-              
-              {/* Nepal eSewa Invoice Summary Sheet */}
-              <div className="bg-[#60bb46]/5 rounded-3xl p-5 border border-[#60bb46]/20 space-y-4">
-                <div className="flex justify-between items-center border-b border-[#60bb46]/10 pb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-[#60bb46] flex items-center justify-center text-white font-black text-xs font-sans">
-                      e
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-mono font-bold text-[#60bb46] uppercase block">eSewa Merchant Invoice</span>
-                      <span className="text-xs font-black text-zinc-900">FreshLink Ad Portal</span>
-                    </div>
-                  </div>
-                  <span className="text-[9px] font-mono bg-[#60bb46]/20 text-[#2E7D32] border border-[#60bb46]/35 px-2.5 py-0.5 rounded-full font-black uppercase">
-                    READY TO PAY
-                  </span>
-                </div>
-
-                <div className="space-y-2 text-xs">
-                  <div className="flex justify-between font-semibold text-zinc-500">
-                    <span>Selected Campaign Tier</span>
-                    <span className="text-zinc-800 font-extrabold">{selectedTier.label}</span>
-                  </div>
-                  <div className="flex justify-between font-semibold text-zinc-500">
-                    <span>Ad Placement Style</span>
-                    <span className="text-zinc-800 font-extrabold uppercase">{adPlacement}</span>
-                  </div>
-                  <div className="flex justify-between font-semibold text-zinc-500">
-                    <span>Estimated Campaign Views</span>
-                    <span className="text-[#2E7D32] font-extrabold">Unlimited Impressions</span>
-                  </div>
-                  <div className="border-t border-[#60bb46]/10 pt-2.5 flex justify-between items-end">
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase font-mono">Total NPR Payable</span>
-                    <span className="text-lg font-black text-[#60bb46]">Rs. {selectedTier.price.toLocaleString()}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* QR Code Container and Transfer Guides */}
-              <div className="bg-zinc-50 rounded-3xl p-5 border border-zinc-200 text-center space-y-4">
-                <div className="space-y-1">
-                  <span className="text-[10px] font-black uppercase text-zinc-400 font-mono tracking-widest block">ESewa merchant Scan QR</span>
-                  <p className="text-[10.5px] text-zinc-500 leading-snug font-medium max-w-sm mx-auto">
-                    Open eSewa mobile app, click the QR scanner, scan the merchant QR below, and complete transfer of exactly <strong>Rs. {selectedTier.price} NPR</strong>.
-                  </p>
-                </div>
-
-                {/* Our beautifully dynamic eSewa scan-to-pay QR code representation */}
-                <div className="relative w-48 h-48 mx-auto shadow-md rounded-2xl overflow-hidden bg-white">
-                  <svg className="w-full h-full border-4 border-[#60bb46] p-2 rounded-2xl bg-white" viewBox="0 0 100 100">
-                    <rect width="100" height="100" rx="10" fill="#f4faf6" />
-                    <rect x="10" y="10" width="25" height="25" fill="#1e293b" />
-                    <rect x="14" y="14" width="17" height="17" fill="#ffffff" />
-                    <rect x="18" y="18" width="9" height="9" fill="#1e293b" />
-                    <rect x="65" y="10" width="25" height="25" fill="#1e293b" />
-                    <rect x="69" y="14" width="17" height="17" fill="#ffffff" />
-                    <rect x="73" y="18" width="9" height="9" fill="#1e293b" />
-                    <rect x="10" y="65" width="25" height="25" fill="#1e293b" />
-                    <rect x="14" y="69" width="17" height="17" fill="#ffffff" />
-                    <rect x="18" y="73" width="9" height="9" fill="#1e293b" />
-                    <rect x="42" y="10" width="5" height="10" fill="#60bb46" />
-                    <rect x="52" y="15" width="10" height="5" fill="#1e293b" />
-                    <rect x="42" y="25" width="15" height="5" fill="#1e293b" />
-                    <rect x="10" y="42" width="10" height="5" fill="#1e293b" />
-                    <rect x="15" y="52" width="5" height="10" fill="#60bb46" />
-                    <rect x="25" y="42" width="5" height="15" fill="#1e293b" />
-                    <rect x="42" y="42" width="15" height="15" fill="#1e293b" />
-                    <rect x="47" y="47" width="5" height="5" fill="#ffffff" />
-                    <rect x="65" y="42" width="5" height="10" fill="#1e293b" />
-                    <rect x="75" y="52" width="15" height="5" fill="#60bb46" />
-                    <rect x="42" y="65" width="10" height="5" fill="#60bb46" />
-                    <rect x="52" y="75" width="5" height="15" fill="#1e293b" />
-                    <rect x="65" y="65" width="15" height="15" fill="#1e293b" />
-                    <rect x="70" y="70" width="5" height="5" fill="#ffffff" />
-                    <rect x="85" y="85" width="5" height="5" fill="#60bb46" />
-                    <rect x="80" y="75" width="5" height="5" fill="#1e293b" />
-                    <rect x="40" y="40" width="20" height="20" rx="4" fill="#60bb46" stroke="#ffffff" strokeWidth="2" />
-                    <text x="50" y="52" textAnchor="middle" fill="#ffffff" fontSize="7" fontWeight="bold" fontFamily="sans-serif">eSewa</text>
-                  </svg>
-                </div>
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (submissionMode === 'single') setAdEmail(val);
+                    else if (activeAdTab === 0) setAdEmail(val);
+                    else if (activeAdTab === 1) setAdEmail2(val);
+                    else setAdEmail3(val);
+                  }}
+                  placeholder="e.g. marketing@example.com"
+                  className="w-full px-4 py-2.5 rounded-xl bg-[#F8F7F4] focus:bg-white border border-zinc-200 text-xs font-bold text-zinc-850 outline-none focus:border-emerald-500 transition-colors"
+                />
               </div>
 
               {/* Schedule Go Live Date */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Target Scheduled Launch Date</label>
+                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">
+                  Target Scheduled Launch Date {submissionMode === 'triple' && '(Applies to all 3 Ads)'}
+                </label>
                 <div className="relative">
                   <input
                     type="date"
@@ -451,100 +574,125 @@ export const AdPortal: React.FC<AdPortalProps> = ({ currentUser, ads, createOrUp
                 </div>
               </div>
 
-              {/* Payment Receipt Upload Target */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">Upload Screenshot of Completed Transaction Receipt</label>
-                {paymentScreenshotUrl ? (
-                  <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-2xl flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-lg overflow-hidden border border-zinc-250 shrink-0">
-                        <img src={paymentScreenshotUrl} alt="eSewa Receipt Thumbnail" className="w-full h-full object-cover" />
-                      </div>
-                      <div>
-                        <p className="text-[10.5px] font-black text-zinc-800">Screenshot Loaded</p>
-                        <p className="text-[9px] text-zinc-400">Click button on right to select another</p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setPaymentScreenshotUrl('')}
-                      className="text-[9px] font-black uppercase text-red-650 hover:underline px-3 py-1 rounded-lg hover:bg-red-50 border border-transparent transition cursor-pointer"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ) : (
-                  <div className="relative border border-dashed border-zinc-300 hover:bg-zinc-50 rounded-2xl transition overflow-hidden p-6 text-center cursor-pointer flex flex-col items-center justify-center">
+              {/* Banner Image file or URL selection */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">
+                    Ad Banner Image Asset {submissionMode === 'triple' && `(Ad #${activeAdTab + 1})`}
+                  </label>
+                  <span className="text-[8.5px] font-mono text-zinc-400 uppercase">JPEG / PNG Under 1.5MB</span>
+                </div>
+                <div className="grid grid-cols-1 gap-3 bg-zinc-50 p-3 rounded-2xl border border-zinc-150">
+                  <div className="relative border border-dashed border-zinc-250 hover:bg-zinc-100/50 rounded-xl transition overflow-hidden h-24 flex flex-col items-center justify-center p-3 text-center cursor-pointer">
                     <input
                       type="file"
                       accept="image/*"
-                      required
-                      onChange={(e) => handleFileChange(e, 'screenshot')}
+                      onChange={(e) => handleFileChange(e, submissionMode === 'single' ? 0 : activeAdTab)}
                       className="absolute inset-0 opacity-0 cursor-pointer z-10"
                     />
-                    <Upload className="w-6 h-6 text-[#60bb46] mb-1.5 animate-bounce" />
-                    <span className="text-[10.5px] font-black text-zinc-850">Select eSewa Screenshot Proof</span>
-                    <span className="text-[9px] text-zinc-400">PNG / JPEG under 1.5MB</span>
+                    <Upload className="w-5 h-5 text-zinc-400 mb-1" />
+                    <span className="text-[9.5px] font-black text-zinc-700">Choose local image for Ad #{submissionMode === 'single' ? 1 : activeAdTab + 1}</span>
+                    <span className="text-[8.5px] text-zinc-400">or drag and drop</span>
                   </div>
-                )}
+                  {(submissionMode === 'single' ? adImageUrl : activeAdTab === 0 ? adImageUrl : activeAdTab === 1 ? adImageUrl2 : adImageUrl3) && (
+                    <div className="text-[9px] text-zinc-500 font-mono text-center flex items-center justify-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
+                      Image asset successfully loaded
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setAdStep(1)}
-                  className="px-4 py-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-750 font-sans font-bold uppercase tracking-wider text-[10px] rounded-xl transition flex items-center gap-1 cursor-pointer border border-zinc-200"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span>Back</span>
-                </button>
-                <button
-                  type="submit"
-                  disabled={isAdSubmitting}
-                  className="flex-1 py-3 bg-[#60bb46] hover:bg-[#4fa037] disabled:bg-zinc-200 text-white font-sans font-black uppercase text-[10px] tracking-widest rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
-                >
-                  <Check className="w-4 h-4 shrink-0" />
-                  <span>{isAdSubmitting ? 'Submitting Receipt...' : 'Submit Campaign for Review'}</span>
-                </button>
-              </div>
-
+              <button
+                type="submit"
+                disabled={isAdSubmitting}
+                className="w-full py-3 bg-[#60bb46] hover:bg-[#4fa037] disabled:bg-zinc-200 text-white font-sans font-black uppercase text-[10px] tracking-widest rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+              >
+                <Check className="w-4 h-4 shrink-0" />
+                <span>
+                  {isAdSubmitting 
+                    ? 'Submitting campaign packages...' 
+                    : submissionMode === 'single'
+                    ? 'Submit Campaign for Review' 
+                    : 'Submit 3 Ads Package at Once'}
+                </span>
+              </button>
             </form>
-          )}
 
         </div>
 
         {/* My Ad Campaigns Archive (Right List) */}
         <div className="lg:col-span-5 space-y-6">
           
-          {/* Simulated Preview Box */}
           <div className="bg-white border border-zinc-200 p-5 rounded-3xl shadow-sm space-y-3.5 text-left">
-            <h3 className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400">Campaign Preview</h3>
-            {adTitle || adDescription || adImageUrl ? (
-              <div className="bg-zinc-50/50 border border-zinc-150 rounded-2xl p-4 flex flex-col items-center gap-3.5">
-                {adImageUrl && (
-                  <div className="w-full h-24 rounded-lg overflow-hidden border border-zinc-200">
-                    <img src={adImageUrl} alt="Banner preview" className="w-full h-full object-cover" />
-                  </div>
-                )}
-                <div className="w-full text-left">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[8px] font-mono bg-zinc-950 text-white font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
-                      {adPlacement === 'bubble' ? '🫧 BUBBLE SPONSOR' : '📰 FEED SPONSOR'}
-                    </span>
-                  </div>
-                  <h4 className="text-xs font-black text-zinc-900 mt-1 truncate">{adTitle || 'Your Headline Title'}</h4>
-                  <p className="text-[10px] text-zinc-500 mt-0.5 line-clamp-2 leading-relaxed">{adDescription || 'Your ad body text copy details...'}</p>
-                  {adTargetUrl && (
-                    <div className="text-[9.5px] font-mono text-emerald-650 font-bold truncate mt-1 flex items-center gap-0.5">
-                      <span>{adTargetUrl}</span>
-                      <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+            <h3 className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400">
+              {submissionMode === 'single' ? 'Campaign Preview' : 'Interactive Triple Campaigns Previews'}
+            </h3>
+            
+            {submissionMode === 'single' ? (
+              (adName || adContent || adImageUrl) ? (
+                <div className="bg-zinc-50/50 border border-zinc-150 rounded-2xl p-4 flex flex-col items-center gap-3.5">
+                  {adImageUrl && (
+                    <div className="w-full h-24 rounded-lg overflow-hidden border border-zinc-200">
+                      <img src={adImageUrl} alt="Banner preview" className="w-full h-full object-cover" />
                     </div>
                   )}
+                  <div className="w-full text-left">
+                    <h4 className="text-xs font-black text-zinc-900 mt-1 truncate">{adName || 'Your Campaign Name'}</h4>
+                    <p className="text-[10px] text-zinc-500 mt-0.5 line-clamp-2 leading-relaxed">{adContent || 'Your campaign content details...'}</p>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="py-6 border border-dashed border-zinc-200 rounded-2xl text-center text-[10px] text-zinc-400 font-bold">
+                  Design features in Form to view real-time feed placement.
+                </div>
+              )
             ) : (
-              <div className="py-6 border border-dashed border-zinc-200 rounded-2xl text-center text-[10px] text-zinc-400 font-bold">
-                Design features in Form to view real-time feed placement.
+              // Triple Mode Stacked Previews
+              <div className="space-y-3.5">
+                {[0, 1, 2].map((idx) => {
+                  const img = idx === 0 ? adImageUrl : idx === 1 ? adImageUrl2 : adImageUrl3;
+                  const name = idx === 0 ? adName : idx === 1 ? adName2 : adName3;
+                  const content = idx === 0 ? adContent : idx === 1 ? adContent2 : adContent3;
+
+                  return (
+                    <div 
+                      key={idx} 
+                      onClick={() => setActiveAdTab(idx as 0 | 1 | 2)}
+                      className={`p-3 bg-zinc-50/50 border rounded-2xl flex flex-col gap-2 cursor-pointer transition-all ${
+                        activeAdTab === idx 
+                          ? 'border-emerald-500 bg-emerald-50/15 ring-1 ring-emerald-500/30' 
+                          : 'border-zinc-150 hover:border-zinc-300'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="text-[8.5px] font-mono font-black uppercase text-zinc-400">Ad Slot #{idx + 1}</span>
+                        {activeAdTab === idx ? (
+                          <span className="text-[8px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-md font-mono uppercase font-black">editing now</span>
+                        ) : (
+                          <span className="text-[8px] text-zinc-400 font-mono">click to edit</span>
+                        )}
+                      </div>
+                      
+                      {img ? (
+                        <div className="w-full h-16 rounded-lg overflow-hidden border border-zinc-200 bg-white">
+                          <img src={img} alt={`Ad ${idx+1} preview`} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="w-full h-16 border border-dashed border-zinc-200 rounded-lg flex items-center justify-center bg-zinc-100/30 text-[9px] text-zinc-400 font-mono">
+                          No image loaded for Ad #{idx + 1}
+                        </div>
+                      )}
+                      
+                      <div className="w-full text-left">
+                        <h4 className="text-xs font-black text-zinc-900 truncate">{name || `Campaign Title #${idx + 1}`}</h4>
+                        <p className="text-[9px] text-zinc-500 mt-0.5 line-clamp-1 leading-relaxed">
+                          {content || `Enter ad content or copy info using the yellow spark trigger...`}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -572,7 +720,7 @@ export const AdPortal: React.FC<AdPortalProps> = ({ currentUser, ads, createOrUp
                         </div>
                       )}
                       <div className="min-w-0 flex-1">
-                        <h4 className="text-[11px] font-black text-zinc-850 truncate leading-tight">{campaign.title}</h4>
+                        <h4 className="text-[11px] font-black text-zinc-850 truncate leading-tight">{campaign.name}</h4>
                         <p className="text-[9.5px] text-zinc-400 mt-0.5 font-mono">
                           Scheduled: <span className="text-zinc-650 font-bold">{campaign.scheduledDate || 'Not set'}</span>
                         </p>
@@ -581,9 +729,6 @@ export const AdPortal: React.FC<AdPortalProps> = ({ currentUser, ads, createOrUp
 
                     <div className="flex justify-between items-center text-[10px] border-t border-zinc-150/50 pt-2 flex-wrap gap-2">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-mono font-black text-zinc-650 bg-zinc-100 border border-zinc-200 px-1.5 py-0.5 rounded">
-                          Rs. {campaign.amountPaid || 500}
-                        </span>
                       </div>
 
                       <span className={`text-[8.5px] font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded border ${
@@ -599,17 +744,9 @@ export const AdPortal: React.FC<AdPortalProps> = ({ currentUser, ads, createOrUp
                       </span>
                     </div>
 
-                    {/* If rejected, show why */}
-                    {campaign.status === 'rejected' && campaign.welcomeText && (
-                      <div className="p-2 bg-red-50/50 border border-red-100/60 rounded-xl text-[9px] text-red-750 font-sans leading-tight">
-                        <span className="font-black uppercase text-[8px] block tracking-wider text-red-800 mb-0.5">Admin Reject Reason</span>
-                        {campaign.welcomeText}
-                      </div>
-                    )}
-
                     {campaign.status === 'published' && (
                       <div className="text-[9px] font-mono text-zinc-400 bg-emerald-50/30 border border-emerald-150/40 p-1.5 rounded-lg text-center font-bold">
-                        🎯 Click rate: <span className="text-zinc-800 font-extrabold">{campaign.clickCount || 0}</span> redirection clicks
+                        Clicks: <span className="text-zinc-800 font-extrabold">{campaign.clickCount || 0}</span>
                       </div>
                     )}
 
@@ -628,7 +765,7 @@ export const AdPortal: React.FC<AdPortalProps> = ({ currentUser, ads, createOrUp
                           }}
                           className="flex-1 py-1 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-sans font-black uppercase text-[9px] tracking-wider rounded-lg transition text-center cursor-pointer"
                         >
-                          🚀 Publish Ad
+                          Publish Ad
                         </button>
                       )}
                       {campaign.status === 'published' && (
@@ -646,7 +783,7 @@ export const AdPortal: React.FC<AdPortalProps> = ({ currentUser, ads, createOrUp
                               : 'bg-emerald-650 hover:bg-emerald-750 text-white'
                           }`}
                         >
-                          {campaign.active ? '⏸️ Pause' : '▶️ Resume'}
+                          {campaign.active ? 'Pause' : 'Resume'}
                         </button>
                       )}
                       {deleteAd && (
@@ -659,7 +796,7 @@ export const AdPortal: React.FC<AdPortalProps> = ({ currentUser, ads, createOrUp
                           }}
                           className="py-1 px-2.5 bg-red-50 hover:bg-red-150 text-red-700 border border-red-200 font-sans font-black uppercase text-[9px] tracking-wider rounded-lg transition text-center cursor-pointer"
                         >
-                          🗑️ Delete
+                          Delete
                         </button>
                       )}
                     </div>
