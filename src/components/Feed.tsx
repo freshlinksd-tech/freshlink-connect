@@ -10,6 +10,8 @@ import { INTEREST_OPTIONS } from '../data/seedData';
 import { Post, User, AdBanner } from '../types';
 import { MultiPhotosLayout } from './MultiPhotosLayout';
 import { BroadcastBanner } from './BroadcastBanner';
+import { FeedPostSkeleton } from './SkeletonLoader';
+import { ArrowDown } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { uploadToCloudinary } from '../lib/cloudinary';
@@ -127,11 +129,63 @@ export const Feed: React.FC<FeedProps> = ({
     trackAdClick,
     isQuotaFallbackMode,
     securityBlock,
-    resolveSecurityChallenge
+    resolveSecurityChallenge,
+    loading,
+    refetchData
   } = useSocialPlatform();
 
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState('');
+
+  // Pull-to-refresh states
+  const [pullY, setPullY] = useState(0);
+  const [isPulling, setIsPulling] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const touchStartRef = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (window.scrollY === 0 && !isRefreshing) {
+      touchStartRef.current = e.touches[0].clientY;
+      setIsPulling(true);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartRef.current === null || !isPulling) return;
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStartRef.current;
+    
+    if (diff > 0) {
+      const resistance = Math.min(diff * 0.4, 90);
+      setPullY(resistance);
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    if (!isPulling) return;
+    setIsPulling(false);
+    touchStartRef.current = null;
+
+    if (pullY >= 65) {
+      setIsRefreshing(true);
+      setPullY(50);
+      try {
+        await refetchData();
+      } catch (err) {
+        console.warn("Pull-to-refresh refetch failed:", err);
+      } finally {
+        setTimeout(() => {
+          setIsRefreshing(false);
+          setPullY(0);
+        }, 500);
+      }
+    } else {
+      setPullY(0);
+    }
+  };
 
   // Birthday & Security Challenge state
   const [showBirthdayCard, setShowBirthdayCard] = useState(true);
@@ -479,11 +533,43 @@ export const Feed: React.FC<FeedProps> = ({
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 md:px-6 py-8 select-none" id="feed-screen-container">
+    <div 
+      className="w-full max-w-7xl mx-auto px-4 md:px-6 py-8 select-none" 
+      id="feed-screen-container"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
         {/* Left Side: Main Feed Column */}
         <div className="xl:col-span-8 flex flex-col gap-6">
           
+          {/* Pull to Refresh Indicator */}
+          {(pullY > 0 || isRefreshing) && (
+            <div 
+              style={{ height: `${pullY}px` }}
+              className="w-full flex items-center justify-center overflow-hidden transition-all duration-150 ease-out bg-orange-50/50 border border-orange-100/30 rounded-3xl"
+              id="pull-to-refresh-indicator"
+            >
+              <div className="flex items-center gap-2.5 text-orange-600 font-sans font-black text-[10px] tracking-widest uppercase">
+                {isRefreshing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-orange-500" />
+                    <span>Refreshing Feed...</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowDown 
+                      className="w-4 h-4 text-orange-500 transition-transform duration-200"
+                      style={{ transform: pullY >= 65 ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                    />
+                    <span>{pullY >= 65 ? 'Release to Refresh' : 'Pull to Refresh'}</span>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Admin Broadcast Announcements and Polls Banner */}
           <BroadcastBanner />
       
@@ -829,7 +915,13 @@ export const Feed: React.FC<FeedProps> = ({
 
       {/* Blogs / Posts Container */}
       <div className="space-y-8" id="feed-post-list">
-        {rankedPosts.length > 0 ? (
+        {loading ? (
+          <>
+            <FeedPostSkeleton />
+            <FeedPostSkeleton />
+            <FeedPostSkeleton />
+          </>
+        ) : rankedPosts.length > 0 ? (
           rankedPosts.map((post) => {
             const author = users.find(u => u.id === post.userId);
             if (!author) return null;

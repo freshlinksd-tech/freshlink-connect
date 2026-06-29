@@ -138,7 +138,8 @@ export interface Notification {
   createdAt: string;
   read: boolean;
   isPoll?: boolean; // If this notification is a Yes/No question
-  pollAnswer?: 'yes' | 'no' | null; // Recipient's vote/answer
+  pollAnswer?: string | null; // Recipient's vote/answer
+  pollOptions?: string[]; // Custom options for the poll
 }
 
 export interface PostReport {

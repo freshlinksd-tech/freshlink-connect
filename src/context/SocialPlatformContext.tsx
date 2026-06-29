@@ -23,6 +23,7 @@ import {
 } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
+import { getCache, setCache, addPendingInteraction, getPendingInteractions, clearPendingInteractions } from '../lib/dbCache';
 
 interface SocialPlatformContextType {
   users: User[];
@@ -93,9 +94,10 @@ interface SocialPlatformContextType {
     type: 'like' | 'comment' | 'follow' | 'report_decision' | 'withdrawal_decision' | 'ad_alert' | 'system',
     message: string,
     postId?: string,
-    isPoll?: boolean
+    isPoll?: boolean,
+    pollOptions?: string[]
   ) => Promise<void>;
-  submitPollAnswer: (notificationId: string, answer: 'yes' | 'no') => Promise<void>;
+  submitPollAnswer: (notificationId: string, answer: string) => Promise<void>;
   postReports: PostReport[];
   ads: AdBanner[];
   markNotificationAsRead: (id: string) => Promise<void>;
@@ -111,6 +113,7 @@ interface SocialPlatformContextType {
   securityBlock: { actionType: string; remainingMs: number } | null;
   setSecurityBlock: (block: { actionType: string; remainingMs: number } | null) => void;
   resolveSecurityChallenge: () => void;
+  refetchData: () => Promise<void>;
 }
 
 const SocialPlatformContext = createContext<SocialPlatformContextType | undefined>(undefined);
@@ -237,6 +240,107 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   useEffect(() => {
     activeChatPartnerRef.current = activeChatPartnerId;
   }, [activeChatPartnerId]);
+
+  const syncPendingInteractions = async () => {
+    if (!navigator.onLine || !currentUserId) return;
+    try {
+      const pending = await getPendingInteractions();
+      if (pending.length === 0) return;
+
+      console.log(`[PWA Sync] Syncing ${pending.length} pending interactions...`);
+      const successfullySyncedIds: string[] = [];
+
+      for (const item of pending) {
+        try {
+          if (item.type === 'like') {
+            const { isLikedAlready, likeId } = item.payload;
+            if (isLikedAlready) {
+              await deleteDoc(doc(db, 'likes', likeId));
+            } else {
+              await setDoc(doc(db, 'likes', likeId), {
+                userId: item.userId,
+                postId: item.postId
+              });
+              // Notify post owner
+              const post = posts.find(p => p.id === item.postId);
+              if (post && post.userId !== item.userId) {
+                await addNotification(
+                  post.userId,
+                  'like',
+                  `liked your post "${post.title}"`,
+                  item.postId
+                );
+              }
+            }
+          } else if (item.type === 'comment') {
+            const { id, comment, createdAt } = item.payload;
+            const commentObj: Comment = {
+              id,
+              userId: item.userId,
+              postId: item.postId,
+              comment,
+              createdAt
+            };
+            await setDoc(doc(db, 'comments', id), commentObj);
+
+            // Notify post owner
+            const post = posts.find(p => p.id === item.postId);
+            if (post && post.userId !== item.userId) {
+              await addNotification(
+                post.userId,
+                'comment',
+                `commented on your post "${post.title}": "${comment.slice(0, 30)}${comment.length > 30 ? '...' : ''}"`,
+                item.postId
+              );
+            }
+          }
+          successfullySyncedIds.push(item.id);
+        } catch (itemErr) {
+          console.error(`[PWA Sync] Failed to sync item ${item.id}:`, itemErr);
+        }
+      }
+
+      if (successfullySyncedIds.length > 0) {
+        await clearPendingInteractions(successfullySyncedIds);
+        console.log(`[PWA Sync] Successfully synced ${successfullySyncedIds.length} interactions.`);
+        await refetchData();
+      }
+    } catch (err) {
+      console.warn("[PWA Sync] Error in syncPendingInteractions:", err);
+    }
+  };
+
+  // Synchronize pending offline actions when connection comes back online
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log("[Network] Connection restored, triggering sync...");
+      syncPendingInteractions();
+    };
+
+    const handleServiceWorkerMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'SYNC_PENDING_INTERACTIONS') {
+        console.log("[Service Worker] Sync request received...");
+        syncPendingInteractions();
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+    }
+
+    // Try to sync on mount if online
+    if (navigator.onLine) {
+      syncPendingInteractions();
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+      }
+    };
+  }, [currentUserId, posts]);
 
   // 1. Initial Authentication & User Profile Sync
   useEffect(() => {
@@ -427,103 +531,138 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     }
   };
 
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      if (isQuotaFallbackMode) {
-        setLoading(false);
-        return;
-      }
-      try {
-        setLoading(true);
-        // Execute single-round concurrent reads instead of maintaining heavy, permanent wide-collection listeners
-        const [usersSnap, postsSnap, likesSnap, commentsSnap, followersSnap, adsSnap] = await Promise.all([
-          getDocs(collection(db, 'users')),
-          getDocs(collection(db, 'posts')),
-          getDocs(collection(db, 'likes')),
-          getDocs(collection(db, 'comments')),
-          getDocs(collection(db, 'followers')),
-          getDocs(collection(db, 'ads'))
-        ]);
+  const refetchData = async () => {
+    if (isQuotaFallbackMode) {
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      // Execute single-round concurrent reads instead of maintaining heavy, permanent wide-collection listeners
+      const [usersSnap, postsSnap, likesSnap, commentsSnap, followersSnap, adsSnap] = await Promise.all([
+        getDocs(collection(db, 'users')),
+        getDocs(collection(db, 'posts')),
+        getDocs(collection(db, 'likes')),
+        getDocs(collection(db, 'comments')),
+        getDocs(collection(db, 'followers')),
+        getDocs(collection(db, 'ads'))
+      ]);
 
-        const usersList: User[] = [];
-        usersSnap.forEach((d) => usersList.push(d.data() as User));
-        setUsers(usersList);
+      const usersList: User[] = [];
+      usersSnap.forEach((d) => usersList.push(d.data() as User));
+      setUsers(usersList);
 
-        const postsList: Post[] = [];
-        postsSnap.forEach((d) => postsList.push(d.data() as Post));
-        setPosts(postsList);
+      const postsList: Post[] = [];
+      postsSnap.forEach((d) => postsList.push(d.data() as Post));
+      setPosts(postsList);
 
-        const likesList: Like[] = [];
-        likesSnap.forEach((d) => likesList.push(d.data() as Like));
-        setLikes(likesList);
+      const likesList: Like[] = [];
+      likesSnap.forEach((d) => likesList.push(d.data() as Like));
+      setLikes(likesList);
 
-        const commentsList: Comment[] = [];
-        commentsSnap.forEach((d) => commentsList.push(d.data() as Comment));
-        setComments(commentsList);
+      const commentsList: Comment[] = [];
+      commentsSnap.forEach((d) => commentsList.push(d.data() as Comment));
+      setComments(commentsList);
 
-        const followersList: Follower[] = [];
-        followersSnap.forEach((d) => followersList.push(d.data() as Follower));
-        setFollowers(followersList);
+      const followersList: Follower[] = [];
+      followersSnap.forEach((d) => followersList.push(d.data() as Follower));
+      setFollowers(followersList);
 
-        const adsList: AdBanner[] = [];
-        adsSnap.forEach((d) => adsList.push(d.data() as AdBanner));
-        
-        if (adsList.length === 0) {
-          const defaultSeedAd: AdBanner = {
-            id: 'ad_default_nepal_tourism',
-            name: 'Explore the Majesty of Nepal Mountains & Homestays',
-            purpose: 'Tourism & Travel',
-            contact: '+977-1-4200000',
-            content: 'Discover organic tea trails, spectacular Everest panorama homestays, and get 20% off with partner local communities today!',
-            location: 'Nepal',
-            email: 'info@visitnepal.com',
-            title: 'Explore the Majesty of Nepal Mountains & Homestays',
-            description: 'Discover organic tea trails, spectacular Everest panorama homestays, and get 20% off with partner local communities today!',
-            imageUrl: 'https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=600&q=80',
-            targetUrl: 'https://www.visitnepaltours.com',
-            active: true,
-            placement: 'workspace',
-            status: 'published',
-            paymentStatus: 'verified',
-            amountPaid: 1000,
-            clickCount: 142,
-            createdAt: new Date().toISOString(),
-            userId: 'seed_admin_user_id'
-          };
-          try {
-            await setDoc(doc(db, 'ads', defaultSeedAd.id), defaultSeedAd);
-            adsList.push(defaultSeedAd);
-          } catch (e) {
-            console.warn("Failed to auto-seed default ad:", e);
-            adsList.push(defaultSeedAd);
-          }
-        }
-        setAds(adsList);
-
-        // Fetch postReports separately and handle permissions gracefully (since only admins can read them)
+      const adsList: AdBanner[] = [];
+      adsSnap.forEach((d) => adsList.push(d.data() as AdBanner));
+      
+      if (adsList.length === 0) {
+        const defaultSeedAd: AdBanner = {
+          id: 'ad_default_nepal_tourism',
+          name: 'Explore the Majesty of Nepal Mountains & Homestays',
+          purpose: 'Tourism & Travel',
+          contact: '+977-1-4200000',
+          content: 'Discover organic tea trails, spectacular Everest panorama homestays, and get 20% off with partner local communities today!',
+          location: 'Nepal',
+          email: 'info@visitnepal.com',
+          title: 'Explore the Majesty of Nepal Mountains & Homestays',
+          description: 'Discover organic tea trails, spectacular Everest panorama homestays, and get 20% off with partner local communities today!',
+          imageUrl: 'https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=600&q=80',
+          targetUrl: 'https://www.visitnepaltours.com',
+          active: true,
+          placement: 'workspace',
+          status: 'published',
+          paymentStatus: 'verified',
+          amountPaid: 1000,
+          clickCount: 142,
+          createdAt: new Date().toISOString(),
+          userId: 'seed_admin_user_id'
+        };
         try {
-          const reportsSnap = await getDocs(collection(db, 'postReports'));
-          const reportsList: PostReport[] = [];
-          reportsSnap.forEach((d) => reportsList.push(d.data() as PostReport));
-          setPostReports(reportsList);
-        } catch (reportErr: any) {
-          console.log("Post reports skipped or permission denied (expected for non-admins):", reportErr.message || reportErr);
-          setPostReports([]);
+          await setDoc(doc(db, 'ads', defaultSeedAd.id), defaultSeedAd);
+          adsList.push(defaultSeedAd);
+        } catch (e) {
+          console.warn("Failed to auto-seed default ad:", e);
+          adsList.push(defaultSeedAd);
         }
-
-      } catch (err: any) {
-        console.error("An error occurred during Firestore one-time initial load:", err);
-        const errMsg = err instanceof Error ? err.message : String(err);
-        if (errMsg.includes('Quota limit') || errMsg.includes('quota') || errMsg.includes('exceeded') || errMsg.includes('resource-exhausted') || errMsg.includes('Resource exhausted')) {
-          triggerLocalQuotaFallback();
-        }
-      } finally {
-        setLoading(false);
       }
+      setAds(adsList);
+
+      // Save fresh lists to IndexedDB for offline access
+      try {
+        await setCache('users', usersList);
+        await setCache('posts', postsList);
+        await setCache('likes', likesList);
+        await setCache('comments', commentsList);
+        await setCache('followers', followersList);
+        await setCache('ads', adsList);
+      } catch (cacheErr) {
+        console.warn("Failed to update IndexedDB cache:", cacheErr);
+      }
+
+      // Fetch postReports separately and handle permissions gracefully (since only admins can read them)
+      try {
+        const reportsSnap = await getDocs(collection(db, 'postReports'));
+        const reportsList: PostReport[] = [];
+        reportsSnap.forEach((d) => reportsList.push(d.data() as PostReport));
+        setPostReports(reportsList);
+      } catch (reportErr: any) {
+        console.log("Post reports skipped or permission denied (expected for non-admins):", reportErr.message || reportErr);
+        setPostReports([]);
+      }
+
+    } catch (err: any) {
+      console.error("An error occurred during Firestore load:", err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg.includes('Quota limit') || errMsg.includes('quota') || errMsg.includes('exceeded') || errMsg.includes('resource-exhausted') || errMsg.includes('Resource exhausted')) {
+        triggerLocalQuotaFallback();
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const loadCacheAndFetch = async () => {
+      // 1. Load cached state from IndexedDB instantly to enable offline / zero latency startup
+      try {
+        const cachedUsers = await getCache('users');
+        const cachedPosts = await getCache('posts');
+        const cachedComments = await getCache('comments');
+        const cachedLikes = await getCache('likes');
+        const cachedFollowers = await getCache('followers');
+        const cachedAds = await getCache('ads');
+
+        if (cachedUsers) setUsers(cachedUsers);
+        if (cachedPosts) setPosts(cachedPosts);
+        if (cachedComments) setComments(cachedComments);
+        if (cachedLikes) setLikes(cachedLikes);
+        if (cachedFollowers) setFollowers(cachedFollowers);
+        if (cachedAds) setAds(cachedAds);
+      } catch (e) {
+        console.warn("Failed to read IndexedDB startup cache:", e);
+      }
+
+      // 2. Fetch fresh network updates
+      await refetchData();
     };
 
-    fetchInitialData();
-
+    loadCacheAndFetch();
   }, [currentUserId, isQuotaFallbackMode]);
 
   // Request browser notification permissions on login/mount
@@ -1022,6 +1161,34 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     const likeId = `${currentUserId}_${postId}`;
     const isLikedAlready = likes.some(l => l.userId === currentUserId && l.postId === postId);
 
+    if (!navigator.onLine) {
+      console.log(`[PWA Offline] Queueing like for post ${postId}`);
+      // Optimistically update local state immediately
+      if (isLikedAlready) {
+        setLikes(prev => prev.filter(l => l.userId !== currentUserId || l.postId !== postId));
+      } else {
+        setLikes(prev => [...prev, { userId: currentUserId, postId }]);
+      }
+      
+      try {
+        await addPendingInteraction({
+          type: 'like',
+          postId,
+          userId: currentUserId,
+          payload: { isLikedAlready, likeId }
+        });
+
+        // Trigger PWA background sync registration
+        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+          const reg = await navigator.serviceWorker.ready;
+          await (reg as any).sync.register('sync-interactions');
+        }
+      } catch (err) {
+        console.warn("Failed to register offline like sync:", err);
+      }
+      return;
+    }
+
     await runWriteOperation(
       async () => {
         if (isLikedAlready) {
@@ -1087,6 +1254,30 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       comment: cleanText,
       createdAt: new Date().toISOString()
     };
+
+    if (!navigator.onLine) {
+      console.log(`[PWA Offline] Queueing comment for post ${postId}`);
+      // Optimistically update local state immediately
+      setComments(prev => [...prev, newComment]);
+
+      try {
+        await addPendingInteraction({
+          type: 'comment',
+          postId,
+          userId: currentUserId,
+          payload: { id, comment: cleanText, createdAt: newComment.createdAt }
+        });
+
+        // Trigger PWA background sync registration
+        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+          const reg = await navigator.serviceWorker.ready;
+          await (reg as any).sync.register('sync-interactions');
+        }
+      } catch (err) {
+        console.warn("Failed to register offline comment sync:", err);
+      }
+      return newComment;
+    }
 
     await runWriteOperation(
       async () => {
@@ -1555,7 +1746,8 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     type: 'like' | 'comment' | 'follow' | 'report_decision' | 'withdrawal_decision' | 'ad_alert' | 'system',
     message: string,
     postId?: string,
-    isPoll?: boolean
+    isPoll?: boolean,
+    pollOptions?: string[]
   ) => {
     if (!userId) return;
     if (userId === currentUserId && type !== 'system' && type !== 'withdrawal_decision' && type !== 'report_decision') return;
@@ -1573,7 +1765,8 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       createdAt: new Date().toISOString(),
       read: false,
       isPoll,
-      pollAnswer: isPoll ? null : undefined
+      pollAnswer: isPoll ? null : undefined,
+      pollOptions: isPoll ? pollOptions : undefined
     };
 
     // Remove undefined values to avoid Firestore serialization errors
@@ -1592,7 +1785,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     }
   };
 
-  const submitPollAnswer = async (notificationId: string, answer: 'yes' | 'no') => {
+  const submitPollAnswer = async (notificationId: string, answer: string) => {
     await runWriteOperation(
       async () => {
         await updateDoc(doc(db, 'notifications', notificationId), {
@@ -1865,7 +2058,8 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         resetQuotaFallback,
         securityBlock,
         setSecurityBlock,
-        resolveSecurityChallenge
+        resolveSecurityChallenge,
+        refetchData
       }}
     >
       {children}

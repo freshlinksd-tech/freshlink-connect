@@ -21,7 +21,9 @@ import {
   Briefcase,
   ShieldCheck,
   Coins,
-  Bell
+  Bell,
+  Smartphone,
+  Download
 } from 'lucide-react';
 
 interface NavigationProps {
@@ -135,6 +137,29 @@ export const Navigation: React.FC<NavigationProps> = ({
           )}
         </div>
       </nav>
+
+      {/* PWA Direct Installation Sidebar Prompter */}
+      <div className="mx-4 mb-4 p-3.5 bg-gradient-to-br from-orange-50/70 to-amber-50/50 border border-orange-100/50 rounded-2xl" id="nav-pwa-install-prompter">
+        <div className="flex gap-2.5 items-start">
+          <div className="bg-orange-500/10 p-2 rounded-xl border border-orange-500/20 text-orange-600 shrink-0">
+            <Smartphone className="w-4 h-4" />
+          </div>
+          <div className="flex-1 min-w-0 space-y-0.5">
+            <h4 className="font-sans font-black text-[10.5px] text-zinc-900 uppercase tracking-tighter">Use like Mobile App</h4>
+            <p className="text-[9.5px] text-zinc-500 leading-normal font-semibold">Zero-delay loading, direct push notes, and fullscreen view!</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent('trigger-pwa-install'));
+          }}
+          className="w-full mt-3 py-2 bg-orange-600 hover:bg-orange-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition shadow-sm shadow-orange-650/10 flex items-center justify-center gap-1.5 cursor-pointer outline-none"
+        >
+          <Download className="w-3.5 h-3.5" />
+          <span>Install App Now</span>
+        </button>
+      </div>
 
       {/* User Footer Profile */}
       <div className="p-4 border-t border-zinc-100 bg-zinc-50/50">

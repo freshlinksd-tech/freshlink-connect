@@ -19,6 +19,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { VerificationSetup } from './components/VerificationSetup';
 import { MonetizationPanel } from './components/MonetizationPanel';
 import { Notifications } from './components/Notifications';
+import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { 
   Sparkles, 
   Menu, 
@@ -32,7 +33,9 @@ import {
   Wifi,
   ShieldCheck,
   Coins,
-  Bell
+  Bell,
+  Smartphone,
+  Download
 } from 'lucide-react';
 
 function AppContent() {
@@ -118,13 +121,27 @@ function AppContent() {
           </span>
         </div>
 
-        <button
-          id="mobile-hamburger-btn"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="p-1 px-2.5 text-zinc-500 hover:text-zinc-800 bg-zinc-50 rounded-lg hover:shadow-sm"
-        >
-          {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('trigger-pwa-install'));
+            }}
+            className="p-1.5 px-2.5 text-orange-650 hover:text-white hover:bg-orange-600 bg-orange-50 border border-orange-100 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all cursor-pointer outline-none"
+            title="Install Mobile App"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span className="sm:inline hidden">Install App</span>
+          </button>
+
+          <button
+            id="mobile-hamburger-btn"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="p-1 px-2.5 text-zinc-500 hover:text-zinc-800 bg-zinc-50 rounded-lg hover:shadow-sm"
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </header>
 
       {/* Mobile Navigation Drawer Overlay */}
@@ -200,6 +217,30 @@ function AppContent() {
                   My Profile
                 </button>
               )}
+            </div>
+
+            {/* PWA Direct Installation Mobile Drawer prompter */}
+            <div className="mx-4 mt-4 p-3 bg-gradient-to-br from-orange-50/70 to-amber-50/50 border border-orange-100/50 rounded-xl" id="mobile-drawer-pwa-install-prompter">
+              <div className="flex gap-2 items-start">
+                <div className="bg-orange-500/10 p-1.5 rounded-lg border border-orange-500/20 text-orange-600 shrink-0">
+                  <Smartphone className="w-3.5 h-3.5" />
+                </div>
+                <div className="flex-1 min-w-0 space-y-0.5">
+                  <h4 className="font-sans font-black text-[9.5px] text-zinc-900 uppercase tracking-tighter">Use like App</h4>
+                  <p className="text-[8.5px] text-zinc-500 leading-normal font-semibold">Zero-delay loading & push notifications!</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('trigger-pwa-install'));
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full mt-2 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-[9px] font-black uppercase tracking-wider rounded-lg transition shadow-sm flex items-center justify-center gap-1 cursor-pointer outline-none"
+              >
+                <Download className="w-3 h-3" />
+                <span>Install Mobile App</span>
+              </button>
             </div>
 
             <div className="mt-auto p-4 border-t border-zinc-100 bg-zinc-50">
@@ -329,6 +370,9 @@ function AppContent() {
       {authOpen && (
         <Auth onClose={() => setAuthOpen(false)} />
       )}
+
+      {/* PWA Smart Installation Banner */}
+      <PWAInstallPrompt />
     </div>
   );
 }

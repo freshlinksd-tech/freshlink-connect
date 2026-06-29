@@ -33,6 +33,8 @@ import {
   Sparkles,
   Upload
 } from 'lucide-react';
+import { AdminBroadcastCreator } from './AdminBroadcastCreator';
+import { PollAnalyticsDashboard } from './PollAnalyticsDashboard';
 
 interface AdminPanelProps {
   onSelectUser: (userId: string) => void;
@@ -97,6 +99,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
     comments, 
     likes, 
     messages, 
+    notifications,
     currentUser, 
     blockUser, 
     setRoleByAdmin, 
@@ -177,14 +180,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
   const [adFilterState, setAdFilterState] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'published'>('pending');
   const [rejectAdId, setRejectAdId] = useState<string | null>(null);
   const [adRejectReason, setAdRejectReason] = useState('');
-
-  // Broadcast composition states
-  const [broadcastMessage, setBroadcastMessage] = useState('');
-  const [broadcastTarget, setBroadcastTarget] = useState<'all' | string>('all');
-  const [broadcastType, setBroadcastType] = useState<'message' | 'poll'>('message');
-  const [broadcastSuccess, setBroadcastSuccess] = useState('');
-  const [broadcastError, setBroadcastError] = useState('');
-  const [isBroadcasting, setIsBroadcasting] = useState(false);
 
   const filteredWithdrawals = useMemo(() => {
     return [...withdrawals]
@@ -393,46 +388,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
       setTimeout(() => setSeedNotification(null), 3000);
     } catch (err) {
       setSeedNotification(`Failed to seed post: ${err}`);
-    }
-  };
-
-  const handleSendBroadcast = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!broadcastMessage.trim()) {
-      setBroadcastError('Please enter a message or poll question.');
-      return;
-    }
-    
-    setIsBroadcasting(true);
-    setBroadcastSuccess('');
-    setBroadcastError('');
-    
-    try {
-      const isPoll = broadcastType === 'poll';
-      
-      if (broadcastTarget === 'all') {
-        const recipients = users.filter(u => u.id !== currentUser?.id);
-        if (recipients.length === 0 && users.length > 0) {
-          await addNotification(currentUser!.id, 'system', broadcastMessage, undefined, isPoll);
-        } else {
-          for (const user of recipients) {
-            await addNotification(user.id, 'system', broadcastMessage, undefined, isPoll);
-          }
-        }
-        setBroadcastSuccess(`Successfully sent broadcast ${isPoll ? 'Yes/No poll' : 'announcement'} to ${Math.max(1, recipients.length)} users!`);
-      } else {
-        const targetUser = users.find(u => u.id === broadcastTarget);
-        if (!targetUser) throw new Error('Target recipient user not found.');
-        
-        await addNotification(broadcastTarget, 'system', broadcastMessage, undefined, isPoll);
-        setBroadcastSuccess(`Successfully sent ${isPoll ? 'Yes/No poll' : 'alert'} to ${targetUser.name}!`);
-      }
-      
-      setBroadcastMessage('');
-    } catch (err: any) {
-      setBroadcastError(err.message || 'Failed to dispatch broadcast.');
-    } finally {
-      setIsBroadcasting(false);
     }
   };
 
@@ -2068,113 +2023,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
 
       {activeTab === 'broadcasts' && (
         <section className="space-y-6 text-left animate-in fade-in duration-200" id="admin-section-broadcasts">
-          <div className="bg-white p-6 md:p-8 rounded-3xl border border-zinc-200 shadow-sm space-y-6">
-            <div>
-              <h2 className="font-sans font-black text-lg uppercase tracking-tight text-zinc-900 flex items-center gap-2 font-bold">
-                📢 Admin & Super-Admin Broadcast Center
-              </h2>
-              <p className="text-zinc-500 text-xs mt-1">
-                Send system alerts, news, updates, or interactive Yes/No feedback polls directly to users' devices.
-              </p>
-            </div>
+          {/* Admin Broadcast Creator */}
+          <AdminBroadcastCreator />
 
-            {broadcastSuccess && (
-              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs p-4 rounded-xl font-sans font-semibold">
-                {broadcastSuccess}
-              </div>
-            )}
-
-            {broadcastError && (
-              <div className="bg-red-50 border border-red-200 text-red-800 text-xs p-4 rounded-xl font-sans font-semibold">
-                {broadcastError}
-              </div>
-            )}
-
-            <form onSubmit={handleSendBroadcast} className="space-y-5 max-w-2xl font-sans">
-              {/* Type selector */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-sans font-bold text-zinc-500 uppercase tracking-wider block">
-                  Broadcast Type
-                </label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-zinc-700">
-                    <input
-                      type="radio"
-                      name="broadcastType"
-                      checked={broadcastType === 'message'}
-                      onChange={() => setBroadcastType('message')}
-                      className="text-orange-600 focus:ring-orange-500"
-                    />
-                    <span>Regular Announcement</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-zinc-700">
-                    <input
-                      type="radio"
-                      name="broadcastType"
-                      checked={broadcastType === 'poll'}
-                      onChange={() => setBroadcastType('poll')}
-                      className="text-orange-600 focus:ring-orange-500"
-                    />
-                    <span>Yes/No Question (Poll)</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Target Audience */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-sans font-bold text-zinc-500 uppercase tracking-wider block">
-                  Select Target Audience
-                </label>
-                <select
-                  value={broadcastTarget}
-                  onChange={(e) => setBroadcastTarget(e.target.value)}
-                  className="w-full bg-zinc-50 border border-zinc-200 text-xs p-3 rounded-xl outline-none focus:border-orange-500 font-semibold"
-                >
-                  <option value="all">📢 All Registered Creators (Global Broadcast)</option>
-                  {users.map(u => (
-                    <option key={u.id} value={u.id}>
-                      👤 {u.name} ({u.email}) - {u.role || 'user'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Message body */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-sans font-bold text-zinc-500 uppercase tracking-wider block">
-                  {broadcastType === 'poll' ? 'Yes/No Poll Question' : 'Announcement Message'}
-                </label>
-                <textarea
-                  value={broadcastMessage}
-                  onChange={(e) => setBroadcastMessage(e.target.value)}
-                  placeholder={
-                    broadcastType === 'poll'
-                      ? 'e.g., Do you want Freshlinkconnect to include push notifications on devices?'
-                      : 'e.g., Attention creators: Scheduled platform system maintenance tonight from 1 AM to 3 AM UTC.'
-                  }
-                  rows={4}
-                  required
-                  className="w-full bg-zinc-50 border border-zinc-200 text-xs p-3.5 rounded-xl outline-none focus:border-orange-500 font-semibold"
-                />
-              </div>
-
-              {/* Submit */}
-              <button
-                type="submit"
-                disabled={isBroadcasting}
-                className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-md shadow-orange-600/15 uppercase tracking-wider flex items-center justify-center gap-2"
-              >
-                {isBroadcasting ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Broadcasting Alerts...</span>
-                  </>
-                ) : (
-                  <span>Send Broadcast Now</span>
-                )}
-              </button>
-            </form>
-          </div>
+          {/* Recharts Analytics Dashboard */}
+          <PollAnalyticsDashboard />
         </section>
       )}
 

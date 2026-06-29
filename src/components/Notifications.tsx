@@ -150,36 +150,28 @@ export const Notifications: React.FC = () => {
                               <span className="text-xs font-semibold text-zinc-700">
                                 Your response:
                               </span>
-                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                                notif.pollAnswer === 'yes'
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                                  : 'bg-red-50 text-red-700 border border-red-100'
-                              }`}>
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-orange-50 text-orange-700 border border-orange-100">
                                 {notif.pollAnswer.toUpperCase()}
                               </span>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-2 pt-1">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  submitPollAnswer(notif.id, 'yes');
-                                }}
-                                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-sans font-bold text-[9px] uppercase tracking-wider rounded-lg transition-all cursor-pointer shadow-sm shadow-emerald-650/10"
-                              >
-                                👍 Yes
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  submitPollAnswer(notif.id, 'no');
-                                }}
-                                className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white font-sans font-bold text-[9px] uppercase tracking-wider rounded-lg transition-all cursor-pointer shadow-sm shadow-red-650/10"
-                              >
-                                👎 No
-                              </button>
+                            <div className="flex items-center gap-2 pt-1 flex-wrap">
+                              {((notif.pollOptions && notif.pollOptions.length > 0)
+                                ? notif.pollOptions
+                                : ['Yes', 'No']
+                              ).map((option) => (
+                                <button
+                                  key={option}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    submitPollAnswer(notif.id, option);
+                                  }}
+                                  className="px-3.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white font-sans font-bold text-[9px] uppercase tracking-wider rounded-lg transition-all cursor-pointer shadow-sm shadow-orange-650/10"
+                                >
+                                  {option}
+                                </button>
+                              ))}
                             </div>
                           )}
                         </div>

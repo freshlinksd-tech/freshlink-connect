@@ -5,6 +5,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useSocialPlatform } from '../context/SocialPlatformContext';
+import { ProfileSkeleton } from './SkeletonLoader';
 import { compressImage } from '../lib/firebase';
 import { INTEREST_OPTIONS } from '../data/seedData';
 import { User, Post } from '../types';
@@ -122,7 +123,8 @@ export const Profiles: React.FC<ProfilesProps> = ({
     getUserAchievements,
     notifications,
     markNotificationAsRead,
-    markAllNotificationsAsRead
+    markAllNotificationsAsRead,
+    loading
   } = useSocialPlatform();
 
   // Determine active profile to display
@@ -421,6 +423,10 @@ export const Profiles: React.FC<ProfilesProps> = ({
   const earnedAchievementsCount = useMemo(() => {
     return achievements.filter(a => a.isEarned).length;
   }, [achievements]);
+
+  if (loading) {
+    return <ProfileSkeleton />;
+  }
 
   if (!activeProfile) {
     return (

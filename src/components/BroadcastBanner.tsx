@@ -60,9 +60,9 @@ export const BroadcastBanner: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
+            <div className="flex items-center gap-3 shrink-0 self-end md:self-center flex-wrap">
               {broadcast.isPoll && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {broadcast.pollAnswer ? (
                     <div className="bg-white/25 px-4 py-2 rounded-xl flex items-center gap-1.5 text-xs font-black uppercase tracking-wider">
                       <Check className="w-4 h-4 text-emerald-300" />
@@ -70,24 +70,20 @@ export const BroadcastBanner: React.FC = () => {
                     </div>
                   ) : (
                     <>
-                      <button
-                        type="button"
-                        onClick={() => submitPollAnswer(broadcast.id, 'yes')}
-                        className="bg-white hover:bg-zinc-50 text-orange-700 px-4.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5 cursor-pointer"
-                        id={`poll-yes-${broadcast.id}`}
-                      >
-                        <ThumbsUp className="w-3.5 h-3.5 text-orange-600" />
-                        <span>Yes</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => submitPollAnswer(broadcast.id, 'no')}
-                        className="bg-white/20 hover:bg-white/30 text-white px-4.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5 cursor-pointer"
-                        id={`poll-no-${broadcast.id}`}
-                      >
-                        <ThumbsDown className="w-3.5 h-3.5 text-white" />
-                        <span>No</span>
-                      </button>
+                      {((broadcast.pollOptions && broadcast.pollOptions.length > 0)
+                        ? broadcast.pollOptions
+                        : ['Yes', 'No']
+                      ).map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => submitPollAnswer(broadcast.id, option)}
+                          className="bg-white hover:bg-zinc-50 text-orange-700 px-4.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                          id={`poll-option-${broadcast.id}-${option.replace(/\s+/g, '-').toLowerCase()}`}
+                        >
+                          <span>{option}</span>
+                        </button>
+                      ))}
                     </>
                   )}
                 </div>
