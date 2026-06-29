@@ -67,6 +67,9 @@ export const PWAInstallPrompt: React.FC = () => {
           setDeferredPrompt(null);
           setIsVisible(false);
         });
+      } else if (isIframe) {
+        // Instantly open in a new browser tab to bypass the iframe sandbox and enable native PWA installation!
+        window.open(window.location.href, '_blank');
       } else {
         // Fallback: If prompt is not available, show the step-by-step installation guide modal
         setShowGuide(true);
@@ -78,7 +81,7 @@ export const PWAInstallPrompt: React.FC = () => {
     return () => {
       window.removeEventListener('trigger-pwa-install', handleTriggerInstall);
     };
-  }, [deferredPrompt]);
+  }, [deferredPrompt, isIframe]);
 
   const handleInstallClick = async () => {
     if (deferredPrompt) {
@@ -87,6 +90,9 @@ export const PWAInstallPrompt: React.FC = () => {
       console.log(`User response to install prompt: ${outcome}`);
       setDeferredPrompt(null);
       setIsVisible(false);
+    } else if (isIframe) {
+      // Instantly open top-level site in a new tab where browser allows native PWA installation
+      window.open(window.location.href, '_blank');
     } else {
       // Show manual install guide
       setShowGuide(true);
