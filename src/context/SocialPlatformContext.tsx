@@ -88,6 +88,14 @@ interface SocialPlatformContextType {
   requestWithdrawal: (amountNpr: number, paymentMethod: string, details: string) => Promise<void>;
   updateWithdrawalStatusByAdmin: (withdrawalId: string, status: 'approved' | 'rejected', remarks?: string) => Promise<void>;
   notifications: Notification[];
+  addNotification: (
+    userId: string,
+    type: 'like' | 'comment' | 'follow' | 'report_decision' | 'withdrawal_decision' | 'ad_alert' | 'system',
+    message: string,
+    postId?: string,
+    isPoll?: boolean
+  ) => Promise<void>;
+  submitPollAnswer: (notificationId: string, answer: 'yes' | 'no') => Promise<void>;
   postReports: PostReport[];
   ads: AdBanner[];
   markNotificationAsRead: (id: string) => Promise<void>;
@@ -516,7 +524,46 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
 
     fetchInitialData();
 
-    // Attach reactive sync listeners ONLY for real-time user-specific collections (notifications, withdrawals)
+  }, [currentUserId, isQuotaFallbackMode]);
+
+  // Request browser notification permissions on login/mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (window.Notification.permission === 'default') {
+        window.Notification.requestPermission();
+      }
+    }
+  }, [currentUserId]);
+
+  const triggerDeviceNotification = (notif: Notification) => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    
+    // Read and respect target user's notification toggles
+    const userToNotify = users.find(u => u.id === notif.userId);
+    if (userToNotify && userToNotify.notificationSettings) {
+      const settings = userToNotify.notificationSettings;
+      if (notif.type === 'like' && settings.likes === false) return;
+      if (notif.type === 'comment' && settings.comments === false) return;
+      if (notif.type === 'follow' && settings.follows === false) return;
+      if (notif.type === 'system' && settings.system === false) return;
+      if (notif.type === 'ad_alert' && settings.adAlerts === false) return;
+    }
+
+    if (window.Notification.permission === 'granted') {
+      try {
+        new window.Notification("FreshLinkConnect", {
+          body: notif.message,
+          icon: notif.senderImage || "/logo192.png",
+          tag: notif.id,
+        });
+      } catch (e) {
+        console.error("Native notification display failed:", e);
+      }
+    }
+  };
+
+  // 2. Real-time collections listener
+  useEffect(() => {
     let unsubWithdrawals = () => {};
     if (currentUserId && !isQuotaFallbackMode) {
       unsubWithdrawals = onSnapshot(collection(db, 'withdrawals'), (snap) => {
@@ -535,8 +582,32 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       const qNotif = query(collection(db, 'notifications'), where('userId', '==', currentUserId));
       unsubNotifications = onSnapshot(qNotif, (snap) => {
         const list: Notification[] = [];
-        snap.forEach((d) => list.push(d.data() as Notification));
-        setNotifications(list);
+        let newestUnread: Notification | null = null;
+        const nowMs = Date.now();
+        
+        snap.forEach((d) => {
+          list.push(d.data() as Notification);
+        });
+        
+        setNotifications(prev => {
+          list.forEach(n => {
+            if (!n.read) {
+              const createdMs = n.createdAt ? new Date(n.createdAt).getTime() : 0;
+              // Created in the last 15 seconds, and not already in state
+              if (nowMs - createdMs < 15000) {
+                const alreadyExists = prev.some(p => p.id === n.id);
+                if (!alreadyExists) {
+                  newestUnread = n;
+                }
+              }
+            }
+          });
+          return list;
+        });
+
+        if (newestUnread) {
+          triggerDeviceNotification(newestUnread);
+        }
       }, (error) => {
         handleSubError(error, 'notifications');
       });
@@ -1483,7 +1554,8 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     userId: string,
     type: 'like' | 'comment' | 'follow' | 'report_decision' | 'withdrawal_decision' | 'ad_alert' | 'system',
     message: string,
-    postId?: string
+    postId?: string,
+    isPoll?: boolean
   ) => {
     if (!userId) return;
     if (userId === currentUserId && type !== 'system' && type !== 'withdrawal_decision' && type !== 'report_decision') return;
@@ -1499,18 +1571,40 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       message,
       postId,
       createdAt: new Date().toISOString(),
-      read: false
+      read: false,
+      isPoll,
+      pollAnswer: isPoll ? null : undefined
     };
 
+    // Remove undefined values to avoid Firestore serialization errors
+    const cleanNotification = JSON.parse(JSON.stringify(newNotification));
+
     try {
-      await setDoc(doc(db, 'notifications', notifId), newNotification);
+      await setDoc(doc(db, 'notifications', notifId), cleanNotification);
       // Also update notifications local state if not in quota fallback (since snapshot handles normal real-time notifications stream)
       if (isQuotaFallbackMode) {
         setNotifications(prev => [...prev, newNotification]);
+        // Trigger manual native push for fallback
+        triggerDeviceNotification(newNotification);
       }
     } catch (err) {
       console.error("Error creating notification:", err);
     }
+  };
+
+  const submitPollAnswer = async (notificationId: string, answer: 'yes' | 'no') => {
+    await runWriteOperation(
+      async () => {
+        await updateDoc(doc(db, 'notifications', notificationId), {
+          pollAnswer: answer,
+          read: true
+        });
+      },
+      () => {
+        setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, pollAnswer: answer, read: true } : n));
+      },
+      `notifications/${notificationId}`
+    );
   };
 
   const markNotificationAsRead = async (id: string) => {
@@ -1755,6 +1849,8 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         requestWithdrawal,
         updateWithdrawalStatusByAdmin,
         notifications,
+        addNotification,
+        submitPollAnswer,
         postReports,
         ads,
         markNotificationAsRead,

@@ -6,6 +6,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { useSocialPlatform } from '../context/SocialPlatformContext';
+import { uploadToCloudinary } from '../lib/cloudinary';
 import { User, Post } from '../types';
 import { 
   Users, 
@@ -109,12 +110,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
     deleteAd,
     toggleAllAds,
     isQuotaFallbackMode,
-    resetQuotaFallback
+    resetQuotaFallback,
+    addNotification
   } = useSocialPlatform();
 
   const isSuperAdmin = currentUser?.role === 'super_admin' || currentUser?.email?.toLowerCase() === 'fresh.linksd@gmail.com';
 
-  const [activeTab, setActiveTab ] = useState<'users' | 'posts' | 'clearance' | 'controls' | 'ads'>('users');
+  const [activeTab, setActiveTab ] = useState<'users' | 'posts' | 'clearance' | 'controls' | 'ads' | 'broadcasts'>('users');
   
   // Search & Filters state
   const [userSearch, setUserSearch] = useState('');
@@ -166,11 +168,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
   const [adError, setAdError] = useState<string | null>(null);
   const [adSuccess, setAdSuccess] = useState<string | null>(null);
 
+  // Cloudinary uploading states for ads
+  const [isUploadingAdImage, setIsUploadingAdImage] = useState(false);
+  const [adImageUploadProgress, setAdImageUploadProgress] = useState('');
+
   // User eSewa Ad request states
   const [adSubTab, setAdSubTab] = useState<'builder' | 'requests'>('builder');
   const [adFilterState, setAdFilterState] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'published'>('pending');
   const [rejectAdId, setRejectAdId] = useState<string | null>(null);
   const [adRejectReason, setAdRejectReason] = useState('');
+
+  // Broadcast composition states
+  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [broadcastTarget, setBroadcastTarget] = useState<'all' | string>('all');
+  const [broadcastType, setBroadcastType] = useState<'message' | 'poll'>('message');
+  const [broadcastSuccess, setBroadcastSuccess] = useState('');
+  const [broadcastError, setBroadcastError] = useState('');
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
 
   const filteredWithdrawals = useMemo(() => {
     return [...withdrawals]
@@ -382,6 +396,46 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
     }
   };
 
+  const handleSendBroadcast = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!broadcastMessage.trim()) {
+      setBroadcastError('Please enter a message or poll question.');
+      return;
+    }
+    
+    setIsBroadcasting(true);
+    setBroadcastSuccess('');
+    setBroadcastError('');
+    
+    try {
+      const isPoll = broadcastType === 'poll';
+      
+      if (broadcastTarget === 'all') {
+        const recipients = users.filter(u => u.id !== currentUser?.id);
+        if (recipients.length === 0 && users.length > 0) {
+          await addNotification(currentUser!.id, 'system', broadcastMessage, undefined, isPoll);
+        } else {
+          for (const user of recipients) {
+            await addNotification(user.id, 'system', broadcastMessage, undefined, isPoll);
+          }
+        }
+        setBroadcastSuccess(`Successfully sent broadcast ${isPoll ? 'Yes/No poll' : 'announcement'} to ${Math.max(1, recipients.length)} users!`);
+      } else {
+        const targetUser = users.find(u => u.id === broadcastTarget);
+        if (!targetUser) throw new Error('Target recipient user not found.');
+        
+        await addNotification(broadcastTarget, 'system', broadcastMessage, undefined, isPoll);
+        setBroadcastSuccess(`Successfully sent ${isPoll ? 'Yes/No poll' : 'alert'} to ${targetUser.name}!`);
+      }
+      
+      setBroadcastMessage('');
+    } catch (err: any) {
+      setBroadcastError(err.message || 'Failed to dispatch broadcast.');
+    } finally {
+      setIsBroadcasting(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 select-none" id="admin-panel-stage">
       
@@ -562,6 +616,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
           }`}
         >
           Ad Campaigns
+        </button>
+        <button
+          onClick={() => setActiveTab('broadcasts')}
+          className={`flex-1 min-w-[120px] py-3 text-xs font-bold uppercase rounded-xl tracking-wider transition-all cursor-pointer ${
+            activeTab === 'broadcasts'
+              ? 'bg-orange-600 text-white shadow-sm'
+              : 'text-zinc-500 hover:text-zinc-800 hover:bg-white/40'
+          }`}
+        >
+          📢 Broadcasts
         </button>
       </div>
 
@@ -1457,32 +1521,52 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                     />
 
                     {/* Local Image Upload Selector */}
-                    <div className="relative border border-dashed border-zinc-200 hover:border-orange-500/50 hover:bg-zinc-50/50 rounded-xl transition overflow-hidden h-14 flex items-center justify-center gap-2 p-2.5 text-center cursor-pointer mt-1.5">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            if (file.size > 1.5 * 1024 * 1024) {
-                              setAdError("File too large. Please upload an image under 1.5MB.");
-                              return;
-                            }
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setAdImageUrl(reader.result as string);
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }}
-                        className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                      />
-                      <Upload className="w-4 h-4 text-zinc-400 shrink-0" />
-                      <div className="text-left">
-                        <span className="text-[9.5px] font-bold text-zinc-700 block leading-tight">Upload local image to insert</span>
-                        <span className="text-[8.5px] text-zinc-400 block leading-tight">Supports PNG/JPEG under 1.5MB</span>
+                    {isUploadingAdImage ? (
+                      <div className="border border-orange-250 bg-orange-50/50 rounded-xl h-14 flex items-center justify-center gap-2 p-2.5 text-center mt-1.5 animate-pulse">
+                        <Loader2 className="w-4 h-4 text-orange-600 animate-spin shrink-0" />
+                        <div className="text-left font-sans">
+                          <span className="text-[9.5px] font-bold text-orange-850 block leading-tight">Uploading campaign image...</span>
+                          <span className="text-[8.5px] text-orange-600 block leading-tight">{adImageUploadProgress || 'Processing...'}</span>
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="relative border border-dashed border-zinc-200 hover:border-orange-500/50 hover:bg-zinc-50/50 rounded-xl transition overflow-hidden h-14 flex items-center justify-center gap-2 p-2.5 text-center cursor-pointer mt-1.5 font-sans">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (file.size > 1.5 * 1024 * 1024) {
+                                setAdError("File too large. Please upload an image under 1.5MB.");
+                                return;
+                              }
+                              setAdError(null);
+                              setIsUploadingAdImage(true);
+                              setAdImageUploadProgress('Uploading to Cloudinary... 0%');
+                              try {
+                                const url = await uploadToCloudinary(file, (progress) => {
+                                  setAdImageUploadProgress(`Uploading to Cloudinary... ${progress}%`);
+                                });
+                                setAdImageUrl(url);
+                              } catch (err: any) {
+                                console.error("Cloudinary ad upload failed:", err);
+                                setAdError(`Cloudinary upload failed: ${err.message || err}`);
+                              } finally {
+                                setIsUploadingAdImage(false);
+                                setAdImageUploadProgress('');
+                              }
+                            }
+                          }}
+                          className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                        />
+                        <Upload className="w-4 h-4 text-zinc-400 shrink-0" />
+                        <div className="text-left">
+                          <span className="text-[9.5px] font-bold text-zinc-700 block leading-tight">Upload local image to insert</span>
+                          <span className="text-[8.5px] text-zinc-400 block leading-tight">Supports PNG/JPEG under 1.5MB</span>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Convenient Unsplash High Quality Stock Presets */}
                     <div className="grid grid-cols-4 gap-2 pt-1.5">
@@ -1979,6 +2063,118 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
 
             </div>
           )}
+        </section>
+      )}
+
+      {activeTab === 'broadcasts' && (
+        <section className="space-y-6 text-left animate-in fade-in duration-200" id="admin-section-broadcasts">
+          <div className="bg-white p-6 md:p-8 rounded-3xl border border-zinc-200 shadow-sm space-y-6">
+            <div>
+              <h2 className="font-sans font-black text-lg uppercase tracking-tight text-zinc-900 flex items-center gap-2 font-bold">
+                📢 Admin & Super-Admin Broadcast Center
+              </h2>
+              <p className="text-zinc-500 text-xs mt-1">
+                Send system alerts, news, updates, or interactive Yes/No feedback polls directly to users' devices.
+              </p>
+            </div>
+
+            {broadcastSuccess && (
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs p-4 rounded-xl font-sans font-semibold">
+                {broadcastSuccess}
+              </div>
+            )}
+
+            {broadcastError && (
+              <div className="bg-red-50 border border-red-200 text-red-800 text-xs p-4 rounded-xl font-sans font-semibold">
+                {broadcastError}
+              </div>
+            )}
+
+            <form onSubmit={handleSendBroadcast} className="space-y-5 max-w-2xl font-sans">
+              {/* Type selector */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-sans font-bold text-zinc-500 uppercase tracking-wider block">
+                  Broadcast Type
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-zinc-700">
+                    <input
+                      type="radio"
+                      name="broadcastType"
+                      checked={broadcastType === 'message'}
+                      onChange={() => setBroadcastType('message')}
+                      className="text-orange-600 focus:ring-orange-500"
+                    />
+                    <span>Regular Announcement</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-zinc-700">
+                    <input
+                      type="radio"
+                      name="broadcastType"
+                      checked={broadcastType === 'poll'}
+                      onChange={() => setBroadcastType('poll')}
+                      className="text-orange-600 focus:ring-orange-500"
+                    />
+                    <span>Yes/No Question (Poll)</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Target Audience */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-sans font-bold text-zinc-500 uppercase tracking-wider block">
+                  Select Target Audience
+                </label>
+                <select
+                  value={broadcastTarget}
+                  onChange={(e) => setBroadcastTarget(e.target.value)}
+                  className="w-full bg-zinc-50 border border-zinc-200 text-xs p-3 rounded-xl outline-none focus:border-orange-500 font-semibold"
+                >
+                  <option value="all">📢 All Registered Creators (Global Broadcast)</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>
+                      👤 {u.name} ({u.email}) - {u.role || 'user'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Message body */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-sans font-bold text-zinc-500 uppercase tracking-wider block">
+                  {broadcastType === 'poll' ? 'Yes/No Poll Question' : 'Announcement Message'}
+                </label>
+                <textarea
+                  value={broadcastMessage}
+                  onChange={(e) => setBroadcastMessage(e.target.value)}
+                  placeholder={
+                    broadcastType === 'poll'
+                      ? 'e.g., Do you want Freshlinkconnect to include push notifications on devices?'
+                      : 'e.g., Attention creators: Scheduled platform system maintenance tonight from 1 AM to 3 AM UTC.'
+                  }
+                  rows={4}
+                  required
+                  className="w-full bg-zinc-50 border border-zinc-200 text-xs p-3.5 rounded-xl outline-none focus:border-orange-500 font-semibold"
+                />
+              </div>
+
+              {/* Submit */}
+              <button
+                type="submit"
+                disabled={isBroadcasting}
+                className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-md shadow-orange-600/15 uppercase tracking-wider flex items-center justify-center gap-2"
+              >
+                {isBroadcasting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Broadcasting Alerts...</span>
+                  </>
+                ) : (
+                  <span>Send Broadcast Now</span>
+                )}
+              </button>
+            </form>
+          </div>
         </section>
       )}
 

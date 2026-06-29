@@ -140,7 +140,7 @@ export const Profiles: React.FC<ProfilesProps> = ({
     return false;
   }, [activeProfile, currentUser]);
 
-  const [activeTab, setActiveTab] = useState<'published' | 'drafts' | 'liked' | 'bookmarks' | 'achievements' | 'notifications'>('published');
+  const [activeTab, setActiveTab] = useState<'published' | 'drafts' | 'liked' | 'bookmarks' | 'achievements' | 'notifications' | 'followers' | 'following'>('published');
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -158,6 +158,11 @@ export const Profiles: React.FC<ProfilesProps> = ({
   const [editTiktok, setEditTiktok] = useState('');
   const [editDob, setEditDob] = useState('');
   const [editInterests, setEditInterests] = useState<string[]>([]);
+  const [notifyLikes, setNotifyLikes] = useState(true);
+  const [notifyComments, setNotifyComments] = useState(true);
+  const [notifyFollows, setNotifyFollows] = useState(true);
+  const [notifySystem, setNotifySystem] = useState(true);
+  const [notifyAdAlerts, setNotifyAdAlerts] = useState(true);
 
   // Drag & drop references for edit profile overlays
   const [isDraggingAvatar, setIsDraggingAvatar] = useState(false);
@@ -303,6 +308,11 @@ export const Profiles: React.FC<ProfilesProps> = ({
     setEditTiktok(activeProfile.socialLinks?.tiktok || '');
     setEditDob(activeProfile.dob || '');
     setEditInterests(activeProfile.interests || []);
+    setNotifyLikes(activeProfile.notificationSettings?.likes !== false);
+    setNotifyComments(activeProfile.notificationSettings?.comments !== false);
+    setNotifyFollows(activeProfile.notificationSettings?.follows !== false);
+    setNotifySystem(activeProfile.notificationSettings?.system !== false);
+    setNotifyAdAlerts(activeProfile.notificationSettings?.adAlerts !== false);
     setIsEditing(true);
   };
 
@@ -330,6 +340,13 @@ export const Profiles: React.FC<ProfilesProps> = ({
           instagram: editInstagram.trim(),
           facebook: editFacebook.trim(),
           tiktok: editTiktok.trim()
+        },
+        notificationSettings: {
+          likes: notifyLikes,
+          comments: notifyComments,
+          follows: notifyFollows,
+          system: notifySystem,
+          adAlerts: notifyAdAlerts
         }
       });
       setIsEditing(false);
@@ -383,6 +400,18 @@ export const Profiles: React.FC<ProfilesProps> = ({
     if (!activeProfile) return { followers: 0, following: 0 };
     return getUserFollowersCount(activeProfile.id);
   }, [activeProfile, followers, getUserFollowersCount]);
+
+  const followersList = useMemo(() => {
+    if (!activeProfile) return [];
+    const relations = followers.filter(f => f.followingId === activeProfile.id);
+    return relations.map(r => users.find(u => u.id === r.followerId)).filter(Boolean) as User[];
+  }, [activeProfile, followers, users]);
+
+  const followingList = useMemo(() => {
+    if (!activeProfile) return [];
+    const relations = followers.filter(f => f.followerId === activeProfile.id);
+    return relations.map(r => users.find(u => u.id === r.followingId)).filter(Boolean) as User[];
+  }, [activeProfile, followers, users]);
 
   const achievements = useMemo(() => {
     if (!activeProfile) return [];
@@ -601,14 +630,36 @@ export const Profiles: React.FC<ProfilesProps> = ({
                   <p className="text-base sm:text-lg font-extrabold text-zinc-800 leading-none">{profilePosts.published.length}</p>
                   <p className="text-[10px] text-zinc-450 mt-1 font-sans">Posts</p>
                 </div>
-                <div>
-                  <p className="text-base sm:text-lg font-extrabold text-zinc-800 leading-none">{followMetrics.followers}</p>
-                  <p className="text-[10px] text-zinc-450 mt-1 font-sans">Followers</p>
-                </div>
-                <div>
-                  <p className="text-base sm:text-lg font-extrabold text-zinc-800 leading-none">{followMetrics.following}</p>
-                  <p className="text-[10px] text-zinc-450 mt-1 font-sans">Following</p>
-                </div>
+                {isOwnProfile ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('followers')}
+                    className="hover:opacity-85 transition-all text-center flex flex-col items-center justify-start group"
+                  >
+                    <p className="text-base sm:text-lg font-extrabold text-zinc-800 leading-none group-hover:text-orange-600 transition-colors">{followMetrics.followers}</p>
+                    <p className="text-[10px] text-zinc-450 mt-1 font-sans border-b border-dashed border-zinc-200 group-hover:text-orange-600 group-hover:border-orange-300 transition-all">Followers</p>
+                  </button>
+                ) : (
+                  <div>
+                    <p className="text-base sm:text-lg font-extrabold text-zinc-800 leading-none">{followMetrics.followers}</p>
+                    <p className="text-[10px] text-zinc-450 mt-1 font-sans">Followers</p>
+                  </div>
+                )}
+                {isOwnProfile ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('following')}
+                    className="hover:opacity-85 transition-all text-center flex flex-col items-center justify-start group"
+                  >
+                    <p className="text-base sm:text-lg font-extrabold text-zinc-800 leading-none group-hover:text-orange-600 transition-colors">{followMetrics.following}</p>
+                    <p className="text-[10px] text-zinc-450 mt-1 font-sans border-b border-dashed border-zinc-200 group-hover:text-orange-600 group-hover:border-orange-300 transition-all">Following</p>
+                  </button>
+                ) : (
+                  <div>
+                    <p className="text-base sm:text-lg font-extrabold text-zinc-800 leading-none">{followMetrics.following}</p>
+                    <p className="text-[10px] text-zinc-450 mt-1 font-sans">Following</p>
+                  </div>
+                )}
                 <button 
                   type="button" 
                   id="profile-badges-stat-trigger"
@@ -706,6 +757,34 @@ export const Profiles: React.FC<ProfilesProps> = ({
             </button>
           )}
 
+          {isOwnProfile && (
+            <button
+              id="tab-followers"
+              onClick={() => setActiveTab('followers')}
+              className={`px-5 py-3 font-sans font-bold text-xs tracking-wide uppercase border-b-2 transition-all shrink-0 ${
+                activeTab === 'followers'
+                  ? 'border-orange-600 text-orange-600 font-extrabold'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-700'
+              }`}
+            >
+              Followers ({followMetrics.followers})
+            </button>
+          )}
+
+          {isOwnProfile && (
+            <button
+              id="tab-following"
+              onClick={() => setActiveTab('following')}
+              className={`px-5 py-3 font-sans font-bold text-xs tracking-wide uppercase border-b-2 transition-all shrink-0 ${
+                activeTab === 'following'
+                  ? 'border-orange-600 text-orange-600 font-extrabold'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-700'
+              }`}
+            >
+              Following ({followMetrics.following})
+            </button>
+          )}
+
 
         </div>
         <div>
@@ -784,6 +863,104 @@ export const Profiles: React.FC<ProfilesProps> = ({
                   );
                 })}
               </div>
+            </div>
+          ) : (activeTab === 'followers' && isOwnProfile) ? (
+            <div className="space-y-4 w-full animate-fade-in" id="followers-list-box">
+              <div className="bg-white border border-zinc-200/60 p-6 rounded-2xl shadow-sm">
+                <h3 className="font-sans font-extrabold text-lg text-zinc-900 tracking-tight">Your Followers</h3>
+                <p className="text-zinc-500 text-xs mt-1">These are the people following your profile. Only you can view this list.</p>
+              </div>
+
+              {followersList.length === 0 ? (
+                <div className="bg-zinc-50 border border-zinc-200/50 p-12 text-center rounded-2xl font-sans text-xs text-zinc-400">
+                  No followers yet. Share articles to build an audience!
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {followersList.map((user) => (
+                    <div
+                      key={user.id}
+                      onClick={() => onSelectUser(user.id)}
+                      className="bg-white border border-zinc-200/60 p-5 rounded-2xl flex items-center justify-between hover:border-orange-200 hover:shadow-md transition-all cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        {user.profileImage ? (
+                          <img
+                            src={user.profileImage}
+                            alt={user.name}
+                            className="w-11 h-11 rounded-full object-cover border border-zinc-100"
+                          />
+                        ) : (
+                          <div className="w-11 h-11 rounded-full bg-orange-100 flex items-center justify-center font-extrabold text-orange-600 text-sm">
+                            {user.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <h4 className="font-sans font-extrabold text-sm text-zinc-900 group-hover:text-orange-600 transition truncate">
+                            {user.name}
+                          </h4>
+                          <p className="text-zinc-400 text-[10px] font-mono truncate">
+                            {user.email}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <span className="text-[10px] font-sans font-bold text-orange-600 bg-orange-50 border border-orange-100/30 px-2.5 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-all">
+                        View Profile
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (activeTab === 'following' && isOwnProfile) ? (
+            <div className="space-y-4 w-full animate-fade-in" id="following-list-box">
+              <div className="bg-white border border-zinc-200/60 p-6 rounded-2xl shadow-sm">
+                <h3 className="font-sans font-extrabold text-lg text-zinc-900 tracking-tight">Users You Follow</h3>
+                <p className="text-zinc-500 text-xs mt-1">These are the creators you are currently following. Only you can view this list.</p>
+              </div>
+
+              {followingList.length === 0 ? (
+                <div className="bg-zinc-50 border border-zinc-200/50 p-12 text-center rounded-2xl font-sans text-xs text-zinc-400">
+                  You are not following anyone yet. Explore articles and follow authors you enjoy!
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {followingList.map((user) => (
+                    <div
+                      key={user.id}
+                      onClick={() => onSelectUser(user.id)}
+                      className="bg-white border border-zinc-200/60 p-5 rounded-2xl flex items-center justify-between hover:border-orange-200 hover:shadow-md transition-all cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        {user.profileImage ? (
+                          <img
+                            src={user.profileImage}
+                            alt={user.name}
+                            className="w-11 h-11 rounded-full object-cover border border-zinc-100"
+                          />
+                        ) : (
+                          <div className="w-11 h-11 rounded-full bg-orange-100 flex items-center justify-center font-extrabold text-orange-600 text-sm">
+                            {user.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <h4 className="font-sans font-extrabold text-sm text-zinc-900 group-hover:text-orange-600 transition truncate">
+                            {user.name}
+                          </h4>
+                          <p className="text-zinc-400 text-[10px] font-mono truncate">
+                            {user.email}
+                          </p>
+                        </div>
+                      </div>
+
+                      <span className="text-[10px] font-sans font-bold text-orange-600 bg-orange-50 border border-orange-100/30 px-2.5 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-all">
+                        View Profile
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4" id="profile-posts-grid">
@@ -1158,6 +1335,48 @@ export const Profiles: React.FC<ProfilesProps> = ({
                       </button>
                     );
                   })}
+                </div>
+              </div>
+
+              {/* Native Device Notification Toggles */}
+              <div className="space-y-3.5 border-t border-zinc-100 pt-5 mt-5">
+                <div>
+                  <label className="text-[11px] font-sans font-bold text-zinc-500 uppercase tracking-wider block">Native Push Alerts</label>
+                  <p className="text-zinc-400 text-[10px] font-sans">Toggle which events trigger instant native browser & mobile device notification overlays.</p>
+                </div>
+                
+                <div className="space-y-2.5">
+                  {[
+                    { label: "Story Appreciations & Likes", desc: "Get alerted when someone hearts your posts", val: notifyLikes, set: setNotifyLikes, id: "toggle-notif-likes" },
+                    { label: "Comments & Discussions", desc: "Get notified when someone leaves a comment on your blogs", val: notifyComments, set: setNotifyComments, id: "toggle-notif-comments" },
+                    { label: "New Subscribers & Followers", desc: "Get notified when someone starts following your creator profile", val: notifyFollows, set: setNotifyFollows, id: "toggle-notif-follows" },
+                    { label: "Admin announcements & Polls", desc: "Get urgent broadcast messages, Yes/No system-wide surveys and community updates", val: notifySystem, set: setNotifySystem, id: "toggle-notif-system" },
+                    { label: "Sponsor Campaign & Revenue alerts", desc: "Get notified about monetization rewards, clearances, or withdrawal status", val: notifyAdAlerts, set: setNotifyAdAlerts, id: "toggle-notif-adalerts" }
+                  ].map((item) => (
+                    <div 
+                      key={item.id}
+                      className="flex items-center justify-between p-3.5 bg-zinc-50 border border-zinc-200/60 rounded-2xl"
+                    >
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-bold text-zinc-800 font-sans">{item.label}</p>
+                        <p className="text-[10px] text-zinc-500 font-sans leading-tight">{item.desc}</p>
+                      </div>
+                      <button
+                        type="button"
+                        id={item.id}
+                        onClick={() => item.set(!item.val)}
+                        className={`w-11 h-6 rounded-full transition-colors relative focus:outline-none shrink-0 cursor-pointer ${
+                          item.val ? 'bg-orange-600' : 'bg-zinc-200'
+                        }`}
+                      >
+                        <span 
+                          className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform shadow-xs ${
+                            item.val ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

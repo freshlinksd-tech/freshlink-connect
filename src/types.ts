@@ -40,6 +40,13 @@ export interface User {
   isMonetizationEnabled?: boolean;
   monthlySubscriptionPrice?: number;
   subscribedCreators?: string[]; // IDs of creators subscribed to
+  notificationSettings?: {
+    likes?: boolean;
+    comments?: boolean;
+    follows?: boolean;
+    system?: boolean;
+    adAlerts?: boolean;
+  };
 }
 
 export interface Post {
@@ -130,6 +137,8 @@ export interface Notification {
   postId?: string; // Optional related post
   createdAt: string;
   read: boolean;
+  isPoll?: boolean; // If this notification is a Yes/No question
+  pollAnswer?: 'yes' | 'no' | null; // Recipient's vote/answer
 }
 
 export interface PostReport {

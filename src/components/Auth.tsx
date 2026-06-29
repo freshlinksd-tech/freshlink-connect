@@ -8,7 +8,8 @@ import { useSocialPlatform } from '../context/SocialPlatformContext';
 import { INTEREST_OPTIONS } from '../data/seedData';
 import { FreshLinkLogo } from './FreshLinkLogo';
 import { motion } from 'motion/react';
-import { Check, Mail, User, Shield, AlertCircle, Compass, X, Phone, CreditCard, Upload } from 'lucide-react';
+import { Check, Mail, User, Shield, AlertCircle, Compass, X, Phone, CreditCard, Upload, Loader2 } from 'lucide-react';
+import { uploadToCloudinary } from '../lib/cloudinary';
 
 interface AuthProps {
   onClose: () => void;
@@ -41,6 +42,10 @@ export const Auth: React.FC<AuthProps> = ({ onClose }) => {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRefForAuthSignup = useRef<HTMLInputElement>(null);
 
+  // Cloudinary upload progress states for Auth signup
+  const [isUploadingIdPhoto, setIsUploadingIdPhoto] = useState(false);
+  const [idPhotoUploadProgress, setIdPhotoUploadProgress] = useState('');
+
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
@@ -58,7 +63,7 @@ export const Auth: React.FC<AuthProps> = ({ onClose }) => {
     }
   };
 
-  const handleFileChangeForAuth = (file: File) => {
+  const handleFileChangeForAuth = async (file: File) => {
     if (!file.type.startsWith('image/')) {
       setSignupError('Please upload a valid image file (PNG, JPG, or JPEG) for your ID photo.');
       return;
@@ -71,13 +76,21 @@ export const Auth: React.FC<AuthProps> = ({ onClose }) => {
 
     setSignupError('');
     setIdPhotoName(file.name);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (typeof e.target?.result === 'string') {
-        setIdPhoto(e.target.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    setIsUploadingIdPhoto(true);
+    setIdPhotoUploadProgress('Uploading to Cloudinary... 0%');
+
+    try {
+      const url = await uploadToCloudinary(file, (progress) => {
+        setIdPhotoUploadProgress(`Uploading to Cloudinary... ${progress}%`);
+      });
+      setIdPhoto(url);
+    } catch (err: any) {
+      console.error("Auth sign up ID photo upload failed:", err);
+      setSignupError(`ID photo upload failed: ${err.message || err}`);
+    } finally {
+      setIsUploadingIdPhoto(false);
+      setIdPhotoUploadProgress('');
+    }
   };
 
   const onDragOverForAuth = (e: React.DragEvent) => {
@@ -432,7 +445,14 @@ export const Auth: React.FC<AuthProps> = ({ onClose }) => {
                     accept="image/*"
                     className="hidden" 
                   />
-                  {idPhoto ? (
+                  {isUploadingIdPhoto ? (
+                    <div className="flex flex-col items-center py-4">
+                      <Loader2 className="w-6 h-6 text-orange-600 animate-spin mb-1" />
+                      <p className="text-[10px] font-bold text-orange-800 animate-pulse">
+                        {idPhotoUploadProgress || 'Uploading ID...'}
+                      </p>
+                    </div>
+                  ) : idPhoto ? (
                     <div className="flex flex-col items-center">
                       <div className="w-full h-24 overflow-hidden rounded-lg mb-1.5 relative">
                         <img src={idPhoto} alt="Verification ID preview" className="w-full h-full object-cover" />

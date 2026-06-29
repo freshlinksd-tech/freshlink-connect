@@ -9,8 +9,10 @@ import { useSocialPlatform } from '../context/SocialPlatformContext';
 import { INTEREST_OPTIONS } from '../data/seedData';
 import { Post, User, AdBanner } from '../types';
 import { MultiPhotosLayout } from './MultiPhotosLayout';
+import { BroadcastBanner } from './BroadcastBanner';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { uploadToCloudinary } from '../lib/cloudinary';
 import { 
   Heart, 
   MessageSquare, 
@@ -301,7 +303,11 @@ export const Feed: React.FC<FeedProps> = ({
     setEditUploadError('');
   };
 
-  const handleEditFileRead = (file: File) => {
+  // Post Edit states
+  const [isUploadingEditCover, setIsUploadingEditCover] = useState(false);
+  const [editCoverUploadProgress, setEditCoverUploadProgress] = useState('');
+
+  const handleEditFileRead = async (file: File) => {
     if (!file.type.startsWith('image/')) {
       setEditUploadError('Please select or drop a valid cover image file.');
       return;
@@ -310,14 +316,23 @@ export const Feed: React.FC<FeedProps> = ({
       setEditUploadError('Local cover image is too heavy. Please use an image under 1.5MB.');
       return;
     }
+    
     setEditUploadError('');
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (typeof e.target?.result === 'string') {
-        setEditPostMediaUrl(e.target.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    setIsUploadingEditCover(true);
+    setEditCoverUploadProgress('Uploading to Cloudinary... 0%');
+
+    try {
+      const url = await uploadToCloudinary(file, (progress) => {
+        setEditCoverUploadProgress(`Uploading to Cloudinary... ${progress}%`);
+      });
+      setEditPostMediaUrl(url);
+    } catch (err: any) {
+      console.error("Post edit cover upload failed:", err);
+      setEditUploadError(`Upload failed: ${err.message || err}`);
+    } finally {
+      setIsUploadingEditCover(false);
+      setEditCoverUploadProgress('');
+    }
   };
 
   const handleUpdatePostSubmit = async (e: React.FormEvent) => {
@@ -468,6 +483,9 @@ export const Feed: React.FC<FeedProps> = ({
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
         {/* Left Side: Main Feed Column */}
         <div className="xl:col-span-8 flex flex-col gap-6">
+          
+          {/* Admin Broadcast Announcements and Polls Banner */}
+          <BroadcastBanner />
       
       {/* Dynamic Quota Fallback Mode Notice Badge */}
       {isQuotaFallbackMode && (
@@ -1759,10 +1777,21 @@ export const Feed: React.FC<FeedProps> = ({
                         accept="image/*"
                         className="hidden"
                       />
-                      <Upload className="w-4 h-4 mx-auto text-zinc-400 mb-1" />
-                      <p className="text-[11px] font-bold text-zinc-850 select-none">
-                        Drag & Drop or click to browse
-                      </p>
+                      {isUploadingEditCover ? (
+                        <div className="py-2">
+                          <Loader2 className="w-5 h-5 mx-auto text-orange-600 animate-spin mb-1" />
+                          <p className="text-[10px] font-bold text-orange-850 animate-pulse">
+                            {editCoverUploadProgress || 'Uploading Cover...'}
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4 mx-auto text-zinc-400 mb-1" />
+                          <p className="text-[11px] font-bold text-zinc-850 select-none">
+                            Drag & Drop or click to browse
+                          </p>
+                        </>
+                      )}
                     </div>
 
                     {editPostMediaUrl && (

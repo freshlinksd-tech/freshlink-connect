@@ -13,6 +13,7 @@ export const Notifications: React.FC = () => {
     notifications, 
     markNotificationAsRead, 
     markAllNotificationsAsRead, 
+    submitPollAnswer,
     currentUser 
   } = useSocialPlatform();
 
@@ -138,6 +139,51 @@ export const Notifications: React.FC = () => {
                       <p className="font-sans text-xs text-zinc-650 mt-1 leading-normal select-none">
                         {notif.message}
                       </p>
+
+                      {notif.isPoll && (
+                        <div className="mt-3 bg-zinc-50 border border-zinc-150 p-3.5 rounded-xl space-y-2 max-w-sm">
+                          <p className="text-[9px] font-sans font-bold uppercase tracking-wider text-zinc-450 block">
+                            Interactive Poll Question
+                          </p>
+                          {notif.pollAnswer ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-zinc-700">
+                                Your response:
+                              </span>
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                                notif.pollAnswer === 'yes'
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                  : 'bg-red-50 text-red-700 border border-red-100'
+                              }`}>
+                                {notif.pollAnswer.toUpperCase()}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  submitPollAnswer(notif.id, 'yes');
+                                }}
+                                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-sans font-bold text-[9px] uppercase tracking-wider rounded-lg transition-all cursor-pointer shadow-sm shadow-emerald-650/10"
+                              >
+                                👍 Yes
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  submitPollAnswer(notif.id, 'no');
+                                }}
+                                className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white font-sans font-bold text-[9px] uppercase tracking-wider rounded-lg transition-all cursor-pointer shadow-sm shadow-red-650/10"
+                              >
+                                👎 No
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Ping Indicator dot for unread inline items */}

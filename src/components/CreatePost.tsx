@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { censorText, scanPostSafety } from '../lib/security';
 import { MultiPhotosLayout } from './MultiPhotosLayout';
+import { uploadToCloudinary } from '../lib/cloudinary';
 
 const COVER_SUGGESTIONS: Record<string, string[]> = {
   technology: [
@@ -101,6 +102,10 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
   const [submitError, setSubmitError] = useState('');
   const [isPremium, setIsPremium] = useState(false);
 
+  // Cloudinary uploading progress states
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  const [mediaUploadProgress, setMediaUploadProgress] = useState('');
+
   const handleVideoFileRead = (file: File) => {
     if (!file.type.startsWith('video/')) {
       setVideoFileError('Please select a valid video file (e.g., MP4, WebM).');
@@ -118,15 +123,22 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
     const objectUrl = URL.createObjectURL(file);
     videoElement.src = objectUrl;
 
-    const finalizeFile = () => {
+    const finalizeFile = async () => {
       setVideoFileError('');
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        if (typeof e.target?.result === 'string') {
-          setVideoUrl(e.target.result);
-        }
-      };
-      reader.readAsDataURL(file);
+      setIsUploadingMedia(true);
+      setMediaUploadProgress('Initializing video upload...');
+      try {
+        const url = await uploadToCloudinary(file, (progress) => {
+          setMediaUploadProgress(`Uploading video... ${progress}%`);
+        });
+        setVideoUrl(url);
+      } catch (err: any) {
+        console.error("Cloudinary upload failed:", err);
+        setVideoFileError(`Cloudinary upload failed: ${err.message || err}`);
+      } finally {
+        setIsUploadingMedia(false);
+        setMediaUploadProgress('');
+      }
     };
 
     videoElement.onloadedmetadata = () => {
@@ -148,7 +160,7 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
     };
   };
 
-  const handleUnifiedFiles = (files: FileList | File[]) => {
+  const handleUnifiedFiles = async (files: FileList | File[]) => {
     const fileList = Array.from(files);
     const images: File[] = [];
     let video: File | null = null;
@@ -180,22 +192,30 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
       });
 
       if (validImages.length > 0) {
-        let loadedCount = 0;
-        const newPhotos: string[] = [];
-
-        validImages.forEach(file => {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            if (typeof e.target?.result === 'string') {
-              newPhotos.push(e.target.result);
-            }
-            loadedCount++;
-            if (loadedCount === validImages.length) {
-              setMultiplePhotos(prev => [...prev, ...newPhotos]);
-            }
-          };
-          reader.readAsDataURL(file);
-        });
+        setIsUploadingMedia(true);
+        setMediaUploadProgress(`Preparing ${validImages.length} photo(s)...`);
+        
+        try {
+          const uploadedUrls = await Promise.all(
+            validImages.map(async (file, idx) => {
+              const url = await uploadToCloudinary(file, (progress) => {
+                if (validImages.length === 1) {
+                  setMediaUploadProgress(`Uploading photo... ${progress}%`);
+                } else {
+                  setMediaUploadProgress(`Uploading photo ${idx + 1}/${validImages.length}... ${progress}%`);
+                }
+              });
+              return url;
+            })
+          );
+          setMultiplePhotos(prev => [...prev, ...uploadedUrls]);
+        } catch (err: any) {
+          console.error("Image upload failed:", err);
+          setUploadError(`Failed to upload photo(s): ${err.message || err}`);
+        } finally {
+          setIsUploadingMedia(false);
+          setMediaUploadProgress('');
+        }
       }
     }
 
@@ -557,6 +577,13 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
             {videoFileError && (
               <div className="p-3 bg-red-50 text-red-700 text-xs rounded-xl border border-red-100 font-bold font-sans">
                 {videoFileError}
+              </div>
+            )}
+
+            {isUploadingMedia && (
+              <div className="p-4 bg-orange-50 border border-orange-200/50 rounded-xl flex items-center gap-3 animate-pulse">
+                <Loader2 className="w-5 h-5 text-orange-600 animate-spin shrink-0" />
+                <span className="text-xs font-bold text-orange-850 font-sans">{mediaUploadProgress || 'Uploading media to Cloudinary...'}</span>
               </div>
             )}
 
