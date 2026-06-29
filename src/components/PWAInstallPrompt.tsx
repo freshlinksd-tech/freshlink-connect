@@ -42,12 +42,14 @@ export const PWAInstallPrompt: React.FC = () => {
   useEffect(() => {
     const handleTriggerInstall = () => {
       if (deferredPrompt) {
-        handleInstallClick();
-      } else if (isInstalled) {
-        alert("FreshLink Connect is already installed on your device! Check your home screen or apps list. 📱");
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then((choiceResult: any) => {
+          console.log(`User response to install prompt: ${choiceResult.outcome}`);
+          setDeferredPrompt(null);
+          setIsVisible(false);
+        });
       } else {
-        // If beforeinstallprompt didn't fire (e.g. on iOS Safari or unsupported browsers)
-        alert("To install FreshLink Connect on your mobile:\n\n1. Open this page in Safari or Chrome.\n2. Tap the Share button (or menu icon).\n3. Scroll down and tap 'Add to Home Screen'. 📱✨");
+        console.log('PWA installation prompt not deferred yet or unsupported by browser.');
       }
     };
 
@@ -55,7 +57,7 @@ export const PWAInstallPrompt: React.FC = () => {
     return () => {
       window.removeEventListener('trigger-pwa-install', handleTriggerInstall);
     };
-  }, [deferredPrompt, isInstalled]);
+  }, [deferredPrompt]);
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
