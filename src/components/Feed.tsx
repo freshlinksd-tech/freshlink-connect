@@ -11,6 +11,7 @@ import { Post, User, AdBanner } from '../types';
 import { MultiPhotosLayout } from './MultiPhotosLayout';
 import { BroadcastBanner } from './BroadcastBanner';
 import { FeedPostSkeleton } from './SkeletonLoader';
+import { VirtualPost } from './VirtualPost';
 import { ArrowDown } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -47,7 +48,10 @@ import {
   Lock,
   Coins,
   Cake,
-  Compass
+  Compass,
+  Vote,
+  BarChart2,
+  Crop
 } from 'lucide-react';
 
 const COVER_SUGGESTIONS: Record<string, string[]> = {
@@ -121,6 +125,8 @@ export const Feed: React.FC<FeedProps> = ({
     toggleSavePost,
     deletePost,
     updatePost,
+    voteInPostPoll,
+    incrementPostViews,
     editComment,
     deleteComment,
     updateProfile,
@@ -144,6 +150,120 @@ export const Feed: React.FC<FeedProps> = ({
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState('');
   const [localReactions, setLocalReactions] = useState<Record<string, string>>({});
+  const [postRatios, setPostRatios] = useState<Record<string, 'auto' | '16/9' | '4/3' | '1/1'>>({});
+
+  const renderPostPoll = (post: Post) => {
+    if (!post.poll) return null;
+
+    const options = post.poll.options;
+    const votes = post.poll.votes || {};
+    
+    // Get total votes
+    const optionVotes = options.map((_, idx) => votes[String(idx)]?.length || 0);
+    const totalVotes = optionVotes.reduce((sum, v) => sum + v, 0);
+
+    // Check if current user has voted
+    const userVoteIdx = (() => {
+      if (!currentUser) return null;
+      const optIdx = Object.keys(votes).find(key => 
+        votes[key]?.includes(currentUser.id)
+      );
+      return optIdx !== undefined ? Number(optIdx) : null;
+    })();
+    const hasVoted = userVoteIdx !== null;
+
+    return (
+      <div className="mt-4 p-5 bg-gradient-to-r from-orange-50/40 to-amber-50/10 border border-orange-500/10 rounded-2xl font-sans animate-fadeIn">
+        <div className="flex items-center gap-2 mb-3">
+          <Vote className="w-4 h-4 text-orange-600 shrink-0 animate-pulse" />
+          <h4 className="text-xs font-black uppercase tracking-wider text-zinc-800 leading-snug">
+            {post.poll.question || post.title}
+          </h4>
+        </div>
+
+        <div className="space-y-2.5">
+          {options.map((option, idx) => {
+            const voteCount = optionVotes[idx];
+            const pct = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
+            const isMyVote = userVoteIdx === idx;
+
+            if (hasVoted) {
+              return (
+                <div 
+                  key={idx}
+                  className={`relative overflow-hidden rounded-xl h-11 border transition-all ${
+                    isMyVote 
+                      ? 'border-orange-500 bg-orange-50/10' 
+                      : 'border-zinc-200 bg-white'
+                  }`}
+                >
+                  {/* Progress fill */}
+                  <div 
+                    className="absolute inset-y-0 left-0 bg-orange-500/10 transition-all duration-500 ease-out" 
+                    style={{ width: `${pct}%` }}
+                  />
+                  
+                  {/* Content overlay */}
+                  <div className="absolute inset-0 px-4 flex items-center justify-between text-xs font-semibold">
+                    <span className="flex items-center gap-2 truncate text-zinc-800">
+                      {isMyVote && <Check className="w-4 h-4 text-orange-600 shrink-0" />}
+                      <span className="truncate">{option}</span>
+                    </span>
+                    <span className="text-zinc-500 shrink-0 font-mono ml-2">
+                      {pct}% <span className="text-[10px] opacity-75">({voteCount} {voteCount === 1 ? 'vote' : 'votes'})</span>
+                    </span>
+                  </div>
+                </div>
+              );
+            } else {
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => voteInPostPoll(post.id, idx)}
+                  className="w-full h-11 px-4 border border-zinc-200 hover:border-orange-500 bg-white hover:bg-orange-50/20 active:scale-[0.985] rounded-xl text-left text-xs font-bold text-zinc-750 hover:text-orange-600 transition-all duration-200 cursor-pointer"
+                >
+                  {option}
+                </button>
+              );
+            }
+          })}
+        </div>
+
+        <div className="mt-3.5 flex items-center justify-between text-[10px] font-bold text-zinc-450 uppercase tracking-wide px-1">
+          <span>{totalVotes} total {totalVotes === 1 ? 'vote' : 'votes'}</span>
+          {hasVoted && <span className="text-orange-600">✓ Vote Registered</span>}
+        </div>
+      </div>
+    );
+  };
+
+  const renderRatioToggle = (postId: string, currentRatio: 'auto' | '16/9' | '4/3' | '1/1') => {
+    const ratios: ('auto' | '16/9' | '4/3' | '1/1')[] = ['auto', '16/9', '4/3', '1/1'];
+    const nextRatio = ratios[(ratios.indexOf(currentRatio) + 1) % ratios.length];
+    const ratioLabels = {
+      'auto': 'Original/Auto',
+      '16/9': '16:9 Landscape',
+      '4/3': '4:3 Standard',
+      '1/1': '1:1 Square'
+    };
+
+    return (
+      <button
+        type="button"
+        id={`ratio-toggle-btn-${postId}`}
+        onClick={(e) => {
+          e.stopPropagation(); // Prevent opening the details modal when clicking the ratio button
+          setPostRatios(prev => ({ ...prev, [postId]: nextRatio }));
+        }}
+        className="absolute bottom-4 left-4 bg-zinc-950/80 backdrop-blur-md hover:bg-zinc-900 text-white py-1 px-2.5 text-[9px] font-bold tracking-wider uppercase rounded-full flex items-center gap-1 transition-all border border-white/10 shadow-md cursor-pointer z-10"
+        title="Adjust image display aspect ratio"
+      >
+        <Crop className="w-3 h-3 text-orange-500" />
+        <span>Ratio: {ratioLabels[currentRatio]}</span>
+      </button>
+    );
+  };
 
   const getUserReactionWithLocal = (postId: string) => {
     if (localReactions[postId] !== undefined) {
@@ -365,11 +485,17 @@ export const Feed: React.FC<FeedProps> = ({
     if (selectedPost) {
       setActiveDetailsImage(selectedPost.mediaUrl || (selectedPost.mediaUrls && selectedPost.mediaUrls.length > 0 ? selectedPost.mediaUrls[0] : null));
       setDetailsViewMode(selectedPost.videoUrl ? 'video' : 'image');
+      
+      // Increment views count
+      incrementPostViews(selectedPost.id);
+      
+      // Prevent recursive update but ensure details view has the incremented view count
+      setSelectedPost(prev => prev && prev.id === selectedPost.id ? { ...prev, views: (prev.views || 0) + 1 } : prev);
     } else {
       setActiveDetailsImage(null);
       setDetailsViewMode('image');
     }
-  }, [selectedPost]);
+  }, [selectedPost?.id]);
 
   const [newCommentText, setNewCommentText] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
@@ -937,6 +1063,25 @@ export const Feed: React.FC<FeedProps> = ({
 
       {/* Active Ad Banners inside the top white space */}
       {(() => {
+        if (loading) {
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+              {[1, 2, 3].map((idx) => (
+                <div 
+                  key={idx}
+                  className="bg-stone-50/50 border border-stone-200/40 rounded-3xl p-5 md:p-6 flex flex-col items-center gap-6 shadow-sm animate-pulse"
+                >
+                  <div className="w-full h-32 rounded-2xl bg-zinc-200" />
+                  <div className="w-full space-y-2">
+                    <div className="h-3.5 bg-zinc-200 rounded w-3/4 mx-auto" />
+                    <div className="h-2.5 bg-zinc-100 rounded w-1/2 mx-auto" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        }
+
         const activeAds = ads.filter(a => a.active && (a.placement || 'workspace') === 'workspace').slice(0, 3);
         if (activeAds.length === 0) return null;
         return (
@@ -954,6 +1099,7 @@ export const Feed: React.FC<FeedProps> = ({
                 {activeAd.imageUrl && (
                   <div className="w-full h-32 rounded-2xl overflow-hidden shrink-0 border border-zinc-200 bg-white relative">
                     <img 
+                      loading="lazy"
                       referrerPolicy="no-referrer"
                       src={activeAd.imageUrl} 
                       alt={activeAd.title}
@@ -983,13 +1129,28 @@ export const Feed: React.FC<FeedProps> = ({
         ) : rankedPosts.length > 0 ? (
           rankedPosts.map((post) => {
             const author = userMap[post.userId];
-            if (!author) return null;
+            const isAuthorLoading = !author;
+            const authorName = author?.name || "Loading writer...";
+            const authorImg = author?.profileImage || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&h=80&q=80";
+            const authorLoc = author?.location;
 
             const isLiked = isPostLiked(post.id);
             const likesCount = getPostLikesCount(post.id);
             const commentsCount = comments.filter(c => c.postId === post.id).length;
             const authorIsMe = currentUser?.id === post.userId;
             const authorIsFollowed = isFollowing(post.userId);
+
+            const pollVotersCount = (() => {
+              if (!post.poll?.votes) return 0;
+              let total = 0;
+              for (const key of Object.keys(post.poll.votes)) {
+                const list = post.poll.votes[key] as unknown;
+                if (Array.isArray(list)) {
+                  total += list.length;
+                }
+              }
+              return total;
+            })();
 
             // Title styling helper mimicking "WHY Code IS THE NEW LATIN"
             const styledTitleContent = (() => {
@@ -1020,349 +1181,409 @@ export const Feed: React.FC<FeedProps> = ({
             })();
 
             return (
-              <article
-                key={post.id}
-                id={`post-card-${post.id}`}
-                className="bg-white border border-stone-200/45 rounded-[2rem] card-shadow hover:shadow-2xl hover:scale-[1.012] hover:-translate-y-1 hover:border-stone-300/65 transition-all duration-300 ease-out overflow-hidden transform"
-              >
-                {/* Author Info row */}
-                <div className="p-6 flex items-center justify-between border-b border-stone-100/50 bg-white">
-                  <div className="flex items-center gap-3">
-                    <button
-                      id={`post-${post.id}-author-avatar`}
-                      onClick={() => onSelectUser(author.id)}
-                      className="shrink-0 relative focus:outline-none"
-                    >
-                      <img
-                        src={author.profileImage}
-                        alt={author.name}
-                        referrerPolicy="no-referrer"
-                        className="w-10 h-10 rounded-full object-cover border border-zinc-100 shadow-inner"
-                      />
-                    </button>
-                    <div>
+              <VirtualPost key={post.id} id={post.id}>
+                <article
+                  id={`post-card-${post.id}`}
+                  className="bg-white border border-stone-200/45 rounded-[2rem] card-shadow hover:shadow-2xl hover:scale-[1.012] hover:-translate-y-1 hover:border-stone-300/65 transition-all duration-300 ease-out overflow-hidden transform"
+                >
+                  {/* Author Info row */}
+                  <div className="p-6 flex items-center justify-between border-b border-stone-100/50 bg-white">
+                    <div className="flex items-center gap-3">
                       <button
-                        id={`post-${post.id}-author-name`}
-                        onClick={() => onSelectUser(author.id)}
-                        className="font-semibold text-xs text-zinc-900 hover:text-orange-650 block text-left transition-all"
+                        id={`post-${post.id}-author-avatar`}
+                        onClick={() => author && onSelectUser(author.id)}
+                        className="shrink-0 relative focus:outline-none"
+                        disabled={isAuthorLoading}
                       >
-                        {author.name}
+                        <img
+                          loading="lazy"
+                          src={authorImg}
+                          alt={authorName}
+                          referrerPolicy="no-referrer"
+                          className={`w-10 h-10 rounded-full object-cover border border-zinc-100 shadow-inner ${isAuthorLoading ? 'animate-pulse bg-zinc-200 opacity-60' : ''}`}
+                        />
                       </button>
-                      <div className="flex items-center gap-1.5 text-zinc-400 text-[10px] font-sans uppercase mt-0.5 font-medium">
-                        {author.location && (
-                          <div className="flex items-center gap-0.5">
-                            <MapPin className="w-3 h-3 text-zinc-450" />
-                            <span>{author.location.split(',')[0]}</span>
+                      <div>
+                        {isAuthorLoading ? (
+                          <div className="space-y-1 text-left">
+                            <div className="h-3 bg-zinc-200 rounded w-28 animate-pulse" />
+                            <div className="h-2 bg-zinc-100 rounded w-16 animate-pulse" />
                           </div>
+                        ) : (
+                          <>
+                            <button
+                              id={`post-${post.id}-author-name`}
+                              onClick={() => onSelectUser(author.id)}
+                              className="font-semibold text-xs text-zinc-900 hover:text-orange-650 block text-left transition-all"
+                            >
+                              {authorName}
+                            </button>
+                            <div className="flex items-center gap-1.5 text-zinc-400 text-[10px] font-sans uppercase mt-0.5 font-medium">
+                              {authorLoc && (
+                                <div className="flex items-center gap-0.5">
+                                  <MapPin className="w-3 h-3 text-zinc-450" />
+                                  <span>{authorLoc.split(',')[0]}</span>
+                                </div>
+                              )}
+                              <span>•</span>
+                              <span>{new Date(post.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                            </div>
+                          </>
                         )}
-                        <span>•</span>
-                        <span>{new Date(post.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
                       </div>
                     </div>
+
+                    {/* Follow actions button */}
+                    {!authorIsMe && currentUser && author && (
+                      <button
+                        id={`follow-author-btn-${post.id}`}
+                        onClick={() => toggleFollowUser(author.id)}
+                        className={`flex items-center gap-1 px-3.5 py-1.5 font-sans text-[10px] font-bold uppercase tracking-wider rounded-full transition-all border-0 focus:outline-none ${
+                          authorIsFollowed
+                            ? 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700'
+                            : 'bg-orange-50 hover:bg-orange-100 text-orange-600'
+                        }`}
+                      >
+                        {authorIsFollowed ? (
+                          <>
+                            <UserCheck className="w-3.5 h-3.5" />
+                            <span>Following</span>
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="w-3.5 h-3.5 text-orange-600" />
+                            <span>Follow</span>
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
 
-                  {/* Follow actions button */}
-                  {!authorIsMe && currentUser && (
-                    <button
-                      id={`follow-author-btn-${post.id}`}
-                      onClick={() => toggleFollowUser(author.id)}
-                      className={`flex items-center gap-1 px-3.5 py-1.5 font-sans text-[10px] font-bold uppercase tracking-wider rounded-full transition-all border-0 focus:outline-none ${
-                        authorIsFollowed
-                          ? 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700'
-                          : 'bg-orange-50 hover:bg-orange-100 text-orange-600'
-                      }`}
-                    >
-                      {authorIsFollowed ? (
-                        <>
-                          <UserCheck className="w-3.5 h-3.5" />
-                          <span>Following</span>
-                        </>
-                      ) : (
-                        <>
-                          <UserPlus className="w-3.5 h-3.5 text-orange-600" />
-                          <span>Follow</span>
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
-
-                {/* Cover Image and Video Attachment indicators */}
-                {post.mediaUrls && post.mediaUrls.length > 0 ? (
-                  <div
-                    id={`post-${post.id}-cover-gallery`}
-                    onClick={() => setSelectedPost(post)}
-                    className="cursor-pointer px-6 pt-4"
-                  >
-                    <div className="rounded-2xl overflow-hidden border border-stone-200/40">
-                      <MultiPhotosLayout 
-                        images={[post.mediaUrl, ...post.mediaUrls].filter(Boolean) as string[]} 
-                      />
-                    </div>
-                  </div>
-                ) : post.mediaUrl ? (
-                  <div className="px-6 pt-4">
-                    <div 
-                      id={`post-${post.id}-cover`}
+                  {/* Cover Image and Video Attachment indicators */}
+                  {post.mediaUrls && post.mediaUrls.length > 0 ? (
+                    <div
+                      id={`post-${post.id}-cover-gallery`}
                       onClick={() => setSelectedPost(post)}
-                      className="cursor-pointer overflow-hidden relative bg-stone-100/50 rounded-2xl border border-stone-200/45 group flex justify-center items-center w-full max-h-[520px]"
+                      className="cursor-pointer px-6 pt-4"
                     >
-                      <img
-                        src={optimizeImageUrl(post.mediaUrl, { width: 800, crop: 'limit' })}
-                        alt={post.title}
-                        referrerPolicy="no-referrer"
-                        className="w-full h-auto max-h-[520px] object-contain transition-smooth group-hover:scale-[1.01]"
+                      <div className="rounded-2xl overflow-hidden border border-stone-200/40">
+                        <MultiPhotosLayout 
+                          images={[post.mediaUrl, ...post.mediaUrls].filter(Boolean) as string[]} 
+                        />
+                      </div>
+                    </div>
+                  ) : post.mediaUrl ? (
+                    (() => {
+                      const currentRatio = postRatios[post.id] || post.imageRatio || 'auto';
+                      
+                      let containerClasses = "cursor-pointer overflow-hidden relative rounded-2xl border border-stone-200/45 group flex justify-center items-center w-full bg-stone-100/50 transition-all duration-300 ";
+                      let imgClasses = "transition-smooth group-hover:scale-[1.01] ";
+
+                      if (currentRatio === '16/9') {
+                        containerClasses += "aspect-video";
+                        imgClasses += "w-full h-full object-cover";
+                      } else if (currentRatio === '4/3') {
+                        containerClasses += "aspect-[4/3]";
+                        imgClasses += "w-full h-full object-cover";
+                      } else if (currentRatio === '1/1') {
+                        containerClasses += "aspect-square";
+                        imgClasses += "w-full h-full object-cover";
+                      } else {
+                        containerClasses += "h-auto max-h-[500px] min-h-[220px]";
+                        imgClasses += "w-full h-auto max-h-[500px] object-contain bg-stone-50/50";
+                      }
+
+                      return (
+                        <div className="px-6 pt-4">
+                          <div 
+                            id={`post-${post.id}-cover`}
+                            onClick={() => setSelectedPost(post)}
+                            className={containerClasses}
+                          >
+                            <img
+                              loading="lazy"
+                              src={optimizeImageUrl(post.mediaUrl, { width: 800, crop: 'limit' })}
+                              alt={post.title}
+                              referrerPolicy="no-referrer"
+                              className={imgClasses}
+                            />
+                            
+                            {/* Floating Aspect Ratio Adjustment button */}
+                            {renderRatioToggle(post.id, currentRatio)}
+
+                            <div className="absolute top-4 right-4 bg-zinc-950/90 backdrop-blur-md text-white py-1.5 px-3 text-[10px] tracking-widest uppercase rounded-full font-extrabold shadow-sm">
+                              #{post.category}
+                            </div>
+                            {post.videoUrl && (
+                              <div className="absolute bottom-4 right-4 bg-orange-600 text-white flex items-center gap-1 py-1.5 px-3 text-[9px] tracking-wider uppercase rounded-full font-extrabold shadow-md border border-orange-500/20">
+                                <Video className="w-3 h-3 text-white animate-pulse" />
+                                <span>Has Video</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : post.videoUrl ? (
+                    <div className="px-6 pt-4">
+                      <div 
+                        id={`post-${post.id}-video-cover`}
+                        onClick={() => setSelectedPost(post)}
+                        className="cursor-pointer overflow-hidden aspect-video relative bg-zinc-950 rounded-2xl border border-stone-200/45 flex items-center justify-center group"
+                      >
+                      <video
+                        src={post.videoUrl}
+                        className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
                       />
-                      <div className="absolute top-4 left-4 bg-zinc-950/90 backdrop-blur-md text-white py-1.5 px-3 text-[10px] tracking-widest uppercase rounded-full font-extrabold shadow-sm">
+                      <div className="absolute inset-0 bg-black/10 flex items-center justify-center">
+                        <div className="w-12 h-12 bg-white/95 group-hover:bg-orange-600 text-zinc-900 group-hover:text-white rounded-full flex items-center justify-center transition-all shadow-lg scale-100 group-hover:scale-105">
+                          <Video className="w-5 h-5 ml-0.5" />
+                        </div>
+                      </div>
+                      <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-md text-zinc-850 py-1.5 px-3 text-[10px] tracking-wider rounded-full font-bold shadow-sm">
                         #{post.category}
                       </div>
-                      {post.videoUrl && (
-                        <div className="absolute bottom-4 right-4 bg-orange-600 text-white flex items-center gap-1 py-1.5 px-3 text-[9px] tracking-wider uppercase rounded-full font-extrabold shadow-md border border-orange-500/20">
-                          <Video className="w-3 h-3 text-white animate-pulse" />
-                          <span>Has Video</span>
+                    </div>
+                    </div>
+                  ) : null}
+
+                  {/* Card Title & Content Summary */}
+                  <div className="p-6">
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      {!post.mediaUrl && (
+                        <span className="bg-orange-50 text-orange-600 font-bold uppercase text-[9px] tracking-widest px-3 py-1 rounded-full">
+                          #{post.category}
+                        </span>
+                      )}
+                      {post.isPremium && (
+                        <span className="bg-amber-550/10 text-amber-700 border border-amber-205 font-black text-[8.5px] uppercase tracking-wide px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm font-sans shrink-0">
+                          <Lock className="w-2.5 h-2.5 text-amber-600" />
+                          Premium Member
+                        </span>
+                      )}
+                    </div>
+
+                    <h3 
+                      id={`post-title-${post.id}`}
+                      onClick={() => setSelectedPost(post)}
+                      className="font-extrabold text-xl md:text-2xl tracking-tight text-zinc-900 group cursor-pointer hover:text-orange-600 transition-all leading-tight"
+                    >
+                      {styledTitleContent}
+                    </h3>
+
+                    {/* Text contents preview */}
+                    <p className="text-zinc-600 text-xs font-sans leading-relaxed mt-4 line-clamp-3 whitespace-pre-line">
+                      {post.content}
+                    </p>
+
+                    {/* Attached Poll */}
+                    {post.poll && renderPostPoll(post)}
+
+                    {/* Read action trigger */}
+                    <div className="mt-5 flex items-center justify-between">
+                      <button
+                        id={`read-more-btn-${post.id}`}
+                        onClick={() => setSelectedPost(post)}
+                        className="text-orange-600 hover:text-orange-700 text-[10px] uppercase font-bold tracking-widest inline-flex items-center gap-1 transition-all focus:outline-none"
+                      >
+                        Read full article
+                        <ArrowUpRight className="w-3.5 h-3.5 text-orange-600" />
+                      </button>
+                      
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex items-center gap-1 text-zinc-400 text-[10px] font-sans uppercase">
+                          <Clock className="w-3.5 h-3.5 text-zinc-400" />
+                          <span>{post.readingTime} min read</span>
+                        </div>
+                        <span className="text-zinc-300 text-[10px]">•</span>
+                        <div className="flex items-center gap-1 text-emerald-600 font-bold text-[10px] font-sans uppercase">
+                          <span className="relative flex h-1.5 w-1.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                          </span>
+                          <span>{Math.max(12, (post.views || 0) + pollVotersCount * 15)} views</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tags cluster */}
+                    <div className="mt-5 pt-4 border-t border-zinc-100 flex flex-wrap gap-1.5" id={`tags-cluster-[${post.id}]`}>
+                      {post.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          onClick={() => setSearchQuery(`#${tag}`)}
+                          className="text-[10px] font-semibold tracking-wide text-zinc-650 bg-zinc-50 border border-zinc-100 hover:border-zinc-300 hover:bg-zinc-100/50 px-3 py-1 rounded-full transition-all cursor-pointer"
+                        >
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Interactive Engagement panel */}
+                  <div className="bg-zinc-50/55 border-t border-zinc-100 p-4 px-6 flex items-center justify-between text-zinc-500 text-xs">
+                    <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap">
+                      {/* Likes integration */}
+                      <button
+                        id={`like-btn-${post.id}`}
+                        onClick={() => toggleLikePost(post.id)}
+                        className={`flex items-center gap-1.5 font-semibold transition-all focus:outline-none ${
+                          isLiked
+                            ? 'text-orange-600 scale-102 font-bold'
+                            : 'hover:text-zinc-850'
+                        }`}
+                      >
+                        {(() => {
+                          const reaction = getUserReactionWithLocal(post.id);
+                          return reaction ? (
+                            <span className="text-sm select-none animate-bounce">{reaction}</span>
+                          ) : (
+                            <Heart className={`w-4 h-4 ${isLiked ? 'fill-orange-600 stroke-orange-600' : ''}`} />
+                          );
+                        })()}
+                        <span>{likesCount}</span>
+                      </button>
+   
+                      {/* Quick Emoji Reactions */}
+                      <div className="flex items-center gap-0.5 bg-stone-100 p-0.5 rounded-full border border-stone-200/40 shrink-0">
+                        {['👍', '❤️', '😂', '✨'].map((emoji) => {
+                          const count = getPostReactionsWithLocal(post.id)[emoji] || 0;
+                          const userHasReacted = getUserReactionWithLocal(post.id) === emoji;
+                          const labels: Record<string, string> = {
+                            '👍': 'like',
+                            '❤️': 'love',
+                            '😂': 'laugh',
+                            '✨': 'spark'
+                          };
+                          return (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={() => handleReactClick(post.id, emoji)}
+                              className={`flex items-center justify-center gap-1 px-2.5 py-1 rounded-full text-[11px] transition-all cursor-pointer outline-none select-none hover:scale-108 active:scale-95 ${
+                                userHasReacted
+                                  ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold shadow-xs scale-105 border-0'
+                                  : 'hover:bg-white text-zinc-650 hover:text-black border border-transparent'
+                              }`}
+                              title={`React with ${labels[emoji] || emoji}`}
+                            >
+                              <span>{emoji}</span>
+                              {count > 0 && (
+                                <span className="text-[9.5px] leading-none opacity-90 font-bold ml-0.5">
+                                  {count}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Comments button */}
+                      <button
+                        id={`comment-btn-${post.id}`}
+                        onClick={() => setSelectedPost(post)}
+                        className="flex items-center gap-1.5 font-semibold hover:text-zinc-850 transition-all focus:outline-none"
+                      >
+                        <MessageSquare className="w-4 h-4 text-zinc-400" />
+                        <span>{commentsCount}</span>
+                      </button>
+
+                      {/* Save draft / bookmark toggle */}
+                      {currentUser && (
+                        <button
+                          id={`save-btn-${post.id}`}
+                          onClick={() => toggleSavePost(post.id)}
+                          className={`flex items-center gap-1.5 font-semibold transition-all focus:outline-none ${
+                            currentUser.savedPosts?.includes(post.id)
+                              ? 'text-orange-600 shadow-sm'
+                              : 'hover:text-zinc-850'
+                          }`}
+                          title="Save for Reading later"
+                        >
+                          <Bookmark className={`w-4 h-4 ${currentUser.savedPosts?.includes(post.id) ? 'fill-orange-600 stroke-orange-600' : ''}`} />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {/* Direct message instant shortcut */}
+                      {!authorIsMe && currentUser && author && (
+                        <button
+                          id={`chat-shortcut-btn-${post.id}`}
+                          onClick={() => onNavigateToChat(author.id)}
+                          className="text-zinc-400 hover:text-zinc-800 p-2 hover:bg-zinc-100/60 bg-zinc-50 rounded-xl transition-all border border-zinc-100/50"
+                          title={`Send direct Message to ${authorName.split(' ')[0]}`}
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
+                      {/* Report trigger */}
+                      {!authorIsMe && currentUser && (
+                        <button
+                          id={`report-btn-${post.id}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReportingPostId(post.id);
+                            setReportReason('Controversial Topic / Disinformation');
+                            setReportRemarks('');
+                          }}
+                          className="text-zinc-400 hover:text-red-500 p-2 hover:bg-zinc-100/60 bg-zinc-50 rounded-xl transition-all border border-zinc-100/50"
+                          title="Report this post"
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
+                      {/* Share trigger */}
+                      <button
+                        id={`share-btn-${post.id}`}
+                        onClick={() => handleShare(post.id)}
+                        className="text-zinc-400 hover:text-zinc-805 p-2 hover:bg-zinc-100/60 bg-zinc-50 rounded-xl transition-all border border-zinc-100/50"
+                        title="Copy sharing link"
+                      >
+                        {copiedPostId === post.id ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : (
+                          <Share2 className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+
+                      {/* Author Edit & Delete actions */}
+                      {authorIsMe && (
+                        <div className="flex items-center gap-1.5 ml-1">
+                          <button
+                            id={`feed-edit-btn-${post.id}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startEditingPost(post);
+                            }}
+                            className="text-zinc-400 hover:text-orange-600 p-2 hover:bg-orange-50 bg-zinc-50 rounded-xl transition-all border border-zinc-100/50"
+                            title="Edit my post"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            id={`feed-delete-btn-${post.id}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPostToDelete(post);
+                            }}
+                            className="text-zinc-400 hover:text-rose-600 p-2 hover:bg-rose-50 bg-zinc-50 rounded-xl transition-all border border-zinc-100/50"
+                            title="Delete my post"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       )}
                     </div>
                   </div>
-                ) : post.videoUrl ? (
-                  <div className="px-6 pt-4">
-                    <div 
-                      id={`post-${post.id}-video-cover`}
-                      onClick={() => setSelectedPost(post)}
-                      className="cursor-pointer overflow-hidden aspect-[3/4] max-h-[440px] relative bg-zinc-950 rounded-2xl border border-stone-200/45 flex items-center justify-center group"
-                    >
-                    <video
-                      src={post.videoUrl}
-                      className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
-                      autoPlay
-                      loop
-                      muted
-                      playsInline
-                    />
-                    <div className="absolute inset-0 bg-black/10 flex items-center justify-center">
-                      <div className="w-12 h-12 bg-white/95 group-hover:bg-orange-600 text-zinc-900 group-hover:text-white rounded-full flex items-center justify-center transition-all shadow-lg scale-100 group-hover:scale-105">
-                        <Video className="w-5 h-5 ml-0.5" />
-                      </div>
-                    </div>
-                    <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-md text-zinc-850 py-1.5 px-3 text-[10px] tracking-wider rounded-full font-bold shadow-sm">
-                      #{post.category}
-                    </div>
-                  </div>
-                  </div>
-                ) : null}
-
-                {/* Card Title & Content Summary */}
-                <div className="p-6">
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    {!post.mediaUrl && (
-                      <span className="bg-orange-50 text-orange-600 font-bold uppercase text-[9px] tracking-widest px-3 py-1 rounded-full">
-                        #{post.category}
-                      </span>
-                    )}
-                    {post.isPremium && (
-                      <span className="bg-amber-550/10 text-amber-700 border border-amber-205 font-black text-[8.5px] uppercase tracking-wide px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm font-sans shrink-0">
-                        <Lock className="w-2.5 h-2.5 text-amber-600" />
-                        Premium Member
-                      </span>
-                    )}
-                  </div>
-
-                  <h3 
-                    id={`post-title-${post.id}`}
-                    onClick={() => setSelectedPost(post)}
-                    className="font-extrabold text-xl md:text-2xl tracking-tight text-zinc-900 group cursor-pointer hover:text-orange-600 transition-all leading-tight"
-                  >
-                    {styledTitleContent}
-                  </h3>
-
-                  {/* Text contents preview */}
-                  <p className="text-zinc-600 text-xs font-sans leading-relaxed mt-4 line-clamp-3 whitespace-pre-line">
-                    {post.content}
-                  </p>
-
-                  {/* Read action trigger */}
-                  <div className="mt-5 flex items-center justify-between">
-                    <button
-                      id={`read-more-btn-${post.id}`}
-                      onClick={() => setSelectedPost(post)}
-                      className="text-orange-600 hover:text-orange-700 text-[10px] uppercase font-bold tracking-widest inline-flex items-center gap-1 transition-all focus:outline-none"
-                    >
-                      Read full article
-                      <ArrowUpRight className="w-3.5 h-3.5 text-orange-600" />
-                    </button>
-                    <div className="flex items-center gap-1.5 text-zinc-400 text-[10px] font-sans uppercase">
-                      <Clock className="w-3.5 h-3.5 text-zinc-400" />
-                      <span>{post.readingTime} min read</span>
-                    </div>
-                  </div>
-
-                  {/* Tags cluster */}
-                  <div className="mt-5 pt-4 border-t border-zinc-100 flex flex-wrap gap-1.5" id={`tags-cluster-[${post.id}]`}>
-                    {post.tags.map((tag) => (
-                      <span
-                        key={tag}
-                        onClick={() => setSearchQuery(`#${tag}`)}
-                        className="text-[10px] font-semibold tracking-wide text-zinc-650 bg-zinc-50 border border-zinc-100 hover:border-zinc-300 hover:bg-zinc-100/50 px-3 py-1 rounded-full transition-all cursor-pointer"
-                      >
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Interactive Engagement panel */}
-                <div className="bg-zinc-50/55 border-t border-zinc-100 p-4 px-6 flex items-center justify-between text-zinc-500 text-xs">
-                  <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap">
-                    {/* Likes integration */}
-                    <button
-                      id={`like-btn-${post.id}`}
-                      onClick={() => toggleLikePost(post.id)}
-                      className={`flex items-center gap-1.5 font-semibold transition-all focus:outline-none ${
-                        isLiked
-                          ? 'text-orange-600 scale-102 font-bold'
-                          : 'hover:text-zinc-850'
-                      }`}
-                    >
-                      {(() => {
-                        const reaction = getUserReactionWithLocal(post.id);
-                        return reaction ? (
-                          <span className="text-sm select-none animate-bounce">{reaction}</span>
-                        ) : (
-                          <Heart className={`w-4 h-4 ${isLiked ? 'fill-orange-600 stroke-orange-600' : ''}`} />
-                        );
-                      })()}
-                      <span>{likesCount}</span>
-                    </button>
- 
-                    {/* Quick Emoji Reactions */}
-                    <div className="flex items-center gap-0.5 bg-stone-100 p-0.5 rounded-full border border-stone-200/40 shrink-0">
-                      {['👍', '❤️', '🔥', '💡', '🎉'].map((emoji) => {
-                        const count = getPostReactionsWithLocal(post.id)[emoji] || 0;
-                        const userHasReacted = getUserReactionWithLocal(post.id) === emoji;
-                        return (
-                          <button
-                            key={emoji}
-                            type="button"
-                            onClick={() => handleReactClick(post.id, emoji)}
-                            className={`flex items-center justify-center gap-1 px-2.5 py-1 rounded-full text-[11px] transition-all cursor-pointer outline-none select-none hover:scale-108 active:scale-95 ${
-                              userHasReacted
-                                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold shadow-xs scale-105 border-0'
-                                : 'hover:bg-white text-zinc-650 hover:text-black border border-transparent'
-                            }`}
-                            title={`React with ${emoji}`}
-                          >
-                            <span>{emoji}</span>
-                            {count > 0 && (
-                              <span className="text-[9.5px] leading-none opacity-90 font-bold ml-0.5">
-                                {count}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Comments button */}
-                    <button
-                      id={`comment-btn-${post.id}`}
-                      onClick={() => setSelectedPost(post)}
-                      className="flex items-center gap-1.5 font-semibold hover:text-zinc-850 transition-all focus:outline-none"
-                    >
-                      <MessageSquare className="w-4 h-4 text-zinc-400" />
-                      <span>{commentsCount}</span>
-                    </button>
-
-                    {/* Save draft / bookmark toggle */}
-                    {currentUser && (
-                      <button
-                        id={`save-btn-${post.id}`}
-                        onClick={() => toggleSavePost(post.id)}
-                        className={`flex items-center gap-1.5 font-semibold transition-all focus:outline-none ${
-                          currentUser.savedPosts?.includes(post.id)
-                            ? 'text-orange-600 shadow-sm'
-                            : 'hover:text-zinc-850'
-                        }`}
-                        title="Save for Reading later"
-                      >
-                        <Bookmark className={`w-4 h-4 ${currentUser.savedPosts?.includes(post.id) ? 'fill-orange-600 stroke-orange-600' : ''}`} />
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    {/* Direct message instant shortcut */}
-                    {!authorIsMe && currentUser && (
-                      <button
-                        id={`chat-shortcut-btn-${post.id}`}
-                        onClick={() => onNavigateToChat(author.id)}
-                        className="text-zinc-400 hover:text-zinc-800 p-2 hover:bg-zinc-100/60 bg-zinc-50 rounded-xl transition-all border border-zinc-100/50"
-                        title={`Send direct Message to ${author.name.split(' ')[0]}`}
-                      >
-                        <MessageCircle className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-
-                    {/* Report trigger */}
-                    {!authorIsMe && currentUser && (
-                      <button
-                        id={`report-btn-${post.id}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setReportingPostId(post.id);
-                          setReportReason('Controversial Topic / Disinformation');
-                          setReportRemarks('');
-                        }}
-                        className="text-zinc-400 hover:text-red-500 p-2 hover:bg-zinc-100/60 bg-zinc-50 rounded-xl transition-all border border-zinc-100/50"
-                        title="Report this post"
-                      >
-                        <AlertTriangle className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-
-                    {/* Share trigger */}
-                    <button
-                      id={`share-btn-${post.id}`}
-                      onClick={() => handleShare(post.id)}
-                      className="text-zinc-400 hover:text-zinc-805 p-2 hover:bg-zinc-100/60 bg-zinc-50 rounded-xl transition-all border border-zinc-100/50"
-                      title="Copy sharing link"
-                    >
-                      {copiedPostId === post.id ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      ) : (
-                        <Share2 className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-
-                    {/* Author Edit & Delete actions */}
-                    {authorIsMe && (
-                      <div className="flex items-center gap-1.5 ml-1">
-                        <button
-                          id={`feed-edit-btn-${post.id}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            startEditingPost(post);
-                          }}
-                          className="text-zinc-400 hover:text-orange-600 p-2 hover:bg-orange-50 bg-zinc-50 rounded-xl transition-all border border-zinc-100/50"
-                          title="Edit my post"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          id={`feed-delete-btn-${post.id}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPostToDelete(post);
-                          }}
-                          className="text-zinc-400 hover:text-rose-600 p-2 hover:bg-rose-50 bg-zinc-50 rounded-xl transition-all border border-zinc-100/50"
-                          title="Delete my post"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </article>
+                </article>
+              </VirtualPost>
             );
           })
         ) : (
@@ -1466,14 +1687,39 @@ export const Feed: React.FC<FeedProps> = ({
                           </p>
                         </div>
                       ) : activeDetailsImage ? (
-                        <div className="bg-zinc-950 rounded-2xl border border-zinc-150 overflow-hidden shadow-sm relative flex items-center justify-center max-h-[60vh] w-full">
-                          <img
-                            src={optimizeImageUrl(activeDetailsImage, { width: 1000, crop: 'limit' })}
-                            alt={selectedPost.title}
-                            referrerPolicy="no-referrer"
-                            className="w-full h-auto max-h-[60vh] object-contain"
-                          />
-                        </div>
+                        (() => {
+                          const currentRatio = postRatios[selectedPost.id] || selectedPost.imageRatio || 'auto';
+                          
+                          let containerClasses = "bg-zinc-955 rounded-2xl border border-zinc-150 overflow-hidden shadow-sm relative flex items-center justify-center max-h-[60vh] w-full transition-all duration-300 ";
+                          let imgClasses = "w-full max-h-[60vh] ";
+
+                          if (currentRatio === '16/9') {
+                            containerClasses += " aspect-video";
+                            imgClasses += "h-full object-cover";
+                          } else if (currentRatio === '4/3') {
+                            containerClasses += " aspect-[4/3]";
+                            imgClasses += "h-full object-cover";
+                          } else if (currentRatio === '1/1') {
+                            containerClasses += " aspect-square";
+                            imgClasses += "h-full object-cover";
+                          } else {
+                            imgClasses += "h-auto object-contain";
+                          }
+
+                          return (
+                            <div className={containerClasses}>
+                              <img
+                                src={optimizeImageUrl(activeDetailsImage, { width: 1000, crop: 'limit' })}
+                                alt={selectedPost.title}
+                                referrerPolicy="no-referrer"
+                                className={imgClasses}
+                              />
+                              
+                              {/* Floating Aspect Ratio Adjustment button */}
+                              {renderRatioToggle(selectedPost.id, currentRatio)}
+                            </div>
+                          );
+                        })()
                       ) : null}
                       
                       {/* Interactive Attachments & Media Gallery switchers */}
@@ -1779,16 +2025,23 @@ export const Feed: React.FC<FeedProps> = ({
                     );
                   })()}
 
+                  {/* Attached Poll */}
+                  {selectedPost.poll && (
+                    <div className="border-t border-zinc-100 pt-5 mt-5">
+                      {renderPostPoll(selectedPost)}
+                    </div>
+                  )}
+
                   {/* Likes / Save triggers inside reader */}
-                  <div className="flex items-center justify-between border-t border-b border-zinc-100 py-4">
-                    <div className="flex items-center gap-6 text-zinc-650 text-xs font-bold font-sans uppercase">
+                  <div className="flex items-center justify-between border-t border-b border-zinc-100 py-4 flex-wrap gap-4">
+                    <div className="flex items-center gap-4 text-zinc-650 text-xs font-bold font-sans uppercase flex-wrap">
                       <button
                         id={`reader-like-btn-${selectedPost.id}`}
                         onClick={() => toggleLikePost(selectedPost.id)}
                         className={`flex items-center gap-2 transition-all ${isLiked ? 'text-orange-600 font-extrabold' : 'hover:text-zinc-900'}`}
                       >
                         {(() => {
-                          const reaction = getUserReaction(selectedPost.id);
+                          const reaction = getUserReactionWithLocal(selectedPost.id);
                           return reaction ? (
                             <span className="text-sm select-none animate-bounce">{reaction}</span>
                           ) : (
@@ -1797,6 +2050,40 @@ export const Feed: React.FC<FeedProps> = ({
                         })()}
                         <span>{likesCount} Likes</span>
                       </button>
+
+                      {/* Quick Emoji Reactions */}
+                      <div className="flex items-center gap-0.5 bg-stone-100 p-0.5 rounded-full border border-stone-200/40 shrink-0">
+                        {['👍', '❤️', '😂', '✨'].map((emoji) => {
+                          const count = getPostReactionsWithLocal(selectedPost.id)[emoji] || 0;
+                          const userHasReacted = getUserReactionWithLocal(selectedPost.id) === emoji;
+                          const labels: Record<string, string> = {
+                            '👍': 'like',
+                            '❤️': 'love',
+                            '😂': 'laugh',
+                            '✨': 'spark'
+                          };
+                          return (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={() => handleReactClick(selectedPost.id, emoji)}
+                              className={`flex items-center justify-center gap-1 px-2.5 py-1 rounded-full text-[11px] transition-all cursor-pointer outline-none select-none hover:scale-108 active:scale-95 ${
+                                userHasReacted
+                                  ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold shadow-xs scale-105 border-0'
+                                  : 'hover:bg-white text-zinc-650 hover:text-black border border-transparent'
+                              }`}
+                              title={`React with ${labels[emoji] || emoji}`}
+                            >
+                              <span>{emoji}</span>
+                              {count > 0 && (
+                                <span className="text-[9.5px] leading-none opacity-90 font-bold ml-0.5">
+                                  {count}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
 
                       <div className="flex items-center gap-2 text-zinc-450 font-semibold text-xs lowercase">
                         <MessageSquare className="w-4 h-4 text-zinc-400" />

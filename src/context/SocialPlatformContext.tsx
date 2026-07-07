@@ -4,7 +4,7 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
-import { User, Post, Like, Comment, Follower, Message, Achievement, WithdrawalRequest, Notification, PostReport, AdBanner } from '../types';
+import { User, Post, PostPoll, Like, Comment, Follower, Message, Achievement, WithdrawalRequest, Notification, PostReport, AdBanner } from '../types';
 import { SEED_USERS, SEED_POSTS, SEED_FOLLOWERS, SEED_COMMENTS, SEED_MESSAGES } from '../data/seedData';
 import { censorText } from '../lib/security';
 import { checkRateLimit, resetRateLimit } from '../lib/rateLimiter';
@@ -21,7 +21,8 @@ import {
   where,
   writeBatch,
   orderBy,
-  limit
+  limit,
+  increment
 } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
@@ -50,8 +51,12 @@ interface SocialPlatformContextType {
     status?: 'draft' | 'published',
     mediaUrls?: string[],
     videoUrl?: string,
-    isPremium?: boolean
+    isPremium?: boolean,
+    poll?: PostPoll,
+    imageRatio?: 'auto' | '16/9' | '4/3' | '1/1'
   ) => Promise<Post>;
+  voteInPostPoll: (postId: string, optionIndex: number) => Promise<void>;
+  incrementPostViews: (postId: string) => Promise<void>;
   deletePost: (postId: string) => Promise<void>;
   updatePost: (
     postId: string,
@@ -62,7 +67,8 @@ interface SocialPlatformContextType {
     mediaUrl?: string,
     mediaUrls?: string[],
     videoUrl?: string,
-    isPremium?: boolean
+    isPremium?: boolean,
+    imageRatio?: 'auto' | '16/9' | '4/3' | '1/1'
   ) => Promise<void>;
   toggleLikePost: (postId: string) => Promise<void>;
   isPostLiked: (postId: string) => boolean;
@@ -120,10 +126,32 @@ interface SocialPlatformContextType {
   securityBlock: { actionType: string; remainingMs: number } | null;
   setSecurityBlock: (block: { actionType: string; remainingMs: number } | null) => void;
   resolveSecurityChallenge: () => void;
-  refetchData: () => Promise<void>;
+  refetchData: (hasCache?: boolean) => Promise<void>;
   hasMorePosts: boolean;
   loadMorePosts: () => Promise<void>;
 }
+
+const DEFAULT_SEED_AD: AdBanner = {
+  id: 'ad_default_nepal_tourism',
+  name: 'Explore the Majesty of Nepal Mountains & Homestays',
+  purpose: 'Tourism & Travel',
+  contact: '+977-1-4200000',
+  content: 'Discover organic tea trails, spectacular Everest panorama homestays, and get 20% off with partner local communities today!',
+  location: 'Nepal',
+  email: 'info@visitnepal.com',
+  title: 'Explore the Majesty of Nepal Mountains & Homestays',
+  description: 'Discover organic tea trails, spectacular Everest panorama homestays, and get 20% off with partner local communities today!',
+  imageUrl: 'https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=600&q=80',
+  targetUrl: 'https://www.visitnepaltours.com',
+  active: true,
+  placement: 'workspace',
+  status: 'published',
+  paymentStatus: 'verified',
+  amountPaid: 1000,
+  clickCount: 142,
+  createdAt: '2026-07-07T00:00:00.000Z',
+  userId: 'seed_admin_user_id'
+};
 
 const SocialPlatformContext = createContext<SocialPlatformContextType | undefined>(undefined);
 
@@ -556,6 +584,9 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     const unsubAds = onSnapshot(adsQuery, (snap) => {
       const updatedAds: AdBanner[] = [];
       snap.forEach((doc) => updatedAds.push(doc.data() as AdBanner));
+      if (updatedAds.length === 0) {
+        updatedAds.push(DEFAULT_SEED_AD);
+      }
       setAds(updatedAds);
     }, (error) => {
       handleSubError(error, 'ads');
@@ -574,13 +605,15 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     }
   };
 
-  const refetchData = async () => {
+  const refetchData = async (hasCache = false) => {
     if (isQuotaFallbackMode) {
       setLoading(false);
       return;
     }
     try {
-      setLoading(true);
+      if (!hasCache) {
+        setLoading(true);
+      }
       // Execute single-round concurrent reads instead of maintaining heavy, permanent wide-collection listeners
       const [usersSnap, postsSnap, likesSnap, commentsSnap, followersSnap, adsSnap] = await Promise.all([
         getDocs(collection(db, 'users')),
@@ -616,34 +649,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       adsSnap.forEach((d) => adsList.push(d.data() as AdBanner));
       
       if (adsList.length === 0) {
-        const defaultSeedAd: AdBanner = {
-          id: 'ad_default_nepal_tourism',
-          name: 'Explore the Majesty of Nepal Mountains & Homestays',
-          purpose: 'Tourism & Travel',
-          contact: '+977-1-4200000',
-          content: 'Discover organic tea trails, spectacular Everest panorama homestays, and get 20% off with partner local communities today!',
-          location: 'Nepal',
-          email: 'info@visitnepal.com',
-          title: 'Explore the Majesty of Nepal Mountains & Homestays',
-          description: 'Discover organic tea trails, spectacular Everest panorama homestays, and get 20% off with partner local communities today!',
-          imageUrl: 'https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=600&q=80',
-          targetUrl: 'https://www.visitnepaltours.com',
-          active: true,
-          placement: 'workspace',
-          status: 'published',
-          paymentStatus: 'verified',
-          amountPaid: 1000,
-          clickCount: 142,
-          createdAt: new Date().toISOString(),
-          userId: 'seed_admin_user_id'
-        };
-        try {
-          await setDoc(doc(db, 'ads', defaultSeedAd.id), defaultSeedAd);
-          adsList.push(defaultSeedAd);
-        } catch (e) {
-          console.warn("Failed to auto-seed default ad:", e);
-          adsList.push(defaultSeedAd);
-        }
+        adsList.push(DEFAULT_SEED_AD);
       }
       setAds(adsList);
 
@@ -684,6 +690,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   useEffect(() => {
     const loadCacheAndFetch = async () => {
       // 1. Load cached state from IndexedDB instantly to enable offline / zero latency startup
+      let hasCache = false;
       try {
         const cachedUsers = await getCache('users');
         const cachedPosts = await getCache('posts');
@@ -692,22 +699,45 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         const cachedFollowers = await getCache('followers');
         const cachedAds = await getCache('ads');
 
-        if (cachedUsers) setUsers(cachedUsers);
-        if (cachedPosts) setPosts(cachedPosts);
+        if (cachedUsers && cachedUsers.length > 0) {
+          setUsers(cachedUsers);
+          hasCache = true;
+        }
+        if (cachedPosts && cachedPosts.length > 0) {
+          setPosts(cachedPosts);
+          hasCache = true;
+        }
         if (cachedComments) setComments(cachedComments);
         if (cachedLikes) setLikes(cachedLikes);
         if (cachedFollowers) setFollowers(cachedFollowers);
-        if (cachedAds) setAds(cachedAds);
+        if (cachedAds) {
+          setAds(cachedAds.length === 0 ? [DEFAULT_SEED_AD] : cachedAds);
+        }
       } catch (e) {
         console.warn("Failed to read IndexedDB startup cache:", e);
       }
 
+      if (hasCache) {
+        setLoading(false);
+      }
+
       // 2. Fetch fresh network updates
-      await refetchData();
+      await refetchData(hasCache);
     };
 
     loadCacheAndFetch();
   }, [currentUserId, isQuotaFallbackMode, postLimit]);
+
+  // Periodic automatic background revalidation every 60 seconds
+  useEffect(() => {
+    if (isQuotaFallbackMode) return;
+    const interval = setInterval(() => {
+      if (navigator.onLine) {
+        refetchData(true).catch(err => console.warn("Background revalidation failed:", err));
+      }
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [isQuotaFallbackMode]);
 
   // Request browser notification permissions on login/mount
   useEffect(() => {
@@ -1179,7 +1209,9 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     status: 'draft' | 'published' = 'published',
     mediaUrls?: string[],
     videoUrl?: string,
-    isPremium?: boolean
+    isPremium?: boolean,
+    poll?: PostPoll,
+    imageRatio?: 'auto' | '16/9' | '4/3' | '1/1'
   ) => {
     if (!currentUserId) throw new Error("Authentication required to publish articles");
     const id = `post_${Date.now()}`;
@@ -1198,7 +1230,10 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       readingTime,
       mediaUrls: mediaUrls || [],
       videoUrl: videoUrl || '',
-      isPremium: isPremium || false
+      isPremium: isPremium || false,
+      poll: poll || undefined,
+      views: 0,
+      imageRatio: imageRatio || 'auto'
     };
 
     await runWriteOperation(
@@ -1226,6 +1261,54 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     );
   };
 
+  // Vote in a post's attached poll
+  const voteInPostPoll = async (postId: string, optionIndex: number) => {
+    if (!currentUserId) throw new Error("Authentication required to vote in polls");
+    const post = posts.find(p => p.id === postId);
+    if (!post || !post.poll) return;
+
+    const updatedPoll = { ...post.poll };
+    if (!updatedPoll.votes) {
+      updatedPoll.votes = {};
+    }
+    // Remove user's previous vote if any
+    Object.keys(updatedPoll.votes).forEach(optIdx => {
+      if (updatedPoll.votes[optIdx]) {
+        updatedPoll.votes[optIdx] = updatedPoll.votes[optIdx].filter(uid => uid !== currentUserId);
+      }
+    });
+    // Add user's vote
+    const optStr = String(optionIndex);
+    if (!updatedPoll.votes[optStr]) {
+      updatedPoll.votes[optStr] = [];
+    }
+    updatedPoll.votes[optStr].push(currentUserId);
+
+    await runWriteOperation(
+      async () => {
+        const postRef = doc(db, 'posts', postId);
+        await updateDoc(postRef, { poll: updatedPoll });
+      },
+      () => {
+        setPosts(prev => prev.map(p => p.id === postId ? { ...p, poll: updatedPoll } : p));
+      },
+      `posts/${postId}`
+    );
+  };
+
+  // Increment view count of a post
+  const incrementPostViews = async (postId: string) => {
+    try {
+      const postRef = doc(db, 'posts', postId);
+      await updateDoc(postRef, {
+        views: increment(1)
+      });
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, views: (p.views || 0) + 1 } : p));
+    } catch (err) {
+      console.warn("Could not increment post views on server:", err);
+    }
+  };
+
   // Update article blog post
   const updatePost = async (
     postId: string,
@@ -1236,7 +1319,8 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     mediaUrl?: string,
     mediaUrls?: string[],
     videoUrl?: string,
-    isPremium?: boolean
+    isPremium?: boolean,
+    imageRatio?: 'auto' | '16/9' | '4/3' | '1/1'
   ) => {
     const updateData: any = {
       title,
@@ -1254,6 +1338,9 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     }
     if (isPremium !== undefined) {
       updateData.isPremium = isPremium;
+    }
+    if (imageRatio !== undefined) {
+      updateData.imageRatio = imageRatio;
     }
 
     await runWriteOperation(
@@ -2251,6 +2338,8 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         logout,
         updateProfile,
         createPost,
+        voteInPostPoll,
+        incrementPostViews,
         deletePost,
         updatePost,
         toggleLikePost,

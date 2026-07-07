@@ -51,6 +51,12 @@ export interface User {
   };
 }
 
+export interface PostPoll {
+  question: string;
+  options: string[];
+  votes?: Record<string, string[]>; // optionIndex -> array of userUids
+}
+
 export interface Post {
   id: string;
   userId: string;
@@ -65,6 +71,9 @@ export interface Post {
   mediaUrls?: string[]; // Multiple photos selection support
   videoUrl?: string; // Video upload support
   isPremium?: boolean; // monetization field
+  poll?: PostPoll;
+  views?: number;
+  imageRatio?: 'auto' | '16/9' | '4/3' | '1/1';
 }
 
 export interface Like {

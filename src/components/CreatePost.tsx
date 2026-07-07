@@ -25,7 +25,10 @@ import {
   Loader2,
   Video,
   Play,
-  ShieldAlert
+  ShieldAlert,
+  BarChart2,
+  Vote,
+  Crop
 } from 'lucide-react';
 import { censorText, scanPostSafety } from '../lib/security';
 import { MultiPhotosLayout } from './MultiPhotosLayout';
@@ -102,6 +105,12 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
   const [videoFileError, setVideoFileError] = useState('');
   const [submitError, setSubmitError] = useState('');
   const [isPremium, setIsPremium] = useState(false);
+  const [imageRatio, setImageRatio] = useState<'auto' | '16/9' | '4/3' | '1/1'>('auto');
+
+  // Poll attachment states
+  const [hasPoll, setHasPoll] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
 
   // Cloudinary uploading progress states
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
@@ -262,6 +271,21 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
       const cleanTitle = censorText(title.trim());
       const cleanContent = censorText(content.trim());
 
+      let pollData = undefined;
+      if (hasPoll) {
+        const cleanQuestion = censorText(pollQuestion.trim() || title.trim());
+        const cleanOptions = pollOptions
+          .map(opt => censorText(opt.trim()))
+          .filter(Boolean);
+        if (cleanOptions.length >= 2) {
+          pollData = {
+            question: cleanQuestion,
+            options: cleanOptions,
+            votes: {}
+          };
+        }
+      }
+
       await createPost(
         cleanTitle,
         cleanContent,
@@ -271,7 +295,9 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
         status,
         multiplePhotos,
         videoUrl.trim() || undefined,
-        isPremium
+        isPremium,
+        pollData,
+        imageRatio
       );
 
       // Reset Form
@@ -284,6 +310,10 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
       setVideoUrl('');
       setVideoFileError('');
       setSubmitError('');
+      setHasPoll(false);
+      setPollQuestion('');
+      setPollOptions(['', '']);
+      setImageRatio('auto');
 
       onSuccess(); // Redirects to Home Feed tab
     } catch (err) {
@@ -707,6 +737,48 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
                         </div>
                       ))}
                     </div>
+
+                    {/* Dynamic Image Display Aspect Ratio Selector */}
+                    <div className="space-y-3 bg-stone-50 border border-stone-200/60 p-4 rounded-2xl animate-fadeIn mt-4" id="image-aspect-ratio-composer">
+                      <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-zinc-800">
+                        <Crop className="w-4 h-4 text-orange-600 shrink-0" />
+                        <span>Display Aspect Ratio Selection</span>
+                      </div>
+                      <p className="text-[10px] text-zinc-500 font-medium font-sans">
+                        Control how your cover or gallery images are presented. This adjusts the display container size automatically without harsh cropping!
+                      </p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {(['auto', '16/9', '4/3', '1/1'] as const).map((ratio) => {
+                          const labels = {
+                            'auto': 'Original (Auto)',
+                            '16/9': '16:9 Landscape',
+                            '4/3': '4:3 Standard',
+                            '1/1': '1:1 Square'
+                          };
+                          const previewStyles = {
+                            'auto': 'h-6 w-8 border border-dashed border-zinc-400 bg-zinc-100 rounded-sm',
+                            '16/9': 'h-4 w-8 bg-zinc-400 rounded-sm',
+                            '4/3': 'h-6 w-8 bg-zinc-400 rounded-sm',
+                            '1/1': 'h-6 w-6 bg-zinc-400 rounded-sm'
+                          };
+                          return (
+                            <button
+                              key={ratio}
+                              type="button"
+                              onClick={() => setImageRatio(ratio)}
+                              className={`p-2.5 rounded-xl border text-[10px] font-bold flex flex-col items-center justify-center gap-2 transition-all cursor-pointer ${
+                                imageRatio === ratio
+                                  ? 'border-orange-500 bg-orange-50/10 text-orange-700 shadow-xs'
+                                  : 'border-zinc-200 bg-white text-zinc-650 hover:border-zinc-400 hover:text-black'
+                              }`}
+                            >
+                              <div className={`flex items-center justify-center ${previewStyles[ratio]}`} />
+                              <span className="leading-none text-center">{labels[ratio]}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -859,6 +931,99 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
             <p className="text-[10px] text-zinc-500 leading-normal font-sans">
               💡 Use the buttons to enclose parts of your post with <strong>[premium]...[/premium]</strong> or <strong>[elite]...[/elite]</strong> tags. These segments will render as beautiful blurred blocks with payment/subscription gates for non-subscribers!
             </p>
+          </div>
+
+          {/* Interactive Poll Composer Section */}
+          <div className="space-y-4 bg-zinc-50 border border-zinc-200/80 p-5 rounded-2xl animate-fadeIn" id="create-post-poll-section">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-xs font-black uppercase tracking-wider text-zinc-800 flex items-center gap-1.5 font-sans">
+                  <BarChart2 className="w-4 h-4 text-orange-600" />
+                  Attach Poll Questionnaire
+                </label>
+                <div className="text-[10px] text-zinc-500 font-medium font-sans mt-0.5">
+                  Engage your audience with an interactive multi-choice poll.
+                </div>
+              </div>
+              <button
+                type="button"
+                id="toggle-poll-btn"
+                onClick={() => setHasPoll(!hasPoll)}
+                className={`w-11 h-6 rounded-full transition-all outline-none ${
+                  hasPoll ? 'bg-orange-600' : 'bg-zinc-200'
+                } relative flex items-center px-0.5`}
+              >
+                <span className={`w-5 h-5 rounded-full bg-white shadow-sm transition-all absolute ${
+                  hasPoll ? 'right-0.5' : 'left-0.5'
+                }`} />
+              </button>
+            </div>
+
+            {hasPoll && (
+              <div className="space-y-3.5 pt-3 border-t border-zinc-200/60 animate-fadeIn">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block">
+                    Poll Question (Optional - defaults to article title)
+                  </label>
+                  <input
+                    type="text"
+                    id="poll-question-input"
+                    value={pollQuestion}
+                    onChange={(e) => setPollQuestion(e.target.value)}
+                    placeholder="e.g. Which tool do you prefer for production?"
+                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-zinc-200 focus:border-orange-500 focus:outline-none bg-white transition text-zinc-850"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block">
+                    Poll Options (Min 2, Max 5)
+                  </label>
+                  <div className="space-y-2">
+                    {pollOptions.map((opt, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-zinc-400 w-5">#{idx + 1}</span>
+                        <input
+                          type="text"
+                          required
+                          value={opt}
+                          onChange={(e) => {
+                            const newOpts = [...pollOptions];
+                            newOpts[idx] = e.target.value;
+                            setPollOptions(newOpts);
+                          }}
+                          placeholder={`Option ${idx + 1}`}
+                          className="flex-1 px-3 py-2 text-xs font-medium rounded-xl border border-zinc-200 focus:border-orange-500 focus:outline-none bg-white transition text-zinc-800"
+                        />
+                        {pollOptions.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPollOptions(pollOptions.filter((_, i) => i !== idx));
+                            }}
+                            className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
+                            title="Remove option"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {pollOptions.length < 5 && (
+                    <button
+                      type="button"
+                      onClick={() => setPollOptions([...pollOptions, ''])}
+                      className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-bold text-orange-600 hover:text-orange-700 uppercase tracking-widest transition cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add Poll Option
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-1.5">
