@@ -7,6 +7,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useSocialPlatform } from '../context/SocialPlatformContext';
 import { ProfileSkeleton } from './SkeletonLoader';
 import { compressImage } from '../lib/firebase';
+import { optimizeImageUrl } from '../lib/cloudinary';
 import { INTEREST_OPTIONS } from '../data/seedData';
 import { User, Post } from '../types';
 import { 
@@ -124,16 +125,18 @@ export const Profiles: React.FC<ProfilesProps> = ({
     notifications,
     markNotificationAsRead,
     markAllNotificationsAsRead,
-    loading
+    loading,
+    userMap,
+    getUserReaction
   } = useSocialPlatform();
 
   // Determine active profile to display
   const activeProfile = useMemo(() => {
     if (targetUserId) {
-      return users.find(u => u.id === targetUserId) || currentUser;
+      return userMap[targetUserId] || currentUser;
     }
     return currentUser;
-  }, [targetUserId, users, currentUser]);
+  }, [targetUserId, userMap, currentUser]);
 
   const isOwnProfile = useMemo(() => {
     if (!activeProfile || !currentUser) return false;
@@ -406,14 +409,14 @@ export const Profiles: React.FC<ProfilesProps> = ({
   const followersList = useMemo(() => {
     if (!activeProfile) return [];
     const relations = followers.filter(f => f.followingId === activeProfile.id);
-    return relations.map(r => users.find(u => u.id === r.followerId)).filter(Boolean) as User[];
-  }, [activeProfile, followers, users]);
+    return relations.map(r => userMap[r.followerId]).filter(Boolean) as User[];
+  }, [activeProfile, followers, userMap]);
 
   const followingList = useMemo(() => {
     if (!activeProfile) return [];
     const relations = followers.filter(f => f.followerId === activeProfile.id);
-    return relations.map(r => users.find(u => u.id === r.followingId)).filter(Boolean) as User[];
-  }, [activeProfile, followers, users]);
+    return relations.map(r => userMap[r.followingId]).filter(Boolean) as User[];
+  }, [activeProfile, followers, userMap]);
 
   const achievements = useMemo(() => {
     if (!activeProfile) return [];
@@ -459,7 +462,7 @@ export const Profiles: React.FC<ProfilesProps> = ({
         <div className="h-44 md:h-56 bg-stone-100 relative">
           {activeProfile.coverImage && (
             <img
-              src={activeProfile.coverImage}
+              src={optimizeImageUrl(activeProfile.coverImage, { width: 1200, height: 250, crop: 'fill' })}
               alt="Cover Banner"
               referrerPolicy="no-referrer"
               className="w-full h-full object-cover brightness-95 hover:brightness-100 transition-smooth"
@@ -474,7 +477,7 @@ export const Profiles: React.FC<ProfilesProps> = ({
             {/* Avatar block */}
             <div className="relative">
               <img
-                src={activeProfile.profileImage}
+                src={optimizeImageUrl(activeProfile.profileImage, { width: 150, height: 150, crop: 'fill' })}
                 alt={activeProfile.name}
                 referrerPolicy="no-referrer"
                 className="w-28 h-28 sm:w-36 sm:h-36 rounded-full object-cover border-4 border-white shadow-md bg-white transform hover:scale-102 transition-smooth"
@@ -1414,7 +1417,7 @@ export const Profiles: React.FC<ProfilesProps> = ({
       {readingPost && (
         <div id="reader-local-modal-overlay" className="fixed inset-0 bg-zinc-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 overflow-y-auto">
           {(() => {
-            const author = users.find(u => u.id === readingPost.userId);
+            const author = userMap[readingPost.userId];
             if (!author) return null;
 
             const isLiked = isPostLiked(readingPost.id);
@@ -1498,7 +1501,14 @@ export const Profiles: React.FC<ProfilesProps> = ({
                       onClick={() => toggleLikePost(readingPost.id)}
                       className={`flex items-center gap-1.5 font-bold transition ${isLiked ? 'text-orange-600' : 'hover:text-orange-600 text-zinc-400'}`}
                     >
-                      <Heart className={`w-4 h-4 ${isLiked ? 'fill-orange-600 text-orange-600' : ''}`} />
+                      {(() => {
+                        const reaction = getUserReaction(readingPost.id);
+                        return reaction ? (
+                          <span className="text-sm select-none animate-bounce">{reaction}</span>
+                        ) : (
+                          <Heart className={`w-4 h-4 ${isLiked ? 'fill-orange-600 text-orange-600' : ''}`} />
+                        );
+                      })()}
                       <span>{likesCount} Likes</span>
                     </button>
                     <span className="font-bold text-zinc-400">

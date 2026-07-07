@@ -579,6 +579,74 @@ export const LandingPage: React.FC = () => {
                     </p>
                   </form>
                 )}
+
+                {/* ⚡ INSTANT DEMO BYPASS & AUTO-ENTRY (No holding) */}
+                <div className="mt-6 border-t border-stone-150/70 pt-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9.5px] font-mono uppercase text-zinc-400 tracking-wider font-extrabold flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                      ⚡ Instant Entry Bypass (No Holding)
+                    </span>
+                    <span className="text-[8px] font-bold text-emerald-600 uppercase bg-emerald-50 px-2 py-0.5 rounded-md">
+                      Auto-Login Saved
+                    </span>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setLoginEmail('fresh.linksd@gmail.com');
+                        try {
+                          const success = await login('fresh.linksd@gmail.com');
+                          if (!success) {
+                            setLoginError('Admin account failed to seed. Please try Google sign-in.');
+                          }
+                        } catch (e: any) {
+                          setLoginError(e.message || 'Bypass failed.');
+                        }
+                      }}
+                      className="flex items-center gap-2 p-2 bg-zinc-50 hover:bg-orange-50 border border-zinc-200/60 hover:border-orange-200 rounded-xl transition-all text-left cursor-pointer group"
+                      title="Access developer root dashboard instantly"
+                    >
+                      <div className="w-7 h-7 rounded-full bg-orange-600 text-white flex items-center justify-center font-black text-[10px] shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+                        AD
+                      </div>
+                      <div className="min-w-0">
+                        <span className="block text-[10px] font-black text-zinc-800 truncate">Root Admin</span>
+                        <span className="block text-[8px] text-zinc-450 truncate font-mono">fresh.linksd@gmail...</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setLoginEmail('alice@nexus.com');
+                        try {
+                          const success = await login('alice@nexus.com');
+                          if (!success) {
+                            setLoginError('Alice creator profile not initialized.');
+                          }
+                        } catch (e: any) {
+                          setLoginError(e.message || 'Bypass failed.');
+                        }
+                      }}
+                      className="flex items-center gap-2 p-2 bg-zinc-50 hover:bg-orange-50 border border-zinc-200/60 hover:border-orange-200 rounded-xl transition-all text-left cursor-pointer group"
+                      title="Explore as premium writer Alice Springs"
+                    >
+                      <img 
+                        src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150&q=80" 
+                        alt="Alice" 
+                        className="w-7 h-7 rounded-full object-cover shrink-0 shadow-sm group-hover:scale-105 transition-transform" 
+                      />
+                      <div className="min-w-0">
+                        <span className="block text-[10px] font-black text-zinc-800 truncate">Alice Springs</span>
+                        <span className="block text-[8px] text-zinc-450 truncate font-mono">alice@nexus.com</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
               </div>
 
             </div>

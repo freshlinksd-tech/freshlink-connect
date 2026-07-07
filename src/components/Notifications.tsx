@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSocialPlatform } from '../context/SocialPlatformContext';
-import { Bell, Check, Trash2, ShieldCheck, MessageCircle, Heart, UserPlus, Coins } from 'lucide-react';
+import { Bell, Check, Trash2, MessageCircle, Heart, UserPlus, Coins } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export const Notifications: React.FC = () => {
@@ -14,7 +14,8 @@ export const Notifications: React.FC = () => {
     markNotificationAsRead, 
     markAllNotificationsAsRead, 
     submitPollAnswer,
-    currentUser 
+    currentUser,
+    triggerDeviceNotification
   } = useSocialPlatform();
 
   const userNotifications = notifications.filter(n => n.userId === currentUser?.id);
@@ -25,7 +26,7 @@ export const Notifications: React.FC = () => {
     if (text.includes('like') || text.includes('liked')) {
       return <Heart className="w-4 h-4 text-rose-500" />;
     }
-    if (text.includes('comment') || text.includes('commented')) {
+    if (text.includes('comment') || text.includes('commented') || text.includes('texted') || text.includes('message')) {
       return <MessageCircle className="w-4 h-4 text-blue-500" />;
     }
     if (text.includes('follow') || text.includes('following')) {
@@ -62,6 +63,8 @@ export const Notifications: React.FC = () => {
           </button>
         )}
       </div>
+
+
 
       {/* Main Alert Feed */}
       <div className="flex-1 overflow-y-auto pr-2 space-y-3">

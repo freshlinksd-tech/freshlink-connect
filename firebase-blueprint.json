@@ -56,7 +56,8 @@
       "type": "object",
       "properties": {
         "userId": { "type": "string" },
-        "postId": { "type": "string" }
+        "postId": { "type": "string" },
+        "reactionType": { "type": "string" }
       },
       "required": ["userId", "postId"]
     },

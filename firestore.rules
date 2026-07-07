@@ -53,7 +53,8 @@ service cloud.firestore {
         (
           // Action: Subscriber updating Creator's wallet Balance/Credits
           incoming().diff(existing()).affectedKeys().hasOnly(['walletBalance', 'walletCredits']) &&
-          isValidUser(incoming())
+          (!incoming().keys().hasAny(['walletBalance']) || (incoming().walletBalance is number || incoming().walletBalance is int)) &&
+          (!incoming().keys().hasAny(['walletCredits']) || (incoming().walletCredits is number || incoming().walletCredits is int))
         )
       );
       allow delete: if isAdmin();
@@ -130,14 +131,16 @@ service cloud.firestore {
     // --- Likes Collection ---
     match /likes/{likeId} {
       allow read: if true;
-      allow create: if isSignedIn() && !isBlocked() && (incoming().userId == request.auth.uid || isSeedUser(incoming().userId)) && isValidLike(incoming());
-      allow delete: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && !isBlocked() && isValidLike(incoming());
+      allow update: if isSignedIn() && !isBlocked() && isValidLike(incoming());
+      allow delete: if isSignedIn();
     }
 
     function isValidLike(data) {
       return data.keys().hasAll(['userId', 'postId'])
         && (data.userId == request.auth.uid || isSeedUser(data.userId))
-        && data.postId is string && data.postId.size() <= 100;
+        && data.postId is string && data.postId.size() <= 100
+        && (!data.keys().hasAny(['reactionType']) || (data.reactionType is string && data.reactionType.size() <= 50));
     }
 
     // --- Comments Collection ---
@@ -223,7 +226,7 @@ service cloud.firestore {
     // --- Notifications Collection ---
     match /notifications/{notifId} {
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn();
+      allow create: if true;
       allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }

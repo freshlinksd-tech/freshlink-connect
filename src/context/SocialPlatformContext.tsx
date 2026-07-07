@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
 import { User, Post, Like, Comment, Follower, Message, Achievement, WithdrawalRequest, Notification, PostReport, AdBanner } from '../types';
 import { SEED_USERS, SEED_POSTS, SEED_FOLLOWERS, SEED_COMMENTS, SEED_MESSAGES } from '../data/seedData';
 import { censorText } from '../lib/security';
@@ -19,7 +19,9 @@ import {
   deleteDoc,
   query,
   where,
-  writeBatch
+  writeBatch,
+  orderBy,
+  limit
 } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
@@ -65,6 +67,9 @@ interface SocialPlatformContextType {
   toggleLikePost: (postId: string) => Promise<void>;
   isPostLiked: (postId: string) => boolean;
   getPostLikesCount: (postId: string) => number;
+  reactToPost: (postId: string, reactionType: string) => Promise<void>;
+  getPostReactions: (postId: string) => Record<string, number>;
+  getUserReaction: (postId: string) => string | null;
   addComment: (postId: string, commentText: string) => Promise<Comment>;
   getPostComments: (postId: string) => Comment[];
   editComment: (commentId: string, newText: string) => Promise<void>;
@@ -89,6 +94,7 @@ interface SocialPlatformContextType {
   requestWithdrawal: (amountNpr: number, paymentMethod: string, details: string) => Promise<void>;
   updateWithdrawalStatusByAdmin: (withdrawalId: string, status: 'approved' | 'rejected', remarks?: string) => Promise<void>;
   notifications: Notification[];
+  triggerDeviceNotification: (notif: Notification) => void;
   addNotification: (
     userId: string,
     type: 'like' | 'comment' | 'follow' | 'report_decision' | 'withdrawal_decision' | 'ad_alert' | 'system',
@@ -109,17 +115,33 @@ interface SocialPlatformContextType {
   trackAdClick: (adId: string) => Promise<void>;
   toggleAllAds: (active: boolean) => Promise<void>;
   isQuotaFallbackMode: boolean;
+  userMap: Record<string, User>;
   resetQuotaFallback: () => void;
   securityBlock: { actionType: string; remainingMs: number } | null;
   setSecurityBlock: (block: { actionType: string; remainingMs: number } | null) => void;
   resolveSecurityChallenge: () => void;
   refetchData: () => Promise<void>;
+  hasMorePosts: boolean;
+  loadMorePosts: () => Promise<void>;
 }
 
 const SocialPlatformContext = createContext<SocialPlatformContextType | undefined>(undefined);
 
 export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<User[]>(() => {
+    if (typeof window !== 'undefined') {
+      const cachedUserStr = localStorage.getItem('freshlink_cached_user');
+      if (cachedUserStr) {
+        try {
+          const parsed = JSON.parse(cachedUserStr);
+          if (parsed && typeof parsed === 'object' && parsed.id) {
+            return [parsed];
+          }
+        } catch (e) {}
+      }
+    }
+    return [];
+  });
   const [posts, setPosts] = useState<Post[]>([]);
   const [followers, setFollowers] = useState<Follower[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -129,18 +151,37 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [postReports, setPostReports] = useState<PostReport[]>([]);
   const [ads, setAds] = useState<AdBanner[]>([]);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('freshlink_current_user_id') || null;
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const cachedUserId = localStorage.getItem('freshlink_current_user_id');
+      const cachedUserStr = localStorage.getItem('freshlink_cached_user');
+      return !(cachedUserId && cachedUserStr);
+    }
+    return true;
+  });
   const [activeChatPartnerId, setActiveChatPartnerId] = useState<string | null>(null);
   const activeChatPartnerRef = useRef<string | null>(null);
 
-  const [isQuotaFallbackMode, setIsQuotaFallbackMode] = useState<boolean>(false);
+  const [isQuotaFallbackMode, setIsQuotaFallbackMode] = useState<boolean>(() => {
+    return localStorage.getItem('freshlink_quota_fallback') === 'true';
+  });
   const [securityBlock, setSecurityBlock] = useState<{ actionType: string; remainingMs: number } | null>(null);
+  const [postLimit, setPostLimit] = useState<number>(20);
+  const [hasMorePosts, setHasMorePosts] = useState<boolean>(true);
 
-  // Clear any previously persisted quota fallback state on load
-  useEffect(() => {
-    localStorage.removeItem('freshlink_quota_fallback');
-  }, []);
+  const userMap = useMemo(() => {
+    const map: Record<string, User> = {};
+    users.forEach((u) => {
+      map[u.id] = u;
+    });
+    return map;
+  }, [users]);
 
   const resolveSecurityChallenge = () => {
     if (securityBlock) {
@@ -149,9 +190,11 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     }
   };
 
-  // Helper is disabled to prevent going into offline mode per user instruction
+  // Helper is triggered to activate offline fallback mode when Firestore is exhausted
   const triggerLocalQuotaFallback = () => {
-    console.warn("Firebase Quota Limit reached, but offline fallback mode is strictly disabled per configuration.");
+    localStorage.setItem('freshlink_quota_fallback', 'true');
+    setIsQuotaFallbackMode(true);
+    console.warn("Firebase Quota Limit reached! Fallback to Offline/Maintenance Mode activated.");
   };
 
   const resetQuotaFallback = () => {
@@ -541,7 +584,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       // Execute single-round concurrent reads instead of maintaining heavy, permanent wide-collection listeners
       const [usersSnap, postsSnap, likesSnap, commentsSnap, followersSnap, adsSnap] = await Promise.all([
         getDocs(collection(db, 'users')),
-        getDocs(collection(db, 'posts')),
+        getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(postLimit))),
         getDocs(collection(db, 'likes')),
         getDocs(collection(db, 'comments')),
         getDocs(collection(db, 'followers')),
@@ -555,6 +598,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       const postsList: Post[] = [];
       postsSnap.forEach((d) => postsList.push(d.data() as Post));
       setPosts(postsList);
+      setHasMorePosts(postsSnap.docs.length >= postLimit);
 
       const likesList: Like[] = [];
       likesSnap.forEach((d) => likesList.push(d.data() as Like));
@@ -663,7 +707,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     };
 
     loadCacheAndFetch();
-  }, [currentUserId, isQuotaFallbackMode]);
+  }, [currentUserId, isQuotaFallbackMode, postLimit]);
 
   // Request browser notification permissions on login/mount
   useEffect(() => {
@@ -675,29 +719,80 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   }, [currentUserId]);
 
   const triggerDeviceNotification = (notif: Notification) => {
-    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    console.log("[Notification System] triggerDeviceNotification called for:", notif);
+    if (typeof window === 'undefined') {
+      console.warn("[Notification System] window is undefined - skipping device alert");
+      return;
+    }
+    if (!('Notification' in window)) {
+      console.warn("[Notification System] 'Notification' is not supported in this browser");
+      return;
+    }
+
+    console.log("[Notification System] Current browser Notification permission state:", window.Notification.permission);
     
     // Read and respect target user's notification toggles
     const userToNotify = users.find(u => u.id === notif.userId);
     if (userToNotify && userToNotify.notificationSettings) {
       const settings = userToNotify.notificationSettings;
-      if (notif.type === 'like' && settings.likes === false) return;
-      if (notif.type === 'comment' && settings.comments === false) return;
-      if (notif.type === 'follow' && settings.follows === false) return;
-      if (notif.type === 'system' && settings.system === false) return;
-      if (notif.type === 'ad_alert' && settings.adAlerts === false) return;
+      console.log("[Notification System] Evaluating target user notification preferences:", settings);
+      if (notif.type === 'like' && settings.likes === false) {
+        console.log("[Notification System] Blocked: user 'likes' notifications are disabled");
+        return;
+      }
+      if (notif.type === 'comment' && settings.comments === false) {
+        console.log("[Notification System] Blocked: user 'comments' notifications are disabled");
+        return;
+      }
+      if (notif.type === 'follow' && settings.follows === false) {
+        console.log("[Notification System] Blocked: user 'follows' notifications are disabled");
+        return;
+      }
+      if (notif.type === 'system' && settings.system === false) {
+        console.log("[Notification System] Blocked: user 'system' notifications are disabled");
+        return;
+      }
+      if (notif.type === 'ad_alert' && settings.adAlerts === false) {
+        console.log("[Notification System] Blocked: user 'ad_alert' notifications are disabled");
+        return;
+      }
     }
 
     if (window.Notification.permission === 'granted') {
       try {
-        new window.Notification("FreshLinkConnect", {
-          body: notif.message,
-          icon: notif.senderImage || "/logo192.png",
-          tag: notif.id,
-        });
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          console.log("[Notification System] Service Worker controller detected. Using registration to display alert...");
+          navigator.serviceWorker.ready.then((reg) => {
+            reg.showNotification("FreshLinkConnect", {
+              body: notif.message,
+              icon: notif.senderImage || "/favicon.png",
+              tag: notif.id,
+              badge: "/favicon.png"
+            }).then(() => {
+              console.log("[Notification System] Service Worker successfully scheduled/rendered notification banner");
+            }).catch((swErr) => {
+              console.error("[Notification System] SW registration notification failed, falling back to legacy constructor:", swErr);
+              new window.Notification("FreshLinkConnect", {
+                body: notif.message,
+                icon: notif.senderImage || "/favicon.png",
+                tag: notif.id,
+              });
+            });
+          });
+        } else {
+          console.log("[Notification System] Service Worker not active. Spawning direct browser window.Notification...");
+          new window.Notification("FreshLinkConnect", {
+            body: notif.message,
+            icon: notif.senderImage || "/favicon.png",
+            tag: notif.id,
+          });
+          console.log("[Notification System] Direct window.Notification constructor executed successfully");
+        }
       } catch (e) {
-        console.error("Native notification display failed:", e);
+        console.error("[Notification System] Failed to render native notification banner:", e);
       }
+    } else {
+      console.warn("[Notification System] Notification permission is not 'granted' (current status: " + window.Notification.permission + "). Banner cannot be rendered directly. Please prompt user to grant permissions.");
     }
   };
 
@@ -721,7 +816,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       const qNotif = query(collection(db, 'notifications'), where('userId', '==', currentUserId));
       unsubNotifications = onSnapshot(qNotif, (snap) => {
         const list: Notification[] = [];
-        let newestUnread: Notification | null = null;
+        const newlyArrived: Notification[] = [];
         const nowMs = Date.now();
         
         snap.forEach((d) => {
@@ -736,7 +831,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
               if (nowMs - createdMs < 15000) {
                 const alreadyExists = prev.some(p => p.id === n.id);
                 if (!alreadyExists) {
-                  newestUnread = n;
+                  newlyArrived.push(n);
                 }
               }
             }
@@ -744,9 +839,9 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
           return list;
         });
 
-        if (newestUnread) {
-          triggerDeviceNotification(newestUnread);
-        }
+        newlyArrived.forEach(notif => {
+          triggerDeviceNotification(notif);
+        });
       }, (error) => {
         handleSubError(error, 'notifications');
       });
@@ -851,6 +946,18 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   }, [rawCurrentUser, auth.currentUser?.email]);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (currentUser) {
+        localStorage.setItem('freshlink_current_user_id', currentUser.id);
+        localStorage.setItem('freshlink_cached_user', JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem('freshlink_current_user_id');
+        localStorage.removeItem('freshlink_cached_user');
+      }
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
     const isRootGmail = rawCurrentUser?.email?.toLowerCase() === 'fresh.linksd@gmail.com' || auth.currentUser?.email?.toLowerCase() === 'fresh.linksd@gmail.com';
     if (rawCurrentUser && isRootGmail) {
       if (rawCurrentUser.role !== 'super_admin' || !rawCurrentUser.isAdmin || rawCurrentUser.email?.toLowerCase() !== 'fresh.linksd@gmail.com') {
@@ -918,10 +1025,10 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     let matched = users.find(u => u.email.toLowerCase() === email.toLowerCase());
     
     // Auto-create/guarantee root super_admin if they login with this specific email
-    if (!matched && email.toLowerCase() === 'fresh.linksd@gmail.com') {
+    if (!matched && email.toLowerCase() === 'fresh.linksd@gmail.com' && currentUserId) {
       try {
         const defaultSuperAdmin: User = {
-          id: `super_admin_seed_${Date.now()}`,
+          id: currentUserId,
           name: 'Super Admin',
           email: 'fresh.linksd@gmail.com',
           bio: 'Root Developer & Primary System clearing administrator.',
@@ -981,6 +1088,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       isMonetizationEnabled: matched.isMonetizationEnabled || false,
       monthlySubscriptionPrice: matched.monthlySubscriptionPrice !== undefined ? matched.monthlySubscriptionPrice : 4.99,
       subscribedCreators: matched.subscribedCreators || [],
+      subscribedTiers: matched.subscribedTiers || {},
       hasVerifiedDetails: matched.hasVerifiedDetails || false
     };
 
@@ -1036,6 +1144,11 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   // Sign out cleanly
   const logout = async () => {
     try {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('freshlink_current_user_id');
+        localStorage.removeItem('freshlink_cached_user');
+      }
+      setCurrentUserId(null);
       await signOut(auth);
     } catch (err) {
       console.error("Auth session signout error:", err);
@@ -1161,14 +1274,18 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     const likeId = `${currentUserId}_${postId}`;
     const isLikedAlready = likes.some(l => l.userId === currentUserId && l.postId === postId);
 
+    // Save current state for rollback
+    const previousLikes = [...likes];
+
+    // Optimistically update state immediately
+    if (isLikedAlready) {
+      setLikes(prev => prev.filter(l => l.userId !== currentUserId || l.postId !== postId));
+    } else {
+      setLikes(prev => [...prev, { id: likeId, userId: currentUserId, postId, createdAt: new Date().toISOString() }]);
+    }
+
     if (!navigator.onLine) {
       console.log(`[PWA Offline] Queueing like for post ${postId}`);
-      // Optimistically update local state immediately
-      if (isLikedAlready) {
-        setLikes(prev => prev.filter(l => l.userId !== currentUserId || l.postId !== postId));
-      } else {
-        setLikes(prev => [...prev, { userId: currentUserId, postId }]);
-      }
       
       try {
         await addPendingInteraction({
@@ -1189,48 +1306,49 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       return;
     }
 
-    await runWriteOperation(
-      async () => {
-        if (isLikedAlready) {
-          await deleteDoc(doc(db, 'likes', likeId));
-        } else {
-          await setDoc(doc(db, 'likes', likeId), {
-            userId: currentUserId,
-            postId
-          });
+    try {
+      await runWriteOperation(
+        async () => {
+          if (isLikedAlready) {
+            await deleteDoc(doc(db, 'likes', likeId));
+          } else {
+            await setDoc(doc(db, 'likes', likeId), {
+              userId: currentUserId,
+              postId
+            });
 
-          // Notify post owner
-          const post = posts.find(p => p.id === postId);
-          if (post && post.userId !== currentUserId) {
-            await addNotification(
-              post.userId,
-              'like',
-              `liked your post "${post.title}"`,
-              postId
-            );
+            // Notify post owner
+            const post = posts.find(p => p.id === postId);
+            if (post && post.userId !== currentUserId) {
+              await addNotification(
+                post.userId,
+                'like',
+                `liked your post "${post.title}"`,
+                postId
+              );
+            }
           }
-        }
-      },
-      () => {
-        if (isLikedAlready) {
-          setLikes(prev => prev.filter(l => l.userId !== currentUserId || l.postId !== postId));
-        } else {
-          setLikes(prev => [...prev, { userId: currentUserId, postId }]);
-          
-          // Notify post owner locally (only in local fallback mode)
-          const post = posts.find(p => p.id === postId);
-          if (post && post.userId !== currentUserId && isQuotaFallbackMode) {
-            addNotification(
-              post.userId,
-              'like',
-              `liked your post "${post.title}"`,
-              postId
-            );
+        },
+        () => {
+          // Notify post owner locally (only in local fallback mode / quota mode)
+          if (!isLikedAlready) {
+            const post = posts.find(p => p.id === postId);
+            if (post && post.userId !== currentUserId && isQuotaFallbackMode) {
+              addNotification(
+                post.userId,
+                'like',
+                `liked your post "${post.title}"`,
+                postId
+              );
+            }
           }
-        }
-      },
-      `likes/${likeId}`
-    );
+        },
+        `likes/${likeId}`
+      );
+    } catch (err) {
+      console.error("Failed to toggle like post, rolling back optimistic update:", err);
+      setLikes(previousLikes);
+    }
   };
 
   const isPostLiked = (postId: string) => {
@@ -1240,6 +1358,109 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
 
   const getPostLikesCount = (postId: string) => {
     return likes.filter(l => l.postId === postId).length;
+  };
+
+  const reactToPost = async (postId: string, reactionType: string) => {
+    if (!currentUserId) return;
+    const likeId = `${currentUserId}_${postId}`;
+    const existingLike = likes.find(l => l.userId === currentUserId && l.postId === postId);
+
+    // Save previous state for rollback on error
+    const previousLikes = [...likes];
+
+    // Optimistically update local state synchronously and immediately
+    if (existingLike) {
+      if (existingLike.reactionType === reactionType) {
+        // Remove reaction
+        setLikes(prev => prev.filter(l => l.userId !== currentUserId || l.postId !== postId));
+      } else {
+        // Change reaction
+        setLikes(prev => prev.map(l => l.userId === currentUserId && l.postId === postId ? { ...l, reactionType } : l));
+      }
+    } else {
+      // Add new reaction
+      setLikes(prev => [...prev, { id: likeId, userId: currentUserId, postId, reactionType, createdAt: new Date().toISOString() }]);
+    }
+
+    if (!navigator.onLine) {
+      console.log(`[PWA Offline] Queueing reaction ${reactionType} for post ${postId}`);
+      return;
+    }
+
+    try {
+      await runWriteOperation(
+        async () => {
+          if (existingLike) {
+            if (existingLike.reactionType === reactionType) {
+              // Delete reaction document
+              await deleteDoc(doc(db, 'likes', likeId));
+            } else {
+              // Update reaction document
+              await setDoc(doc(db, 'likes', likeId), {
+                userId: currentUserId,
+                postId,
+                reactionType
+              });
+            }
+          } else {
+            // Create reaction document
+            await setDoc(doc(db, 'likes', likeId), {
+              userId: currentUserId,
+              postId,
+              reactionType
+            });
+
+            // Notify post owner
+            const post = posts.find(p => p.id === postId);
+            if (post && post.userId !== currentUserId) {
+              await addNotification(
+                post.userId,
+                'like',
+                `reacted with ${reactionType} to your post "${post.title}"`,
+                postId
+              );
+            }
+          }
+        },
+        () => {
+          // Since we already performed the optimistic update, we don't need to do anything here on success.
+          // However, if we are in local quota fallback mode, we still ensure local notification works
+          if (!existingLike) {
+            const post = posts.find(p => p.id === postId);
+            if (post && post.userId !== currentUserId && isQuotaFallbackMode) {
+              addNotification(
+                post.userId,
+                'like',
+                `reacted with ${reactionType} to your post "${post.title}"`,
+                postId
+              );
+            }
+          }
+        },
+        `likes/${likeId}`
+      );
+    } catch (err) {
+      console.error("Failed to persist reaction, rolling back optimistic update:", err);
+      // Rollback to previous state
+      setLikes(previousLikes);
+    }
+  };
+
+  const getPostReactions = (postId: string) => {
+    const postLikes = likes.filter(l => l.postId === postId);
+    const reactionCounts: Record<string, number> = {};
+    postLikes.forEach(l => {
+      const type = l.reactionType || '👍';
+      reactionCounts[type] = (reactionCounts[type] || 0) + 1;
+    });
+    return reactionCounts;
+  };
+
+  const getUserReaction = (postId: string) => {
+    if (!currentUserId) return null;
+    const existing = likes.find(l => l.userId === currentUserId && l.postId === postId);
+    if (!existing) return null;
+    return existing.reactionType || '👍';
   };
 
   // Comments write, edit, delete & lookup
@@ -1430,6 +1651,18 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       },
       `messages/${id}`
     );
+
+    // Create a real-time notification to trigger device and system alerts for the recipient
+    try {
+      await addNotification(
+        receiverId,
+        'system',
+        `✉️ texted you: "${cleanText.length > 60 ? cleanText.substring(0, 60) + '...' : cleanText}"`
+      );
+    } catch (err) {
+      console.warn("Failed to create message system/device notification:", err);
+    }
+
     return newMsg;
   };
 
@@ -1996,6 +2229,11 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     }
   };
 
+  const loadMorePosts = async () => {
+    if (!hasMorePosts || loading) return;
+    setPostLimit(prev => prev + 20);
+  };
+
   return (
     <SocialPlatformContext.Provider
       value={{
@@ -2018,6 +2256,9 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         toggleLikePost,
         isPostLiked,
         getPostLikesCount,
+        reactToPost,
+        getPostReactions,
+        getUserReaction,
         addComment,
         getPostComments,
         editComment,
@@ -2042,6 +2283,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         requestWithdrawal,
         updateWithdrawalStatusByAdmin,
         notifications,
+        triggerDeviceNotification,
         addNotification,
         submitPollAnswer,
         postReports,
@@ -2055,11 +2297,14 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         trackAdClick,
         toggleAllAds,
         isQuotaFallbackMode,
+        userMap,
         resetQuotaFallback,
         securityBlock,
         setSecurityBlock,
         resolveSecurityChallenge,
-        refetchData
+        refetchData,
+        hasMorePosts,
+        loadMorePosts
       }}
     >
       {children}

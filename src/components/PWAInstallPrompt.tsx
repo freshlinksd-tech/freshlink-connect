@@ -4,13 +4,11 @@ import {
   X, 
   Sparkles, 
   Smartphone, 
-  Check, 
   ExternalLink, 
   Share2, 
   Plus, 
-  Chrome, 
-  Laptop, 
-  Info
+  Info,
+  ChevronRight
 } from 'lucide-react';
 
 export const PWAInstallPrompt: React.FC = () => {
@@ -22,7 +20,6 @@ export const PWAInstallPrompt: React.FC = () => {
   // Detect context
   const isIframe = window.self !== window.top;
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-  const isAndroid = /Android/i.test(navigator.userAgent);
 
   useEffect(() => {
     // Check if app is already installed in standalone mode
@@ -52,11 +49,19 @@ export const PWAInstallPrompt: React.FC = () => {
 
     window.addEventListener('appinstalled', handleAppInstalled);
 
+    // Also auto-trigger banner visible on mobile to increase engagement if prompt is null (fallback)
+    const timer = setTimeout(() => {
+      if (!isInstalled && !deferredPrompt) {
+        setIsVisible(true);
+      }
+    }, 4000);
+
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
+      clearTimeout(timer);
     };
-  }, []);
+  }, [isInstalled]);
 
   useEffect(() => {
     const handleTriggerInstall = () => {
@@ -71,7 +76,7 @@ export const PWAInstallPrompt: React.FC = () => {
         // Instantly open in a new browser tab to bypass the iframe sandbox and enable native PWA installation!
         window.open(window.location.href, '_blank');
       } else {
-        // Fallback: If prompt is not available, show the step-by-step installation guide modal
+        // Fallback: If prompt is not available, show the step-by-step installation guide modal/sheet
         setShowGuide(true);
         setIsVisible(true);
       }
@@ -108,7 +113,6 @@ export const PWAInstallPrompt: React.FC = () => {
     return null; // App already installed
   }
 
-  // Generate current external link
   const getExternalLink = () => {
     return window.location.href;
   };
@@ -118,86 +122,92 @@ export const PWAInstallPrompt: React.FC = () => {
       {/* Banner view: displayed at the bottom right */}
       {isVisible && !showGuide && (
         <div 
-          className="fixed bottom-6 left-6 right-6 md:left-auto md:right-6 md:w-96 bg-zinc-950 text-white rounded-3xl p-5 border border-zinc-800 shadow-2xl z-50 animate-in slide-in-from-bottom duration-300 font-sans"
+          className="fixed bottom-4 left-4 right-4 md:left-auto md:right-6 md:w-96 bg-white text-zinc-900 rounded-2xl p-4 border border-stone-200 shadow-2xl z-50 animate-in slide-in-from-bottom duration-300 font-sans"
           id="pwa-install-banner"
         >
-          <div className="flex items-start justify-between gap-4">
-            <div className="bg-orange-600/10 p-2.5 rounded-2xl border border-orange-500/20 shrink-0 text-orange-500">
+          <div className="flex items-start justify-between gap-3">
+            <div className="bg-orange-500/10 p-2 rounded-xl border border-orange-500/20 shrink-0 text-orange-600">
               <Smartphone className="w-5 h-5" />
             </div>
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-black text-orange-500 uppercase tracking-widest flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5" /> PWA Application
+            <div className="flex-1 space-y-0.5">
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] font-extrabold text-orange-600 uppercase tracking-widest flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" /> PWA Application
                 </span>
               </div>
-              <h4 className="text-sm font-black text-white">Install FreshLink Connect</h4>
-              <p className="text-zinc-400 text-[11px] leading-relaxed font-semibold">
-                Add FreshLink to your home screen for rapid offline loading, zero-delay notifications, and an immersive fullscreen app experience!
+              <h4 className="text-xs font-black text-zinc-900">Install FreshLink Connect</h4>
+              <p className="text-zinc-500 text-[10.5px] leading-relaxed font-semibold">
+                Get lightning-fast loading, zero-delay notifications, and fullscreen social blogging on your mobile screen.
               </p>
             </div>
             <button 
               type="button"
               onClick={handleDismiss}
-              className="text-zinc-500 hover:text-white transition-colors cursor-pointer p-1 rounded-full hover:bg-zinc-900"
+              className="text-zinc-400 hover:text-zinc-650 transition-colors cursor-pointer p-1 rounded-full hover:bg-zinc-50"
               aria-label="Dismiss PWA Promotion"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          <div className="flex items-center gap-2.5 mt-4">
+          <div className="flex items-center gap-2 mt-3">
             <button
               type="button"
               onClick={handleDismiss}
-              className="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-white text-[11px] font-black uppercase tracking-wider rounded-xl border border-zinc-800 transition-all cursor-pointer outline-none"
+              className="flex-1 py-2 bg-stone-100 hover:bg-stone-200 text-zinc-650 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer outline-none"
             >
               Later
             </button>
             <button
               type="button"
               onClick={handleInstallClick}
-              className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition-all shadow-md shadow-orange-600/15 flex items-center justify-center gap-1.5 cursor-pointer outline-none"
+              className="flex-1 py-2 bg-orange-600 hover:bg-orange-700 text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-all shadow-md shadow-orange-600/10 flex items-center justify-center gap-1.5 cursor-pointer outline-none"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Install Now</span>
+              <span>Install App</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* Guide modal view: displayed when native prompt is unavailable (e.g., in iframe, iOS, or manual) */}
+      {/* Guide bottom sheet (mobile) or modal (desktop) */}
       {showGuide && (
-        <div className="fixed inset-0 bg-black/65 backdrop-blur-md flex items-center justify-center p-4 z-[100] animate-in fade-in duration-200">
-          <div className="bg-zinc-950 border border-zinc-850 rounded-3xl p-6 max-w-md w-full shadow-2xl relative font-sans text-white">
+        <div className="fixed inset-0 bg-zinc-950/40 backdrop-blur-sm flex items-end sm:items-center sm:justify-center p-0 sm:p-4 z-[100] animate-in fade-in duration-200">
+          {/* Backdrop dismiss button */}
+          <div className="absolute inset-0 cursor-default" onClick={handleDismiss} />
+          
+          <div className="bg-white border-t sm:border border-stone-200 rounded-t-[2.5rem] sm:rounded-3xl p-5 sm:p-6 max-w-md w-full shadow-2xl relative font-sans text-zinc-900 z-10 animate-in slide-in-from-bottom duration-300 max-h-[85vh] overflow-y-auto">
+            {/* Drag Handle for Mobile visual hint */}
+            <div className="w-12 h-1 bg-zinc-200 rounded-full mx-auto mb-4 sm:hidden" />
+
             <button
-              type="button"
+              type="button; "
               onClick={handleDismiss}
-              className="absolute top-4 right-4 text-zinc-400 hover:text-white p-1 rounded-full bg-zinc-900 border border-zinc-800 transition-all cursor-pointer"
+              className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-700 p-1.5 rounded-full bg-zinc-50 border border-zinc-100 transition-all cursor-pointer hidden sm:block"
               aria-label="Close Guide"
             >
               <X className="w-4 h-4" />
             </button>
 
-            <div className="text-center mb-5 space-y-2">
-              <div className="inline-flex bg-orange-600/15 p-3 rounded-2xl border border-orange-500/20 text-orange-500 mb-2">
+            <div className="text-center mb-5 space-y-1.5">
+              <div className="inline-flex bg-orange-500/10 p-3 rounded-2xl border border-orange-500/20 text-orange-600 mb-1">
                 <Smartphone className="w-6 h-6" />
               </div>
-              <h3 className="text-lg font-black tracking-tight">Add to Home Screen</h3>
-              <p className="text-xs text-zinc-400 font-medium">
-                Install FreshLink Connect as a lightweight app for offline access and native multitasking.
+              <h3 className="text-base font-black tracking-tight text-zinc-900">Add to Home Screen</h3>
+              <p className="text-[11px] text-zinc-500 font-bold leading-relaxed max-w-xs mx-auto">
+                No store required. Run FreshLink as a high-performance native-like app on your device.
               </p>
             </div>
 
             {/* CASE 1: Inside Iframe (Vite sandbox preview) */}
             {isIframe ? (
-              <div className="space-y-4">
-                <div className="p-3 bg-orange-950/20 border border-orange-500/20 rounded-2xl flex gap-3 items-start">
-                  <Info className="w-4.5 h-4.5 text-orange-500 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <h4 className="text-xs font-black uppercase tracking-wider text-orange-400">Sandbox IFrame Detected</h4>
-                    <p className="text-[11px] text-zinc-400 leading-relaxed font-semibold">
-                      Browsers block PWA installation inside sandbox frames. To add FreshLink to your home screen, you must first open it in a top-level tab!
+              <div className="space-y-3.5">
+                <div className="p-3 bg-orange-50 border border-orange-100 rounded-xl flex gap-3 items-start">
+                  <Info className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <h4 className="text-[10px] font-black uppercase tracking-wider text-orange-700">Frame Sandbox Limit</h4>
+                    <p className="text-[10.5px] text-zinc-600 leading-normal font-semibold">
+                      Browser security prevents direct installations inside preview sandboxes. Open in a top-level tab to automatically install!
                     </p>
                   </div>
                 </div>
@@ -206,40 +216,40 @@ export const PWAInstallPrompt: React.FC = () => {
                   href={getExternalLink()}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white text-xs font-black uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-orange-600/10 flex items-center justify-center gap-2 cursor-pointer text-center"
+                  className="w-full py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-[10.5px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md shadow-orange-600/10 flex items-center justify-center gap-1.5 cursor-pointer text-center"
                 >
                   <span>Open in New Tab</span>
-                  <ExternalLink className="w-4 h-4" />
+                  <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </div>
             ) : isIOS ? (
               /* CASE 2: Apple iOS Devices (Safari, Chrome iOS) */
-              <div className="space-y-4">
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-4 text-left">
-                  <div className="flex gap-3.5 items-start">
-                    <span className="bg-orange-600 text-white font-black text-xs w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+              <div className="space-y-3.5">
+                <div className="bg-stone-50 border border-stone-200/50 rounded-2xl p-3.5 space-y-3 text-left">
+                  <div className="flex gap-3 items-start">
+                    <span className="bg-orange-600 text-white font-black text-[10px] w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">
                       1
                     </span>
-                    <p className="text-xs text-zinc-300 font-semibold leading-relaxed">
-                      Tap the <span className="inline-flex items-center gap-1 font-bold text-orange-400 bg-zinc-850 px-1.5 py-0.5 rounded border border-zinc-800"><Share2 className="w-3 h-3" /> Share</span> button in Safari's lower navigation bar.
+                    <p className="text-[11px] text-zinc-700 font-semibold leading-relaxed">
+                      Tap the <span className="inline-flex items-center gap-1 font-extrabold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100 text-[10px]"><Share2 className="w-3 h-3" /> Share</span> button in Safari's lower menu bar.
                     </p>
                   </div>
 
-                  <div className="flex gap-3.5 items-start">
-                    <span className="bg-orange-600 text-white font-black text-xs w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+                  <div className="flex gap-3 items-start">
+                    <span className="bg-orange-600 text-white font-black text-[10px] w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">
                       2
                     </span>
-                    <p className="text-xs text-zinc-300 font-semibold leading-relaxed">
-                      Scroll down through the share options menu and tap <span className="inline-flex items-center gap-1 font-bold text-orange-400 bg-zinc-850 px-1.5 py-0.5 rounded border border-zinc-800"><Plus className="w-3 h-3" /> Add to Home Screen</span>.
+                    <p className="text-[11px] text-zinc-700 font-semibold leading-relaxed">
+                      Scroll through options and tap <span className="inline-flex items-center gap-1 font-extrabold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100 text-[10px]"><Plus className="w-3 h-3" /> Add to Home Screen</span>.
                     </p>
                   </div>
 
-                  <div className="flex gap-3.5 items-start">
-                    <span className="bg-orange-600 text-white font-black text-xs w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+                  <div className="flex gap-3 items-start">
+                    <span className="bg-orange-600 text-white font-black text-[10px] w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">
                       3
                     </span>
-                    <p className="text-xs text-zinc-300 font-semibold leading-relaxed">
-                      Tap <span className="font-bold text-orange-500">"Add"</span> in the top-right corner to complete!
+                    <p className="text-[11px] text-zinc-700 font-semibold leading-relaxed">
+                      Tap <span className="font-extrabold text-orange-600">"Add"</span> in the top-right corner to instantly install!
                     </p>
                   </div>
                 </div>
@@ -247,30 +257,30 @@ export const PWAInstallPrompt: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleDismiss}
-                  className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 text-xs font-black uppercase tracking-wider rounded-xl border border-zinc-800 transition-all cursor-pointer outline-none"
+                  className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-850 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer outline-none"
                 >
-                  Got It
+                  Dismiss Guide
                 </button>
               </div>
             ) : (
-              /* CASE 3: Desktop or Android Chrome/Firefox where prompt was missed/blocked */
-              <div className="space-y-4">
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-4 text-left">
+              /* CASE 3: Desktop or Android where prompt was missed/blocked */
+              <div className="space-y-3.5">
+                <div className="bg-stone-50 border border-stone-200/50 rounded-2xl p-3.5 space-y-3 text-left">
                   <div className="flex gap-3.5 items-start">
-                    <span className="bg-orange-600 text-white font-black text-xs w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">
-                      Option A
+                    <span className="bg-orange-600 text-white font-black text-[10px] w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+                      A
                     </span>
-                    <p className="text-xs text-zinc-300 font-semibold leading-relaxed">
-                      Look at your browser's <span className="text-orange-400 font-bold">Address Bar</span> and click the install icon (usually a <span className="font-bold text-orange-400">⊕ plus</span> or <span className="font-bold text-orange-400">⤓ download</span> button on the right side of the URL bar).
+                    <p className="text-[11px] text-zinc-700 font-semibold leading-relaxed">
+                      Look at your browser's <span className="text-orange-600 font-bold">Address Bar</span> and click the install icon (usually a <span className="font-extrabold text-orange-600">⊕ plus</span> or <span className="font-extrabold text-orange-600">⤓ download</span> button on the right side of the URL bar).
                     </p>
                   </div>
 
                   <div className="flex gap-3.5 items-start">
-                    <span className="bg-orange-600 text-white font-black text-xs w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">
-                      Option B
+                    <span className="bg-orange-600 text-white font-black text-[10px] w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+                      B
                     </span>
-                    <p className="text-xs text-zinc-300 font-semibold leading-relaxed">
-                      Open your browser menu (click <span className="font-bold text-orange-400">⋮</span> or <span className="font-bold text-orange-400">≡</span> in the top right) and select <span className="text-orange-400 font-bold">"Install app..."</span> or <span className="text-orange-400 font-bold">"Add to Home screen"</span>.
+                    <p className="text-[11px] text-zinc-700 font-semibold leading-relaxed">
+                      Open your browser's menu (click <span className="font-extrabold text-orange-600">⋮</span> or <span className="font-extrabold text-orange-600">≡</span> in top-right) and select <span className="text-orange-600 font-bold">"Install App"</span> or <span className="text-orange-600 font-bold">"Add to Home screen"</span>.
                     </p>
                   </div>
                 </div>
@@ -278,9 +288,9 @@ export const PWAInstallPrompt: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleDismiss}
-                  className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 text-xs font-black uppercase tracking-wider rounded-xl border border-zinc-800 transition-all cursor-pointer outline-none"
+                  className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-850 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer outline-none"
                 >
-                  I'm on it
+                  Dismiss Guide
                 </button>
               </div>
             )}

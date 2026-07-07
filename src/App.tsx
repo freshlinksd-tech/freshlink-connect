@@ -3,23 +3,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { SocialPlatformProvider, useSocialPlatform } from './context/SocialPlatformContext';
 import { Navigation } from './components/Navigation';
-import { Auth } from './components/Auth';
-import { Feed } from './components/Feed';
 import { FreshLinkLogo } from './components/FreshLinkLogo';
 import { motion } from 'motion/react';
-import { CreatePost } from './components/CreatePost';
-import { Chat } from './components/Chat';
-import { Profiles } from './components/Profiles';
-import { LandingPage } from './components/LandingPage';
-import { OnboardingSetup } from './components/OnboardingSetup';
-import { AdminPanel } from './components/AdminPanel';
-import { VerificationSetup } from './components/VerificationSetup';
-import { MonetizationPanel } from './components/MonetizationPanel';
-import { Notifications } from './components/Notifications';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
+import { FeedPostSkeleton } from './components/SkeletonLoader';
+
+const Auth = lazy(() => import('./components/Auth').then(m => ({ default: m.Auth })));
+const Feed = lazy(() => import('./components/Feed').then(m => ({ default: m.Feed })));
+const CreatePost = lazy(() => import('./components/CreatePost').then(m => ({ default: m.CreatePost })));
+const Chat = lazy(() => import('./components/Chat').then(m => ({ default: m.Chat })));
+const Profiles = lazy(() => import('./components/Profiles').then(m => ({ default: m.Profiles })));
+const LandingPage = lazy(() => import('./components/LandingPage').then(m => ({ default: m.LandingPage })));
+const OnboardingSetup = lazy(() => import('./components/OnboardingSetup').then(m => ({ default: m.OnboardingSetup })));
+const AdminPanel = lazy(() => import('./components/AdminPanel').then(m => ({ default: m.AdminPanel })));
+const VerificationSetup = lazy(() => import('./components/VerificationSetup').then(m => ({ default: m.VerificationSetup })));
+const MonetizationPanel = lazy(() => import('./components/MonetizationPanel').then(m => ({ default: m.MonetizationPanel })));
+const Notifications = lazy(() => import('./components/Notifications').then(m => ({ default: m.Notifications })));
 import { 
   Sparkles, 
   Menu, 
@@ -31,6 +33,7 @@ import {
   PlusCircle,
   Cpu,
   Wifi,
+  WifiOff,
   ShieldCheck,
   Coins,
   Bell,
@@ -39,7 +42,7 @@ import {
 } from 'lucide-react';
 
 function AppContent() {
-  const { currentUser, logout, messages, notifications } = useSocialPlatform();
+  const { currentUser, loading, logout, messages, notifications, isQuotaFallbackMode, resetQuotaFallback } = useSocialPlatform();
   const [activeTab, setActiveTab] = useState<string>('feed');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [targetChatUserId, setTargetChatUserId] = useState<string | null>(null);
@@ -47,8 +50,26 @@ function AppContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('all');
   
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-zinc-600 text-xs font-semibold uppercase tracking-wider animate-pulse font-mono">Synchronizing Live Channels...</p>
+      </div>
+    );
+  }
+
   if (!currentUser) {
-    return <LandingPage />;
+    return (
+      <Suspense fallback={
+        <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-center">
+          <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="text-stone-500 text-xs font-semibold uppercase tracking-wider animate-pulse">Loading FreshLink Connection...</p>
+        </div>
+      }>
+        <LandingPage />
+      </Suspense>
+    );
   }
 
   if (currentUser.isBlocked) {
@@ -82,7 +103,16 @@ function AppContent() {
     currentUser.role !== 'admin' && 
     (currentUser.hasVerifiedDetails !== true || currentUser.isApprovedByAdmin !== true);
   if (needsVerification) {
-    return <VerificationSetup />;
+    return (
+      <Suspense fallback={
+        <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-center">
+          <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="text-stone-500 text-xs font-semibold uppercase tracking-wider animate-pulse">Loading Identity Verification Portal...</p>
+        </div>
+      }>
+        <VerificationSetup />
+      </Suspense>
+    );
   }
 
   // Trigger when feed links call for direct profile inspection
@@ -109,7 +139,9 @@ function AppContent() {
       
       {/* Real-time Setup Wizard Portal for First Login */}
       {currentUser.hasSetupAccount === false && (
-        <OnboardingSetup />
+        <Suspense fallback={null}>
+          <OnboardingSetup />
+        </Suspense>
       )}
       
       {/* Mobile Top Header */}
@@ -125,7 +157,12 @@ function AppContent() {
           <button
             type="button"
             onClick={() => {
-              window.dispatchEvent(new CustomEvent('trigger-pwa-install'));
+              const isIframe = window.self !== window.top;
+              if (isIframe) {
+                window.open(window.location.href, '_blank');
+              } else {
+                window.dispatchEvent(new CustomEvent('trigger-pwa-install'));
+              }
             }}
             className="p-1.5 px-2.5 text-orange-650 hover:text-white hover:bg-orange-600 bg-orange-50 border border-orange-100 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all cursor-pointer outline-none"
             title="Install Mobile App"
@@ -233,7 +270,12 @@ function AppContent() {
               <button
                 type="button"
                 onClick={() => {
-                  window.dispatchEvent(new CustomEvent('trigger-pwa-install'));
+                  const isIframe = window.self !== window.top;
+                  if (isIframe) {
+                    window.open(window.location.href, '_blank');
+                  } else {
+                    window.dispatchEvent(new CustomEvent('trigger-pwa-install'));
+                  }
                   setMobileMenuOpen(false);
                 }}
                 className="w-full mt-2 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-[9px] font-black uppercase tracking-wider rounded-lg transition shadow-sm flex items-center justify-center gap-1 cursor-pointer outline-none"
@@ -293,6 +335,35 @@ function AppContent() {
 
       {/* Main Screen Content Stage */}
       <main className="flex-1 min-w-0" id="main-canvas-stage">
+        {/* System Under Maintenance / Offline Fallback Notice */}
+        {isQuotaFallbackMode && (
+          <div 
+            id="maintenance-offline-notice" 
+            className="m-4 md:m-6 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 rounded-2xl p-4 md:p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all animate-pulse"
+          >
+            <div className="flex items-start gap-3.5">
+              <div className="bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20 text-orange-600 shrink-0">
+                <WifiOff className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="font-sans font-black text-xs text-zinc-900 uppercase tracking-wider flex items-center gap-2">
+                  🛠️ System Under Maintenance — Offline Fallback Active
+                </h4>
+                <p className="text-[11px] text-zinc-650 leading-relaxed font-semibold max-w-xl">
+                  Cloud server database query quota limit was reached. The application is running seamlessly in <strong className="text-orange-700">Offline Fallback Mode</strong> using your high-speed cached local storage.
+                </p>
+              </div>
+            </div>
+            <button
+              id="reconnect-system-db-btn"
+              onClick={resetQuotaFallback}
+              className="px-4 py-2 bg-white hover:bg-stone-50 text-orange-700 hover:text-orange-800 border border-orange-200 hover:border-orange-300 font-sans font-bold uppercase tracking-wider text-[10px] rounded-xl shadow-xs transition cursor-pointer active:scale-98 shrink-0 flex items-center gap-2 outline-none"
+            >
+              <span>Reconnect Now</span>
+            </button>
+          </div>
+        )}
+
         {/* Screen Routing logic */}
         <motion.div
           key={activeTab}
@@ -301,74 +372,78 @@ function AppContent() {
           transition={{ duration: 0.22, ease: "easeOut" }}
           className="h-full"
         >
-          {(() => {
-            switch (activeTab) {
-              case 'feed':
-                return (
-                  <Feed 
-                    onSelectUser={handleSelectUser} 
-                    onNavigateToChat={handleNavigateToChat}
-                    activeCategoryFilter={activeCategoryFilter}
-                    setActiveCategoryFilter={setActiveCategoryFilter}
-                  />
-                );
-              case 'create':
-                return (
-                  <CreatePost 
-                    onSuccess={() => setActiveTab('feed')} 
-                  />
-                );
-              case 'chat':
-                return (
-                  <Chat 
-                    onSelectUser={handleSelectUser}
-                    targetChatUserId={targetChatUserId}
-                    setTargetChatUserId={setTargetChatUserId}
-                  />
-                );
-              case 'bookmarks':
-                return (
-                  <Feed 
-                    onSelectUser={handleSelectUser} 
-                    onNavigateToChat={handleNavigateToChat}
-                    activeCategoryFilter="all"
-                    setActiveCategoryFilter={setActiveCategoryFilter}
-                    isBookmarksOnly={true}
-                  />
-                );
-              case 'notifications':
-                return (
-                  <Notifications />
-                );
-              case 'profile':
-                return (
-                  <Profiles
-                    targetUserId={selectedUser}
-                    onSelectUser={handleSelectUser}
-                    onNavigateToChat={handleNavigateToChat}
-                    onOpenAuth={handleOpenAuth}
-                  />
-                );
-              case 'admin':
-                return (
-                  <AdminPanel
-                    onSelectUser={handleSelectUser}
-                  />
-                );
-              case 'monetization':
-                return (
-                  <MonetizationPanel />
-                );
-              default:
-                return <Feed onSelectUser={handleSelectUser} onNavigateToChat={handleNavigateToChat} activeCategoryFilter="all" setActiveCategoryFilter={setActiveCategoryFilter} />;
-            }
-          })()}
+          <Suspense fallback={<FeedPostSkeleton />}>
+            {(() => {
+              switch (activeTab) {
+                case 'feed':
+                  return (
+                    <Feed 
+                      onSelectUser={handleSelectUser} 
+                      onNavigateToChat={handleNavigateToChat}
+                      activeCategoryFilter={activeCategoryFilter}
+                      setActiveCategoryFilter={setActiveCategoryFilter}
+                    />
+                  );
+                case 'create':
+                  return (
+                    <CreatePost 
+                      onSuccess={() => setActiveTab('feed')} 
+                    />
+                  );
+                case 'chat':
+                  return (
+                    <Chat 
+                      onSelectUser={handleSelectUser}
+                      targetChatUserId={targetChatUserId}
+                      setTargetChatUserId={setTargetChatUserId}
+                    />
+                  );
+                case 'bookmarks':
+                  return (
+                    <Feed 
+                      onSelectUser={handleSelectUser} 
+                      onNavigateToChat={handleNavigateToChat}
+                      activeCategoryFilter="all"
+                      setActiveCategoryFilter={setActiveCategoryFilter}
+                      isBookmarksOnly={true}
+                    />
+                  );
+                case 'notifications':
+                  return (
+                    <Notifications />
+                  );
+                case 'profile':
+                  return (
+                    <Profiles
+                      targetUserId={selectedUser}
+                      onSelectUser={handleSelectUser}
+                      onNavigateToChat={handleNavigateToChat}
+                      onOpenAuth={handleOpenAuth}
+                    />
+                  );
+                case 'admin':
+                  return (
+                    <AdminPanel
+                      onSelectUser={handleSelectUser}
+                    />
+                  );
+                case 'monetization':
+                  return (
+                    <MonetizationPanel />
+                  );
+                default:
+                  return <Feed onSelectUser={handleSelectUser} onNavigateToChat={handleNavigateToChat} activeCategoryFilter="all" setActiveCategoryFilter={setActiveCategoryFilter} />;
+              }
+            })()}
+          </Suspense>
         </motion.div>
       </main>
 
       {/* Unified Authentication Setup Portal */}
       {authOpen && (
-        <Auth onClose={() => setAuthOpen(false)} />
+        <Suspense fallback={null}>
+          <Auth onClose={() => setAuthOpen(false)} />
+        </Suspense>
       )}
 
       {/* PWA Smart Installation Banner */}

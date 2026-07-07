@@ -24,12 +24,12 @@ export const MultiPhotosLayout: React.FC<MultiPhotosLayoutProps> = ({
   // Modern Mosaic Layouts depending on image count
   if (count === 1) {
     return (
-      <div className="w-full aspect-video rounded-2xl overflow-hidden border border-zinc-150 shadow-xs relative">
+      <div className="w-full rounded-2xl overflow-hidden border border-zinc-150 shadow-xs relative bg-stone-50/50 flex justify-center items-center">
         <img 
           src={images[0]} 
           alt="Visual Attachment" 
           onClick={() => handleClick(images[0])}
-          className={`w-full h-full object-cover cursor-pointer hover:scale-[1.01] transition-transform duration-500 ${
+          className={`w-full h-auto max-h-[600px] object-contain cursor-pointer hover:scale-[1.01] transition-transform duration-500 ${
             selectedImageUrl === images[0] ? 'ring-4 ring-orange-500' : ''
           }`}
         />
@@ -41,12 +41,12 @@ export const MultiPhotosLayout: React.FC<MultiPhotosLayoutProps> = ({
     return (
       <div className="grid grid-cols-2 gap-2 w-full aspect-video rounded-2xl overflow-hidden border border-zinc-150 shadow-xs">
         {images.map((img, idx) => (
-          <div key={idx} className="relative h-full overflow-hidden bg-zinc-900 group">
+          <div key={idx} className="relative h-full overflow-hidden bg-zinc-950 group flex items-center justify-center">
             <img 
               src={img} 
               alt={`Attachment ${idx + 1}`} 
               onClick={() => handleClick(img)}
-              className={`w-full h-full object-cover cursor-pointer group-hover:scale-105 transition duration-500 ${
+              className={`w-full h-full object-contain cursor-pointer group-hover:scale-105 transition duration-500 ${
                 selectedImageUrl === img ? 'opacity-90 ring-2 ring-inset ring-orange-500' : ''
               }`}
             />
@@ -59,24 +59,24 @@ export const MultiPhotosLayout: React.FC<MultiPhotosLayoutProps> = ({
   if (count === 3) {
     return (
       <div className="grid grid-cols-3 gap-2 w-full aspect-video rounded-2xl overflow-hidden border border-zinc-150 shadow-xs">
-        <div className="col-span-2 relative h-full overflow-hidden bg-zinc-900 group">
+        <div className="col-span-2 relative h-full overflow-hidden bg-zinc-950 group flex items-center justify-center">
           <img 
             src={images[0]} 
             alt="Lead Attachment" 
             onClick={() => handleClick(images[0])}
-            className={`w-full h-full object-cover cursor-pointer group-hover:scale-105 transition duration-500 ${
+            className={`w-full h-full object-contain cursor-pointer group-hover:scale-105 transition duration-500 ${
               selectedImageUrl === images[0] ? 'opacity-90 ring-2 ring-inset ring-orange-500' : ''
             }`}
           />
         </div>
         <div className="col-span-1 grid grid-rows-2 gap-2 h-full">
           {images.slice(1, 3).map((img, idx) => (
-            <div key={idx} className="relative h-full overflow-hidden bg-zinc-900 group">
+            <div key={idx} className="relative h-full overflow-hidden bg-zinc-950 group flex items-center justify-center">
               <img 
                 src={img} 
                 alt={`Attachment ${idx + 2}`} 
                 onClick={() => handleClick(img)}
-                className={`w-full h-full object-cover cursor-pointer group-hover:scale-105 transition duration-500 ${
+                className={`w-full h-full object-contain cursor-pointer group-hover:scale-105 transition duration-500 ${
                   selectedImageUrl === img ? 'opacity-90 ring-2 ring-inset ring-orange-500' : ''
                 }`}
               />
@@ -90,24 +90,24 @@ export const MultiPhotosLayout: React.FC<MultiPhotosLayoutProps> = ({
   if (count === 4) {
     return (
       <div className="grid grid-cols-4 gap-2 w-full aspect-video rounded-2xl overflow-hidden border border-zinc-150 shadow-xs">
-        <div className="col-span-2 relative h-full overflow-hidden bg-zinc-900 group">
+        <div className="col-span-2 relative h-full overflow-hidden bg-zinc-950 group flex items-center justify-center">
           <img 
             src={images[0]} 
             alt="Lead Attachment" 
             onClick={() => handleClick(images[0])}
-            className={`w-full h-full object-cover cursor-pointer group-hover:scale-105 transition duration-500 ${
+            className={`w-full h-full object-contain cursor-pointer group-hover:scale-105 transition duration-500 ${
               selectedImageUrl === images[0] ? 'opacity-90 ring-2 ring-inset ring-orange-500' : ''
             }`}
           />
         </div>
         <div className="col-span-2 grid grid-cols-2 grid-rows-2 gap-2 h-full">
           {images.slice(1, 4).map((img, idx) => (
-            <div key={idx} className="relative h-full overflow-hidden bg-zinc-900 group">
+            <div key={idx} className="relative h-full overflow-hidden bg-zinc-950 group flex items-center justify-center">
               <img 
                 src={img} 
                 alt={`Attachment ${idx + 2}`} 
                 onClick={() => handleClick(img)}
-                className={`w-full h-full object-cover cursor-pointer group-hover:scale-105 transition duration-500 ${
+                className={`w-full h-full object-contain cursor-pointer group-hover:scale-105 transition duration-500 ${
                   selectedImageUrl === img ? 'opacity-90 ring-2 ring-inset ring-orange-500' : ''
                 }`}
               />
@@ -123,24 +123,24 @@ export const MultiPhotosLayout: React.FC<MultiPhotosLayoutProps> = ({
   const remaining = count - 4;
   return (
     <div className="grid grid-cols-4 gap-2 w-full aspect-video rounded-2xl overflow-hidden border border-zinc-150 shadow-xs">
-      <div className="col-span-2 relative h-full overflow-hidden bg-zinc-900 group">
+      <div className="col-span-2 relative h-full overflow-hidden bg-zinc-950 group flex items-center justify-center">
         <img 
           src={images[0]} 
           alt="Lead Attachment" 
           onClick={() => handleClick(images[0])}
-          className={`w-full h-full object-cover cursor-pointer group-hover:scale-105 transition duration-500 ${
+          className={`w-full h-full object-contain cursor-pointer group-hover:scale-105 transition duration-500 ${
             selectedImageUrl === images[0] ? 'opacity-90 ring-2 ring-inset ring-orange-500' : ''
           }`}
         />
       </div>
       <div className="col-span-2 grid grid-cols-2 grid-rows-2 gap-2 h-full">
         {images.slice(1, 4).map((img, idx) => (
-          <div key={idx} className="relative h-full overflow-hidden bg-zinc-900 group">
+          <div key={idx} className="relative h-full overflow-hidden bg-zinc-950 group flex items-center justify-center">
             <img 
               src={img} 
               alt={`Attachment ${idx + 2}`} 
               onClick={() => handleClick(img)}
-              className={`w-full h-full object-cover cursor-pointer group-hover:scale-105 transition duration-500 ${
+              className={`w-full h-full object-contain cursor-pointer group-hover:scale-105 transition duration-500 ${
                 selectedImageUrl === img ? 'opacity-90 ring-2 ring-inset ring-orange-500' : ''
               }`}
             />

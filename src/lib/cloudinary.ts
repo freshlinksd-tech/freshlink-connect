@@ -112,3 +112,55 @@ export async function uploadToCloudinary(fileOrData: File | string, onProgress?:
     }
   }
 }
+
+/**
+ * Dynamically optimizes an image URL (Cloudinary or Unsplash or any other URL)
+ * using transformations: auto-format, auto-quality, and custom resizing.
+ */
+export function optimizeImageUrl(
+  url: string | undefined | null, 
+  options: { width?: number; height?: number; crop?: 'fill' | 'scale' | 'limit' | 'crop' } = {}
+): string {
+  if (!url) return '';
+
+  // 1. If it's a Cloudinary URL, inject optimal quality, format, and optional sizing
+  if (url.includes('res.cloudinary.com')) {
+    const urlParts = url.split('/upload/');
+    if (urlParts.length === 2) {
+      const { width, height, crop = 'limit' } = options;
+      let transformString = 'f_auto,q_auto';
+      if (width) transformString += `,w_${width}`;
+      if (height) transformString += `,h_${height}`;
+      if (width || height) transformString += `,c_${crop}`;
+      return `${urlParts[0]}/upload/${transformString}/${urlParts[1]}`;
+    }
+  }
+
+  // 2. If it's an Unsplash URL, replace/inject query parameters
+  if (url.includes('images.unsplash.com')) {
+    try {
+      const urlObj = new URL(url);
+      const params = urlObj.searchParams;
+      params.set('auto', 'format');
+      params.set('q', '75'); // high visual fidelity, lower size
+      if (options.width) {
+        params.set('w', options.width.toString());
+      }
+      if (options.height) {
+        params.set('h', options.height.toString());
+      }
+      if (options.crop) {
+        params.set('fit', options.crop === 'fill' ? 'crop' : 'max');
+      } else {
+        params.set('fit', 'crop');
+      }
+      return urlObj.toString();
+    } catch (e) {
+      return url; // fallback to raw string if parsing fails
+    }
+  }
+
+  // 3. Fallback for other URLs
+  return url;
+}
+

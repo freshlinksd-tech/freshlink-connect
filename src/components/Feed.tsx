@@ -14,7 +14,7 @@ import { FeedPostSkeleton } from './SkeletonLoader';
 import { ArrowDown } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { uploadToCloudinary } from '../lib/cloudinary';
+import { uploadToCloudinary, optimizeImageUrl } from '../lib/cloudinary';
 import { 
   Heart, 
   MessageSquare, 
@@ -31,6 +31,7 @@ import {
   Check,
   Send,
   Sparkles,
+  Crown,
   Search,
   Edit3,
   Trash2,
@@ -123,6 +124,7 @@ export const Feed: React.FC<FeedProps> = ({
     editComment,
     deleteComment,
     updateProfile,
+    userMap,
     reportPost,
     postReports,
     ads,
@@ -131,11 +133,60 @@ export const Feed: React.FC<FeedProps> = ({
     securityBlock,
     resolveSecurityChallenge,
     loading,
-    refetchData
+    refetchData,
+    hasMorePosts,
+    loadMorePosts,
+    reactToPost,
+    getPostReactions,
+    getUserReaction
   } = useSocialPlatform();
 
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState('');
+  const [localReactions, setLocalReactions] = useState<Record<string, string>>({});
+
+  const getUserReactionWithLocal = (postId: string) => {
+    if (localReactions[postId] !== undefined) {
+      return localReactions[postId] === 'none' ? null : localReactions[postId];
+    }
+    return getUserReaction(postId);
+  };
+
+  const getPostReactionsWithLocal = (postId: string) => {
+    const baseReactions = { ...getPostReactions(postId) };
+    const baseUserReaction = getUserReaction(postId);
+    const localUserReaction = localReactions[postId];
+
+    if (localUserReaction !== undefined) {
+      if (baseUserReaction) {
+        if (baseReactions[baseUserReaction] > 0) {
+          baseReactions[baseUserReaction]--;
+        }
+      }
+      if (localUserReaction !== 'none') {
+        baseReactions[localUserReaction] = (baseReactions[localUserReaction] || 0) + 1;
+      }
+    }
+    return baseReactions;
+  };
+
+  const handleReactClick = (postId: string, emoji: string) => {
+    const currentReaction = getUserReactionWithLocal(postId);
+    const nextReaction = currentReaction === emoji ? 'none' : emoji;
+    
+    // Apply local state immediately for instant feedback
+    setLocalReactions(prev => ({ ...prev, [postId]: nextReaction }));
+    
+    // Trigger the backend/context update
+    reactToPost(postId, emoji).catch(err => {
+      console.error("[Feed] Backend reaction sync failed, rolling back:", err);
+      setLocalReactions(prev => {
+        const updated = { ...prev };
+        delete updated[postId];
+        return updated;
+      });
+    });
+  };
 
   // Pull-to-refresh states
   const [pullY, setPullY] = useState(0);
@@ -232,7 +283,7 @@ export const Feed: React.FC<FeedProps> = ({
   const [activeDetailsImage, setActiveDetailsImage] = useState<string | null>(null);
   const [detailsViewMode, setDetailsViewMode] = useState<'image' | 'video'>('image');
 
-  const handlePurchaseSubscription = async (creatorId: string, price: number) => {
+  const handlePurchaseSubscription = async (creatorId: string, price: number, tier: 'Premium Member' | 'Elite Creator' = 'Premium Member') => {
     if (!currentUser) {
       alert("Authentication required to purchase creator subscriptions.");
       return;
@@ -244,13 +295,21 @@ export const Feed: React.FC<FeedProps> = ({
     }
 
     try {
-      const updatedSubscribed = [...(currentUser.subscribedCreators || []), creatorId];
+      const updatedSubscribed = [...(currentUser.subscribedCreators || [])];
+      if (!updatedSubscribed.includes(creatorId)) {
+        updatedSubscribed.push(creatorId);
+      }
+
+      const updatedTiers = { ...(currentUser.subscribedTiers || {}) };
+      updatedTiers[creatorId] = tier;
+
       await updateProfile({
         walletBalance: currentBalance - price,
-        subscribedCreators: updatedSubscribed
+        subscribedCreators: updatedSubscribed,
+        subscribedTiers: updatedTiers
       });
 
-      const creator = users.find(u => u.id === creatorId);
+      const creator = userMap[creatorId];
       if (creator) {
         const creatorBalance = creator.walletBalance || 0;
         await updateDoc(doc(db, 'users', creatorId), {
@@ -258,7 +317,7 @@ export const Feed: React.FC<FeedProps> = ({
         });
       }
 
-      alert(`Congratulations! You have subscribed to this creator successfully. Content unlocked!`);
+      alert(`Congratulations! You have subscribed to this creator as an [${tier}] successfully. Exclusive tier badge unlocked!`);
       if (selectedPost) {
         setSelectedPost({ ...selectedPost });
       }
@@ -285,7 +344,7 @@ export const Feed: React.FC<FeedProps> = ({
         subscribedCreators: updatedSubscribed
       });
 
-      const creator = users.find(u => u.id === creatorId);
+      const creator = userMap[creatorId];
       if (creator) {
         const creatorCredits = creator.walletCredits || 0;
         await updateDoc(doc(db, 'users', creatorId), {
@@ -412,14 +471,14 @@ export const Feed: React.FC<FeedProps> = ({
     const locSet = new Set<string>();
     posts.forEach(p => {
       if (p.status === 'published') {
-        const author = users.find(u => u.id === p.userId);
+        const author = userMap[p.userId];
         if (author && author.location) {
           locSet.add(author.location);
         }
       }
     });
     return Array.from(locSet).sort();
-  }, [posts, users]);
+  }, [posts, userMap]);
 
   const filteredLocationOptions = useMemo(() => {
     const query = locationSearch.toLowerCase().trim();
@@ -445,7 +504,7 @@ export const Feed: React.FC<FeedProps> = ({
     // Apply location filter
     if (selectedLocation !== 'all') {
       list = list.filter(p => {
-        const author = users.find(u => u.id === p.userId);
+        const author = userMap[p.userId];
         if (!author || !author.location) return false;
         return author.location.toLowerCase().includes(selectedLocation.toLowerCase());
       });
@@ -515,7 +574,7 @@ export const Feed: React.FC<FeedProps> = ({
     .sort((a, b) => b.score - a.score)
     .map(item => item.post);
 
-  }, [posts, users, isBookmarksOnly, activeCategoryFilter, selectedLocation, searchQuery, useAlgorithm, currentUser, followers, likes, comments, postReports]);
+  }, [posts, userMap, isBookmarksOnly, activeCategoryFilter, selectedLocation, searchQuery, useAlgorithm, currentUser, followers, likes, comments, postReports]);
 
   const handleShare = (postId: string) => {
     setCopiedPostId(postId);
@@ -923,7 +982,7 @@ export const Feed: React.FC<FeedProps> = ({
           </>
         ) : rankedPosts.length > 0 ? (
           rankedPosts.map((post) => {
-            const author = users.find(u => u.id === post.userId);
+            const author = userMap[post.userId];
             if (!author) return null;
 
             const isLiked = isPostLiked(post.id);
@@ -964,7 +1023,7 @@ export const Feed: React.FC<FeedProps> = ({
               <article
                 key={post.id}
                 id={`post-card-${post.id}`}
-                className="bg-white border border-stone-200/45 rounded-[2rem] card-shadow card-shadow-hover transition-smooth overflow-hidden"
+                className="bg-white border border-stone-200/45 rounded-[2rem] card-shadow hover:shadow-2xl hover:scale-[1.012] hover:-translate-y-1 hover:border-stone-300/65 transition-all duration-300 ease-out overflow-hidden transform"
               >
                 {/* Author Info row */}
                 <div className="p-6 flex items-center justify-between border-b border-stone-100/50 bg-white">
@@ -1046,13 +1105,13 @@ export const Feed: React.FC<FeedProps> = ({
                     <div 
                       id={`post-${post.id}-cover`}
                       onClick={() => setSelectedPost(post)}
-                      className="cursor-pointer overflow-hidden aspect-video relative bg-stone-100 rounded-2xl border border-stone-200/45 group"
+                      className="cursor-pointer overflow-hidden relative bg-stone-100/50 rounded-2xl border border-stone-200/45 group flex justify-center items-center w-full max-h-[520px]"
                     >
                       <img
-                        src={post.mediaUrl}
+                        src={optimizeImageUrl(post.mediaUrl, { width: 800, crop: 'limit' })}
                         alt={post.title}
                         referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover transition-smooth group-hover:scale-[1.015]"
+                        className="w-full h-auto max-h-[520px] object-contain transition-smooth group-hover:scale-[1.01]"
                       />
                       <div className="absolute top-4 left-4 bg-zinc-950/90 backdrop-blur-md text-white py-1.5 px-3 text-[10px] tracking-widest uppercase rounded-full font-extrabold shadow-sm">
                         #{post.category}
@@ -1153,7 +1212,7 @@ export const Feed: React.FC<FeedProps> = ({
 
                 {/* Interactive Engagement panel */}
                 <div className="bg-zinc-50/55 border-t border-zinc-100 p-4 px-6 flex items-center justify-between text-zinc-500 text-xs">
-                  <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap">
                     {/* Likes integration */}
                     <button
                       id={`like-btn-${post.id}`}
@@ -1164,9 +1223,44 @@ export const Feed: React.FC<FeedProps> = ({
                           : 'hover:text-zinc-850'
                       }`}
                     >
-                      <Heart className={`w-4 h-4 ${isLiked ? 'fill-orange-600 stroke-orange-600' : ''}`} />
+                      {(() => {
+                        const reaction = getUserReactionWithLocal(post.id);
+                        return reaction ? (
+                          <span className="text-sm select-none animate-bounce">{reaction}</span>
+                        ) : (
+                          <Heart className={`w-4 h-4 ${isLiked ? 'fill-orange-600 stroke-orange-600' : ''}`} />
+                        );
+                      })()}
                       <span>{likesCount}</span>
                     </button>
+ 
+                    {/* Quick Emoji Reactions */}
+                    <div className="flex items-center gap-0.5 bg-stone-100 p-0.5 rounded-full border border-stone-200/40 shrink-0">
+                      {['👍', '❤️', '🔥', '💡', '🎉'].map((emoji) => {
+                        const count = getPostReactionsWithLocal(post.id)[emoji] || 0;
+                        const userHasReacted = getUserReactionWithLocal(post.id) === emoji;
+                        return (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => handleReactClick(post.id, emoji)}
+                            className={`flex items-center justify-center gap-1 px-2.5 py-1 rounded-full text-[11px] transition-all cursor-pointer outline-none select-none hover:scale-108 active:scale-95 ${
+                              userHasReacted
+                                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold shadow-xs scale-105 border-0'
+                                : 'hover:bg-white text-zinc-650 hover:text-black border border-transparent'
+                            }`}
+                            title={`React with ${emoji}`}
+                          >
+                            <span>{emoji}</span>
+                            {count > 0 && (
+                              <span className="text-[9.5px] leading-none opacity-90 font-bold ml-0.5">
+                                {count}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
 
                     {/* Comments button */}
                     <button
@@ -1289,6 +1383,22 @@ export const Feed: React.FC<FeedProps> = ({
         )}
       </div>
 
+      {/* Pagination / Load More button */}
+      {hasMorePosts && !loading && (
+        <div className="flex justify-center mt-12 pb-16" id="pagination-load-more-section">
+          <button
+            id="load-more-posts-btn"
+            onClick={loadMorePosts}
+            className="px-8 py-3.5 bg-white hover:bg-stone-50 text-zinc-800 hover:text-black font-sans font-bold uppercase tracking-wider text-[11px] border border-stone-200/80 rounded-2xl shadow-sm hover:shadow transition-all duration-200 flex items-center gap-2 cursor-pointer active:scale-98"
+          >
+            <span>Load More Articles</span>
+            <svg className="w-4 h-4 text-zinc-500 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Expanded Article Modal / Reader View */}
       {selectedPost && (
         <div 
@@ -1296,7 +1406,7 @@ export const Feed: React.FC<FeedProps> = ({
           className="fixed inset-0 bg-[#1A1A1A]/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto"
         >
           {(() => {
-            const author = users.find(u => u.id === selectedPost.userId);
+            const author = userMap[selectedPost.userId];
             if (!author) return null;
 
             const commentsList = getPostComments(selectedPost.id);
@@ -1356,12 +1466,12 @@ export const Feed: React.FC<FeedProps> = ({
                           </p>
                         </div>
                       ) : activeDetailsImage ? (
-                        <div className="aspect-video bg-zinc-950 rounded-2xl border border-zinc-150 overflow-hidden shadow-sm relative">
+                        <div className="bg-zinc-950 rounded-2xl border border-zinc-150 overflow-hidden shadow-sm relative flex items-center justify-center max-h-[60vh] w-full">
                           <img
-                            src={activeDetailsImage}
+                            src={optimizeImageUrl(activeDetailsImage, { width: 1000, crop: 'limit' })}
                             alt={selectedPost.title}
                             referrerPolicy="no-referrer"
-                            className="w-full h-full object-contain"
+                            className="w-full h-auto max-h-[60vh] object-contain"
                           />
                         </div>
                       ) : null}
@@ -1399,7 +1509,7 @@ export const Feed: React.FC<FeedProps> = ({
                                   detailsViewMode === 'image' && activeDetailsImage === selectedPost.mediaUrl ? 'border-orange-500 scale-[1.03] ring-2 ring-orange-500/20 shadow-md' : 'border-zinc-200 hover:border-zinc-400'
                                 }`}
                               >
-                                <img src={selectedPost.mediaUrl} className="w-full h-full object-cover" alt="Main cover" />
+                                <img src={optimizeImageUrl(selectedPost.mediaUrl, { width: 120, height: 80, crop: 'fill' })} className="w-full h-full object-cover" alt="Main cover" />
                                 <span className="absolute bottom-0 inset-x-0 bg-black/60 text-[7px] text-white py-0.5 text-center font-bold">Cover</span>
                               </button>
                             )}
@@ -1417,7 +1527,7 @@ export const Feed: React.FC<FeedProps> = ({
                                   detailsViewMode === 'image' && activeDetailsImage === photoUrl ? 'border-orange-500 scale-[1.03] ring-2 ring-orange-500/20 shadow-md' : 'border-zinc-200 hover:border-zinc-400'
                                 }`}
                               >
-                                <img src={photoUrl} className="w-full h-full object-cover" alt={`Companion ${idx + 1}`} />
+                                <img src={optimizeImageUrl(photoUrl, { width: 120, height: 80, crop: 'fill' })} className="w-full h-full object-cover" alt={`Companion ${idx + 1}`} />
                                 <span className="absolute bottom-0 inset-x-0 bg-black/60 text-[7px] text-white py-0.5 text-center font-bold">Image #{idx + 1}</span>
                               </button>
                             ))}
@@ -1461,25 +1571,30 @@ export const Feed: React.FC<FeedProps> = ({
 
                   {/* Post Content text with Premium checking gating */}
                   {(() => {
-                    const authorUser = users.find(u => u.id === selectedPost.userId);
+                    const authorUser = userMap[selectedPost.userId];
                     const authorName = authorUser ? authorUser.name : 'Creator Member';
                     const premiumPrice = authorUser?.monthlySubscriptionPrice || 4.99;
 
-                    const hasAccess = 
-                      !selectedPost.isPremium || 
-                      (currentUser && (
-                        selectedPost.userId === currentUser.id || 
-                        currentUser.isAdmin || 
-                        currentUser.role === 'admin' || 
-                        currentUser.subscribedCreators?.includes(selectedPost.userId)
-                      ));
+                    const isAuthorOrAdmin = currentUser && (
+                      selectedPost.userId === currentUser.id || 
+                      currentUser.isAdmin || 
+                      currentUser.role === 'admin'
+                    );
 
-                    if (!hasAccess) {
+                    const hasSubscribed = currentUser && currentUser.subscribedCreators?.includes(selectedPost.userId);
+                    const userSubscriptionTier = hasSubscribed 
+                      ? (currentUser.subscribedTiers?.[selectedPost.userId] || 'Premium Member')
+                      : null;
+
+                    // Entire article is locked
+                    const postIsLocked = selectedPost.isPremium && !isAuthorOrAdmin && !userSubscriptionTier;
+
+                    if (postIsLocked) {
                       return (
                         <div className="space-y-6 py-4">
                           {/* Blurry content preview */}
                           <div className="relative select-none">
-                            <p className="text-zinc-450 text-sm font-sans blur-[4.5px] opacity-40 pointer-events-none whitespace-pre-wrap leading-relaxed line-clamp-4">
+                            <p className="text-zinc-405 text-sm font-sans blur-[4.5px] opacity-40 pointer-events-none whitespace-pre-wrap leading-relaxed line-clamp-4">
                               {selectedPost.content.slice(0, 180)}...
                               {"\n\n"}
                               Standard readers must subscribe to unlock full exclusive research papers, live programming guides, and developer notes published by this creator.
@@ -1502,16 +1617,25 @@ export const Feed: React.FC<FeedProps> = ({
                             </div>
 
                             <div className="space-y-2 pt-2">
-                              {/* Option A: Monthly subscription */}
+                              {/* Option A: Premium Member Tier */}
                               <button
-                                onClick={() => handlePurchaseSubscription(selectedPost.userId, premiumPrice)}
+                                onClick={() => handlePurchaseSubscription(selectedPost.userId, premiumPrice, 'Premium Member')}
                                 className="w-full py-2.5 bg-zinc-900 hover:bg-black text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition flex items-center justify-center gap-1.5 shadow-md shadow-zinc-950/10 cursor-pointer"
                               >
                                 <Sparkles className="w-4 h-4 text-amber-400" />
-                                <span>Subscribe for ${premiumPrice.toFixed(2)}/mo</span>
+                                <span>Subscribe Premium: ${premiumPrice.toFixed(2)}/mo</span>
                               </button>
 
-                              {/* Option B: Unlock single coin tips */}
+                              {/* Option B: Elite Creator Tier */}
+                              <button
+                                onClick={() => handlePurchaseSubscription(selectedPost.userId, premiumPrice * 2, 'Elite Creator')}
+                                className="w-full py-2.5 bg-violet-600 hover:bg-violet-750 text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition flex items-center justify-center gap-1.5 shadow-md shadow-violet-950/10 cursor-pointer"
+                              >
+                                <Crown className="w-4 h-4 text-amber-300" />
+                                <span>Subscribe Elite: ${(premiumPrice * 2).toFixed(2)}/mo</span>
+                              </button>
+
+                              {/* Option C: Unlock single coin tips */}
                               <button
                                 onClick={() => handleUnlockWithCredits(selectedPost.id, selectedPost.userId, 50)}
                                 className="w-full py-2 bg-white hover:bg-zinc-50 text-amber-700 hover:text-amber-800 text-[10px] font-bold uppercase tracking-widest rounded-xl border border-amber-205 transition flex items-center justify-center gap-1 cursor-pointer"
@@ -1534,10 +1658,124 @@ export const Feed: React.FC<FeedProps> = ({
                       );
                     }
 
+                    // Otherwise, parse content for selective [premium] or [elite] blocks
+                    const textContent = selectedPost.content || '';
+                    const tagRegex = /\[(premium|elite)\]([\s\S]*?)\[\/\1\]/g;
+                    const blocks: { type: 'text' | 'premium' | 'elite'; content: string }[] = [];
+                    let lastIndex = 0;
+                    let match;
+
+                    while ((match = tagRegex.exec(textContent)) !== null) {
+                      if (match.index > lastIndex) {
+                        blocks.push({
+                          type: 'text',
+                          content: textContent.substring(lastIndex, match.index)
+                        });
+                      }
+                      blocks.push({
+                        type: match[1] as 'premium' | 'elite',
+                        content: match[2]
+                      });
+                      lastIndex = tagRegex.lastIndex;
+                    }
+
+                    if (lastIndex < textContent.length) {
+                      blocks.push({
+                        type: 'text',
+                        content: textContent.substring(lastIndex)
+                      });
+                    }
+
                     return (
-                      <p className="text-zinc-800 text-sm md:text-base font-sans leading-relaxed whitespace-pre-wrap">
-                        {selectedPost.content}
-                      </p>
+                      <div className="space-y-4 text-zinc-800 text-sm md:text-base font-sans leading-relaxed">
+                        {blocks.map((block, idx) => {
+                          if (block.type === 'text') {
+                            return (
+                              <p key={idx} className="whitespace-pre-wrap">
+                                {block.content}
+                              </p>
+                            );
+                          }
+
+                          if (block.type === 'premium') {
+                            const hasPremiumAccess = isAuthorOrAdmin || userSubscriptionTier === 'Premium Member' || userSubscriptionTier === 'Elite Creator';
+                            if (hasPremiumAccess) {
+                              return (
+                                <div key={idx} className="border-l-4 border-amber-500 bg-amber-500/[0.03] p-4 my-2 rounded-r-xl">
+                                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-700 uppercase mb-1">
+                                    <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                                    <span>Premium Exclusive Segment</span>
+                                  </div>
+                                  <p className="whitespace-pre-wrap text-zinc-800 text-xs md:text-sm">{block.content}</p>
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <div key={idx} className="border border-amber-200 bg-amber-500/[0.01] p-5 my-3 rounded-2xl relative overflow-hidden">
+                                  <div className="relative select-none pointer-events-none blur-[4px] opacity-30">
+                                    <p className="whitespace-pre-wrap text-xs">{block.content.slice(0, 100) || "Standard exclusive developer research content. Locked for non-subscribers."}</p>
+                                  </div>
+                                  <div className="absolute inset-0 bg-gradient-to-t from-white/95 via-white/80 to-white/40 flex flex-col items-center justify-center p-3">
+                                    <div className="bg-amber-100/80 p-1.5 rounded-lg mb-1 border border-amber-200/50">
+                                      <Lock className="w-3.5 h-3.5 text-amber-600" />
+                                    </div>
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-amber-950 text-center">Premium Subscriber Area</p>
+                                    <p className="text-[9px] text-amber-800 text-center max-w-xs mt-0.5 leading-tight">
+                                      Subscribe to <strong>Premium Member</strong> tier to unlock.
+                                    </p>
+                                    <button
+                                      onClick={() => handlePurchaseSubscription(selectedPost.userId, premiumPrice, 'Premium Member')}
+                                      className="mt-2 px-3 py-1 bg-zinc-900 hover:bg-black text-white text-[9px] font-black uppercase tracking-wider rounded-lg transition"
+                                    >
+                                      Subscribe for ${premiumPrice.toFixed(2)}/mo
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            }
+                          }
+
+                          if (block.type === 'elite') {
+                            const hasEliteAccess = isAuthorOrAdmin || userSubscriptionTier === 'Elite Creator';
+                            if (hasEliteAccess) {
+                              return (
+                                <div key={idx} className="border-l-4 border-violet-500 bg-violet-500/[0.03] p-4 my-2 rounded-r-xl">
+                                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-violet-700 uppercase mb-1">
+                                    <Crown className="w-3.5 h-3.5 text-violet-500 animate-pulse" />
+                                    <span>Elite Creator Exclusive</span>
+                                  </div>
+                                  <p className="whitespace-pre-wrap text-zinc-800 text-xs md:text-sm">{block.content}</p>
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <div key={idx} className="border border-violet-200 bg-violet-500/[0.01] p-5 my-3 rounded-2xl relative overflow-hidden">
+                                  <div className="relative select-none pointer-events-none blur-[4px] opacity-30">
+                                    <p className="whitespace-pre-wrap text-xs">{block.content.slice(0, 100) || "High-value advanced financial charts and strategies. Locked for elite members."}</p>
+                                  </div>
+                                  <div className="absolute inset-0 bg-gradient-to-t from-white/95 via-white/80 to-white/40 flex flex-col items-center justify-center p-3">
+                                    <div className="bg-violet-100/80 p-1.5 rounded-lg mb-1 border border-violet-200/50">
+                                      <Crown className="w-3.5 h-3.5 text-violet-600" />
+                                    </div>
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-violet-955 text-center">Elite-Only Section</p>
+                                    <p className="text-[9px] text-violet-850 text-center max-w-xs mt-0.5 leading-tight">
+                                      Requires <strong>Elite Creator</strong> level subscription to unlock.
+                                    </p>
+                                    <button
+                                      onClick={() => handlePurchaseSubscription(selectedPost.userId, premiumPrice * 2, 'Elite Creator')}
+                                      className="mt-2 px-3 py-1 bg-violet-600 hover:bg-violet-700 text-white text-[9px] font-black uppercase tracking-wider rounded-lg transition"
+                                    >
+                                      Subscribe Elite for ${(premiumPrice * 2).toFixed(2)}/mo
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            }
+                          }
+
+                          return null;
+                        })}
+                      </div>
                     );
                   })()}
 
@@ -1549,7 +1787,14 @@ export const Feed: React.FC<FeedProps> = ({
                         onClick={() => toggleLikePost(selectedPost.id)}
                         className={`flex items-center gap-2 transition-all ${isLiked ? 'text-orange-600 font-extrabold' : 'hover:text-zinc-900'}`}
                       >
-                        <Heart className={`w-4 h-4 ${isLiked ? 'fill-orange-600 stroke-orange-600' : ''}`} />
+                        {(() => {
+                          const reaction = getUserReaction(selectedPost.id);
+                          return reaction ? (
+                            <span className="text-sm select-none animate-bounce">{reaction}</span>
+                          ) : (
+                            <Heart className={`w-4 h-4 ${isLiked ? 'fill-orange-600 stroke-orange-600' : ''}`} />
+                          );
+                        })()}
                         <span>{likesCount} Likes</span>
                       </button>
 
@@ -1609,7 +1854,7 @@ export const Feed: React.FC<FeedProps> = ({
                     <div className="space-y-3 pt-2">
                       {commentsList.length > 0 ? (
                         commentsList.map((com) => {
-                          const commentator = users.find(u => u.id === com.userId);
+                          const commentator = userMap[com.userId];
                           if (!commentator) return null;
 
                           return (
@@ -1640,6 +1885,19 @@ export const Feed: React.FC<FeedProps> = ({
                                     >
                                       {commentator.name}
                                     </p>
+
+                                    {/* Creator subscription tier badges */}
+                                    {commentator.subscribedCreators?.includes(selectedPost.userId) && (
+                                      commentator.subscribedTiers?.[selectedPost.userId] === 'Elite Creator' ? (
+                                        <span className="px-1.5 py-0.5 bg-violet-50 border border-violet-200 text-violet-800 text-[8.5px] font-black uppercase rounded-md tracking-wider flex items-center gap-0.5" title="Elite Creator Subscriber">
+                                          👑 Elite Insider
+                                        </span>
+                                      ) : (
+                                        <span className="px-1.5 py-0.5 bg-amber-50 border border-amber-200 text-amber-800 text-[8.5px] font-black uppercase rounded-md tracking-wider flex items-center gap-0.5" title="Premium Member Subscriber">
+                                          ⭐ Premium Member
+                                        </span>
+                                      )
+                                    )}
                                     
                                     {/* Edit / Delete control buttons */}
                                     {currentUser && (

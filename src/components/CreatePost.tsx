@@ -16,6 +16,7 @@ import {
   Check, 
   X,
   Sparkles,
+  Crown,
   Link,
   ChevronRight,
   ArrowUpRight,
@@ -409,7 +410,7 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
                 </span>
               </div>
             ) : multiplePhotos.length > 0 ? (
-              <div className="border-b border-zinc-100 max-h-[320px] overflow-hidden">
+              <div className="border-b border-zinc-100 w-full">
                 <MultiPhotosLayout images={multiplePhotos} />
               </div>
             ) : null}
@@ -799,9 +800,53 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
 
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-zinc-650 block">
-              Main Article Content <span className="text-orange-600 font-bold">*</span>
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-zinc-650 block">
+                Main Article Content <span className="text-orange-600 font-bold">*</span>
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const textarea = document.getElementById("create-content-textarea") as HTMLTextAreaElement;
+                    if (textarea) {
+                      const start = textarea.selectionStart;
+                      const end = textarea.selectionEnd;
+                      const text = textarea.value;
+                      const selected = text.substring(start, end) || "This special section is for Premium Members & Elite Creators.";
+                      const replacement = `[premium]${selected}[/premium]`;
+                      setContent(text.substring(0, start) + replacement + text.substring(end));
+                    } else {
+                      setContent(prev => prev + "\n[premium]This special section is for Premium Members & Elite Creators.[/premium]\n");
+                    }
+                  }}
+                  className="px-2 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all flex items-center gap-1 cursor-pointer shadow-xs"
+                >
+                  <Sparkles className="w-3 h-3 text-amber-500" />
+                  <span>+ Premium Part</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const textarea = document.getElementById("create-content-textarea") as HTMLTextAreaElement;
+                    if (textarea) {
+                      const start = textarea.selectionStart;
+                      const end = textarea.selectionEnd;
+                      const text = textarea.value;
+                      const selected = text.substring(start, end) || "This high-value exclusive analysis is reserved strictly for Elite Creators.";
+                      const replacement = `[elite]${selected}[/elite]`;
+                      setContent(text.substring(0, start) + replacement + text.substring(end));
+                    } else {
+                      setContent(prev => prev + "\n[elite]This high-value exclusive analysis is reserved strictly for Elite Creators.[/elite]\n");
+                    }
+                  }}
+                  className="px-2 py-1 bg-violet-50 hover:bg-violet-100 border border-violet-200 text-violet-800 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all flex items-center gap-1 cursor-pointer shadow-xs"
+                >
+                  <Crown className="w-3 h-3 text-violet-500" />
+                  <span>+ Elite Part</span>
+                </button>
+              </div>
+            </div>
             <textarea
               required
               rows={8}
@@ -811,6 +856,9 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
               placeholder="Write your article copy here... support separation and layout."
               className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 focus:outline-none text-sm leading-relaxed text-zinc-800 bg-white transition-all resize-y shadow-sm"
             />
+            <p className="text-[10px] text-zinc-500 leading-normal font-sans">
+              💡 Use the buttons to enclose parts of your post with <strong>[premium]...[/premium]</strong> or <strong>[elite]...[/elite]</strong> tags. These segments will render as beautiful blurred blocks with payment/subscription gates for non-subscribers!
+            </p>
           </div>
 
           <div className="space-y-1.5">

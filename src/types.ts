@@ -38,8 +38,10 @@ export interface User {
   walletBalance?: number;
   walletCredits?: number;
   isMonetizationEnabled?: boolean;
+  hasPassedMonetizationQuiz?: boolean; // monetization quiz completion indicator
   monthlySubscriptionPrice?: number;
   subscribedCreators?: string[]; // IDs of creators subscribed to
+  subscribedTiers?: Record<string, 'Premium Member' | 'Elite Creator'>; // Creator ID to tier level mapping
   notificationSettings?: {
     likes?: boolean;
     comments?: boolean;
@@ -68,6 +70,7 @@ export interface Post {
 export interface Like {
   userId: string;
   postId: string;
+  reactionType?: string; // Optional emoji reaction string
 }
 
 export interface Comment {
