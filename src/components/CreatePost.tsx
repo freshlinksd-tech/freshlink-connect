@@ -441,7 +441,7 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
               </div>
             ) : multiplePhotos.length > 0 ? (
               <div className="border-b border-zinc-100 w-full">
-                <MultiPhotosLayout images={multiplePhotos} />
+                <MultiPhotosLayout images={multiplePhotos} imageRatio={imageRatio} />
               </div>
             ) : null}
 

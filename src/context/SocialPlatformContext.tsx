@@ -123,6 +123,7 @@ interface SocialPlatformContextType {
   trackAdClick: (adId: string) => Promise<void>;
   toggleAllAds: (active: boolean) => Promise<void>;
   isQuotaFallbackMode: boolean;
+  isOnline: boolean;
   userMap: Record<string, User>;
   resetQuotaFallback: () => void;
   securityBlock: { actionType: string; remainingMs: number } | null;
@@ -201,6 +202,26 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   const [isQuotaFallbackMode, setIsQuotaFallbackMode] = useState<boolean>(() => {
     return localStorage.getItem('freshlink_quota_fallback') === 'true';
   });
+  const [isOnline, setIsOnline] = useState<boolean>(() => {
+    return typeof navigator !== 'undefined' ? navigator.onLine : true;
+  });
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
   const [securityBlock, setSecurityBlock] = useState<{ actionType: string; remainingMs: number } | null>(null);
   const [postLimit, setPostLimit] = useState<number>(20);
   const [hasMorePosts, setHasMorePosts] = useState<boolean>(true);
@@ -251,7 +272,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       return; // Stop execution of the write to protect server resources
     }
 
-    if (isQuotaFallbackMode) {
+    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
       localFallbackCallback();
       return;
     }
@@ -263,6 +284,9 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       if (errMsg.includes('Quota limit') || errMsg.includes('quota') || errMsg.includes('exceeded') || errMsg.includes('resource-exhausted') || errMsg.includes('Resource exhausted')) {
         triggerLocalQuotaFallback();
         localFallbackCallback();
+      } else if (errMsg.includes('offline') || errMsg.includes('network') || errMsg.includes('failed to fetch') || errMsg.includes('Failed to get document')) {
+        console.log("[PWA Offline] Connection unavailable. Saving write locally.");
+        localFallbackCallback();
       } else {
         throw err;
       }
@@ -271,44 +295,74 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
 
   // Automatic side-effect listeners to guarantee absolute state data integrity for offline sandbox testing
   useEffect(() => {
-    if (isQuotaFallbackMode) saveLocalValue('users', users);
-  }, [users, isQuotaFallbackMode]);
+    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      saveLocalValue('users', users);
+      setCache('users', users).catch(e => console.warn(e));
+    }
+  }, [users, isQuotaFallbackMode, isOnline]);
 
   useEffect(() => {
-    if (isQuotaFallbackMode) saveLocalValue('posts', posts);
-  }, [posts, isQuotaFallbackMode]);
+    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      saveLocalValue('posts', posts);
+      setCache('posts', posts).catch(e => console.warn(e));
+    }
+  }, [posts, isQuotaFallbackMode, isOnline]);
 
   useEffect(() => {
-    if (isQuotaFallbackMode) saveLocalValue('followers', followers);
-  }, [followers, isQuotaFallbackMode]);
+    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      saveLocalValue('followers', followers);
+      setCache('followers', followers).catch(e => console.warn(e));
+    }
+  }, [followers, isQuotaFallbackMode, isOnline]);
 
   useEffect(() => {
-    if (isQuotaFallbackMode) saveLocalValue('comments', comments);
-  }, [comments, isQuotaFallbackMode]);
+    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      saveLocalValue('comments', comments);
+      setCache('comments', comments).catch(e => console.warn(e));
+    }
+  }, [comments, isQuotaFallbackMode, isOnline]);
 
   useEffect(() => {
-    if (isQuotaFallbackMode) saveLocalValue('messages', messages);
-  }, [messages, isQuotaFallbackMode]);
+    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      saveLocalValue('messages', messages);
+      setCache('messages', messages).catch(e => console.warn(e));
+    }
+  }, [messages, isQuotaFallbackMode, isOnline]);
 
   useEffect(() => {
-    if (isQuotaFallbackMode) saveLocalValue('likes', likes);
-  }, [likes, isQuotaFallbackMode]);
+    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      saveLocalValue('likes', likes);
+      setCache('likes', likes).catch(e => console.warn(e));
+    }
+  }, [likes, isQuotaFallbackMode, isOnline]);
 
   useEffect(() => {
-    if (isQuotaFallbackMode) saveLocalValue('withdrawals', withdrawals);
-  }, [withdrawals, isQuotaFallbackMode]);
+    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      saveLocalValue('withdrawals', withdrawals);
+      setCache('withdrawals', withdrawals).catch(e => console.warn(e));
+    }
+  }, [withdrawals, isQuotaFallbackMode, isOnline]);
 
   useEffect(() => {
-    if (isQuotaFallbackMode) saveLocalValue('notifications', notifications);
-  }, [notifications, isQuotaFallbackMode]);
+    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      saveLocalValue('notifications', notifications);
+      setCache('notifications', notifications).catch(e => console.warn(e));
+    }
+  }, [notifications, isQuotaFallbackMode, isOnline]);
 
   useEffect(() => {
-    if (isQuotaFallbackMode) saveLocalValue('postReports', postReports);
-  }, [postReports, isQuotaFallbackMode]);
+    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      saveLocalValue('postReports', postReports);
+      setCache('postReports', postReports).catch(e => console.warn(e));
+    }
+  }, [postReports, isQuotaFallbackMode, isOnline]);
 
   useEffect(() => {
-    if (isQuotaFallbackMode) saveLocalValue('ads', ads);
-  }, [ads, isQuotaFallbackMode]);
+    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      saveLocalValue('ads', ads);
+      setCache('ads', ads).catch(e => console.warn(e));
+    }
+  }, [ads, isQuotaFallbackMode, isOnline]);
 
   useEffect(() => {
     activeChatPartnerRef.current = activeChatPartnerId;
@@ -365,6 +419,23 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
                 `commented on your post "${post.title}": "${comment.slice(0, 30)}${comment.length > 30 ? '...' : ''}"`,
                 item.postId
               );
+            }
+          } else if (item.type === 'post') {
+            const postObj = item.payload;
+            await setDoc(doc(db, 'posts', postObj.id), postObj);
+            console.log(`[PWA Sync] Post ${postObj.id} successfully synced.`);
+          } else if (item.type === 'chat') {
+            const msgObj = item.payload;
+            await setDoc(doc(db, 'messages', msgObj.id), msgObj);
+            console.log(`[PWA Sync] Message ${msgObj.id} successfully synced.`);
+            try {
+              await addNotification(
+                msgObj.receiverId,
+                'system',
+                `sent you a chat message: "${msgObj.message.slice(0, 35)}${msgObj.message.length > 35 ? '...' : ''}"`
+              );
+            } catch (notifErr) {
+              console.warn("Failed to create message sync notification:", notifErr);
             }
           }
           successfullySyncedIds.push(item.id);
@@ -608,7 +679,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   };
 
   const refetchData = async (hasCache = false) => {
-    if (isQuotaFallbackMode) {
+    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
       setLoading(false);
       return;
     }
@@ -694,12 +765,50 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       // 1. Load cached state from IndexedDB instantly to enable offline / zero latency startup
       let hasCache = false;
       try {
-        const cachedUsers = await getCache('users');
-        const cachedPosts = await getCache('posts');
-        const cachedComments = await getCache('comments');
-        const cachedLikes = await getCache('likes');
-        const cachedFollowers = await getCache('followers');
-        const cachedAds = await getCache('ads');
+        let cachedUsers = await getCache('users');
+        let cachedPosts = await getCache('posts');
+        let cachedComments = await getCache('comments');
+        let cachedLikes = await getCache('likes');
+        let cachedFollowers = await getCache('followers');
+        let cachedAds = await getCache('ads');
+
+        // Check localStorage backups as a high-reliability fallback
+        if (!cachedUsers || cachedUsers.length === 0) {
+          const backup = localStorage.getItem('freshlink_loc_users');
+          if (backup) {
+            try { cachedUsers = JSON.parse(backup); } catch (e) {}
+          }
+        }
+        if (!cachedPosts || cachedPosts.length === 0) {
+          const backup = localStorage.getItem('freshlink_loc_posts');
+          if (backup) {
+            try { cachedPosts = JSON.parse(backup); } catch (e) {}
+          }
+        }
+        if (!cachedComments || cachedComments.length === 0) {
+          const backup = localStorage.getItem('freshlink_loc_comments');
+          if (backup) {
+            try { cachedComments = JSON.parse(backup); } catch (e) {}
+          }
+        }
+        if (!cachedLikes || cachedLikes.length === 0) {
+          const backup = localStorage.getItem('freshlink_loc_likes');
+          if (backup) {
+            try { cachedLikes = JSON.parse(backup); } catch (e) {}
+          }
+        }
+        if (!cachedFollowers || cachedFollowers.length === 0) {
+          const backup = localStorage.getItem('freshlink_loc_followers');
+          if (backup) {
+            try { cachedFollowers = JSON.parse(backup); } catch (e) {}
+          }
+        }
+        if (!cachedAds || cachedAds.length === 0) {
+          const backup = localStorage.getItem('freshlink_loc_ads');
+          if (backup) {
+            try { cachedAds = JSON.parse(backup); } catch (e) {}
+          }
+        }
 
         if (cachedUsers && cachedUsers.length > 0) {
           setUsers(cachedUsers);
@@ -1247,6 +1356,25 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       },
       `posts/${id}`
     );
+
+    if (!navigator.onLine) {
+      console.log(`[PWA Offline] Queueing post ${id}`);
+      try {
+        await addPendingInteraction({
+          type: 'post',
+          postId: id,
+          userId: currentUserId,
+          payload: newPost
+        });
+        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+          const reg = await navigator.serviceWorker.ready;
+          await (reg as any).sync.register('sync-interactions');
+        }
+      } catch (e) {
+        console.warn("Failed to register offline post sync:", e);
+      }
+    }
+
     return newPost;
   };
 
@@ -1741,15 +1869,33 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       `messages/${id}`
     );
 
-    // Create a real-time notification to trigger device and system alerts for the recipient
-    try {
-      await addNotification(
-        receiverId,
-        'system',
-        `✉️ texted you: "${cleanText.length > 60 ? cleanText.substring(0, 60) + '...' : cleanText}"`
-      );
-    } catch (err) {
-      console.warn("Failed to create message system/device notification:", err);
+    if (!navigator.onLine) {
+      console.log(`[PWA Offline] Queueing message ${id}`);
+      try {
+        await addPendingInteraction({
+          type: 'chat',
+          postId: '',
+          userId: currentUserId,
+          payload: newMsg
+        });
+        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+          const reg = await navigator.serviceWorker.ready;
+          await (reg as any).sync.register('sync-interactions');
+        }
+      } catch (e) {
+        console.warn("Failed to register offline chat sync:", e);
+      }
+    } else {
+      // Create a real-time notification to trigger device and system alerts for the recipient
+      try {
+        await addNotification(
+          receiverId,
+          'system',
+          `✉️ texted you: "${cleanText.length > 60 ? cleanText.substring(0, 60) + '...' : cleanText}"`
+        );
+      } catch (err) {
+        console.warn("Failed to create message system/device notification:", err);
+      }
     }
 
     return newMsg;
@@ -2439,6 +2585,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         trackAdClick,
         toggleAllAds,
         isQuotaFallbackMode,
+        isOnline,
         userMap,
         resetQuotaFallback,
         securityBlock,

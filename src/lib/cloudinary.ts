@@ -33,11 +33,11 @@ export async function uploadToCloudinary(fileOrData: File | string, onProgress?:
   const cloudName = env?.VITE_CLOUDINARY_CLOUD_NAME;
   const uploadPreset = env?.VITE_CLOUDINARY_UPLOAD_PRESET;
 
-  // FALLBACK: If Cloudinary is not configured, we return/fallback to standard Base64 representation.
-  if (!cloudName || !uploadPreset) {
-    console.warn("Cloudinary is NOT configured. Falling back to local Base64 storage in Firestore.");
+  const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+  const getBase64Fallback = (): Promise<string> => {
     if (typeof fileOrData === 'string') {
-      return fileOrData;
+      return Promise.resolve(fileOrData);
     } else {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -52,6 +52,18 @@ export async function uploadToCloudinary(fileOrData: File | string, onProgress?:
         reader.readAsDataURL(fileOrData);
       });
     }
+  };
+
+  // Immediate fallback when offline
+  if (isOffline) {
+    console.log("[PWA Offline] Connection unavailable. Falling back instantly to local Base64 media storage.");
+    return getBase64Fallback();
+  }
+
+  // FALLBACK: If Cloudinary is not configured, we return/fallback to standard Base64 representation.
+  if (!cloudName || !uploadPreset) {
+    console.warn("Cloudinary is NOT configured. Falling back to local Base64 storage in Firestore.");
+    return getBase64Fallback();
   }
 
   try {
@@ -60,7 +72,7 @@ export async function uploadToCloudinary(fileOrData: File | string, onProgress?:
     formData.append('upload_preset', uploadPreset);
 
     // Using XMLHttpRequest to support upload progress monitoring
-    return new Promise((resolve, reject) => {
+    const uploadPromise = new Promise<string>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/upload`, true);
 
@@ -96,20 +108,11 @@ export async function uploadToCloudinary(fileOrData: File | string, onProgress?:
 
       xhr.send(formData);
     });
+
+    return await uploadPromise;
   } catch (error) {
-    console.error("Cloudinary upload wrapper caught error:", error);
-    // Graceful fallback to base64
-    if (typeof fileOrData === 'string') {
-      return fileOrData;
-    } else {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          resolve(e.target?.result as string);
-        };
-        reader.readAsDataURL(fileOrData);
-      });
-    }
+    console.warn("Cloudinary upload failed, falling back to Base64:", error);
+    return getBase64Fallback();
   }
 }
 

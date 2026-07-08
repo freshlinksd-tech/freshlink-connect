@@ -39,7 +39,14 @@ export const Navigation: React.FC<NavigationProps> = ({
   onOpenAuth,
   setSelectedUser
 }) => {
-  const { currentUser, logout, messages, updateProfile, notifications } = useSocialPlatform();
+  const { currentUser, logout, messages, updateProfile, notifications, isOnline } = useSocialPlatform();
+  const [isStandalone, setIsStandalone] = React.useState<boolean>(false);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsStandalone(window.matchMedia('(display-mode: standalone)').matches);
+    }
+  }, []);
 
   const isAdmin = currentUser?.email?.toLowerCase() === 'fresh.linksd@gmail.com' || currentUser?.isAdmin === true || currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
 
@@ -138,27 +145,76 @@ export const Navigation: React.FC<NavigationProps> = ({
         </div>
       </nav>
 
-      {/* PWA Direct Installation Sidebar Prompter */}
-      <div className="mx-4 mb-4 p-3.5 bg-gradient-to-br from-orange-50/70 to-amber-50/50 border border-orange-100/50 rounded-2xl" id="nav-pwa-install-prompter">
-        <div className="flex gap-2.5 items-start">
-          <div className="bg-orange-500/10 p-2 rounded-xl border border-orange-500/20 text-orange-600 shrink-0">
-            <Smartphone className="w-4 h-4" />
+      {/* PWA Operations & Telemetry Sidebar Card */}
+      <div className="mx-4 mb-4 p-3.5 bg-gradient-to-br from-stone-50/90 to-zinc-50/40 border border-stone-200/50 rounded-2xl" id="nav-pwa-install-prompter">
+        {isStandalone ? (
+          <div className="space-y-3">
+            <div className="flex gap-2.5 items-start">
+              <div className="bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/20 text-emerald-600 shrink-0 relative">
+                <Smartphone className="w-4 h-4" />
+                <span className="absolute top-0 right-0 w-2 h-2 bg-emerald-500 rounded-full border border-white animate-ping" />
+              </div>
+              <div className="flex-1 min-w-0 space-y-0.5">
+                <h4 className="font-sans font-black text-[10.5px] text-zinc-950 uppercase tracking-tighter flex items-center gap-1.5">
+                  FreshLink Standalone
+                </h4>
+                <div className="flex items-center gap-1">
+                  <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+                  <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wide">
+                    {isOnline ? 'System Online' : 'Offline Mode Active'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('trigger-pwa-monitor'));
+              }}
+              className="w-full py-2 bg-zinc-950 hover:bg-zinc-900 text-white text-[9.5px] font-black uppercase tracking-wider rounded-xl transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer outline-none"
+            >
+              <Cpu className="w-3.5 h-3.5" />
+              <span>PWA Control Center</span>
+            </button>
           </div>
-          <div className="flex-1 min-w-0 space-y-0.5">
-            <h4 className="font-sans font-black text-[10.5px] text-zinc-900 uppercase tracking-tighter">Use like Mobile App</h4>
-            <p className="text-[9.5px] text-zinc-500 leading-normal font-semibold">Zero-delay loading, direct push notes, and fullscreen view!</p>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex gap-2.5 items-start">
+              <div className="bg-orange-500/10 p-2 rounded-xl border border-orange-500/20 text-orange-600 shrink-0">
+                <Smartphone className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0 space-y-0.5">
+                <h4 className="font-sans font-black text-[10.5px] text-zinc-900 uppercase tracking-tighter">Use like Mobile App</h4>
+                <p className="text-[9px] text-zinc-500 leading-normal font-semibold">Zero-delay loading, background push notes, and offline databases.</p>
+              </div>
+            </div>
+            
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('trigger-pwa-install'));
+                }}
+                className="w-full py-2 bg-orange-600 hover:bg-orange-700 text-white text-[9.5px] font-black uppercase tracking-wider rounded-xl transition shadow-sm shadow-orange-650/10 flex items-center justify-center gap-1.5 cursor-pointer outline-none"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Install Native PWA</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('trigger-pwa-monitor'));
+                }}
+                className="w-full py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-650 text-[9px] font-black uppercase tracking-wider rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer outline-none border border-zinc-200/30"
+              >
+                <Cpu className="w-3 h-3 text-zinc-400" />
+                <span>Diagnostics & Sync</span>
+              </button>
+            </div>
           </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            window.dispatchEvent(new CustomEvent('trigger-pwa-install'));
-          }}
-          className="w-full mt-3 py-2 bg-orange-600 hover:bg-orange-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition shadow-sm shadow-orange-650/10 flex items-center justify-center gap-1.5 cursor-pointer outline-none"
-        >
-          <Download className="w-3.5 h-3.5" />
-          <span>Install App Now</span>
-        </button>
+        )}
       </div>
 
       {/* User Footer Profile */}

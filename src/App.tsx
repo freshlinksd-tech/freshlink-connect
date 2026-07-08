@@ -3,12 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, Suspense, lazy } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { SocialPlatformProvider, useSocialPlatform } from './context/SocialPlatformContext';
 import { Navigation } from './components/Navigation';
 import { FreshLinkLogo } from './components/FreshLinkLogo';
 import { motion } from 'motion/react';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
+import { PWAMonitor } from './components/PWAMonitor';
 import { FeedPostSkeleton } from './components/SkeletonLoader';
 
 const Auth = lazy(() => import('./components/Auth').then(m => ({ default: m.Auth })));
@@ -42,13 +43,24 @@ import {
 } from 'lucide-react';
 
 function AppContent() {
-  const { currentUser, loading, logout, messages, notifications, isQuotaFallbackMode, resetQuotaFallback } = useSocialPlatform();
+  const { currentUser, loading, logout, messages, notifications, isQuotaFallbackMode, resetQuotaFallback, isOnline } = useSocialPlatform();
   const [activeTab, setActiveTab] = useState<string>('feed');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [targetChatUserId, setTargetChatUserId] = useState<string | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('all');
+  const [pwaMonitorOpen, setPwaMonitorOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleTriggerMonitor = () => {
+      setPwaMonitorOpen(true);
+    };
+    window.addEventListener('trigger-pwa-monitor', handleTriggerMonitor);
+    return () => {
+      window.removeEventListener('trigger-pwa-monitor', handleTriggerMonitor);
+    };
+  }, []);
   
   if (loading) {
     return (
@@ -335,6 +347,30 @@ function AppContent() {
 
       {/* Main Screen Content Stage */}
       <main className="flex-1 min-w-0" id="main-canvas-stage">
+        {/* Physical Offline Connection Banner */}
+        {!isOnline && (
+          <div 
+            id="pwa-physical-offline-notice" 
+            className="m-4 md:m-6 bg-gradient-to-r from-amber-50 to-amber-100/60 border border-amber-200 rounded-3xl p-5 shadow-xs flex items-start gap-4 transition-all"
+          >
+            <div className="relative shrink-0 mt-0.5">
+              <div className="bg-amber-500/15 p-3 rounded-2xl border border-amber-500/25 text-amber-600">
+                <WifiOff className="w-5 h-5" />
+              </div>
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 border-2 border-white rounded-full animate-ping" />
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 border-2 border-white rounded-full" />
+            </div>
+            <div className="space-y-1.5 text-left">
+              <h4 className="font-sans font-black text-xs text-zinc-950 uppercase tracking-wider flex items-center gap-2">
+                ⚡ Offline Mode Active — Local Sandbox Engaged
+              </h4>
+              <p className="text-[11.5px] text-zinc-650 leading-relaxed font-semibold max-w-2xl">
+                Your device is disconnected from the internet. FreshLink Connect is operating in <strong className="text-amber-800 font-extrabold">Offline Sandbox Mode</strong> with high-speed local databases. You can continue reading articles, writing drafts, adding comments, reacting, and sending direct messages. Your changes are stored securely and will synchronize automatically when connection is restored.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* System Under Maintenance / Offline Fallback Notice */}
         {isQuotaFallbackMode && (
           <div 
@@ -448,6 +484,9 @@ function AppContent() {
 
       {/* PWA Smart Installation Banner */}
       <PWAInstallPrompt />
+
+      {/* PWA Operations Diagnostics & Control Dashboard */}
+      <PWAMonitor isOpen={pwaMonitorOpen} onClose={() => setPwaMonitorOpen(false)} />
     </div>
   );
 }

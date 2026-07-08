@@ -4,12 +4,14 @@ interface MultiPhotosLayoutProps {
   images: string[];
   onImageClick?: (url: string) => void;
   selectedImageUrl?: string | null;
+  imageRatio?: 'auto' | '16/9' | '4/3' | '1/1';
 }
 
 export const MultiPhotosLayout: React.FC<MultiPhotosLayoutProps> = ({ 
   images, 
   onImageClick,
-  selectedImageUrl 
+  selectedImageUrl,
+  imageRatio = 'auto'
 }) => {
   if (!images || images.length === 0) return null;
 
@@ -21,10 +23,25 @@ export const MultiPhotosLayout: React.FC<MultiPhotosLayoutProps> = ({
     }
   };
 
+  const getAspectRatioClass = () => {
+    switch (imageRatio) {
+      case '16/9':
+        return 'aspect-video';
+      case '4/3':
+        return 'aspect-[4/3]';
+      case '1/1':
+        return 'aspect-square';
+      default:
+        return 'aspect-video'; // Default to aspect-video for gorgeous grid presentation
+    }
+  };
+
+  const aspectClass = getAspectRatioClass();
+
   // Modern Mosaic Layouts depending on image count
   if (count === 1) {
     return (
-      <div className="w-full aspect-video rounded-2xl overflow-hidden border border-zinc-150 shadow-xs relative bg-stone-50/50 flex justify-center items-center">
+      <div className={`w-full ${aspectClass} rounded-2xl overflow-hidden border border-zinc-150 shadow-xs relative bg-stone-50/50 flex justify-center items-center`}>
         <img 
           loading="lazy"
           src={images[0]} 
@@ -40,7 +57,7 @@ export const MultiPhotosLayout: React.FC<MultiPhotosLayoutProps> = ({
 
   if (count === 2) {
     return (
-      <div className="grid grid-cols-2 gap-2 w-full aspect-video rounded-2xl overflow-hidden border border-zinc-150 shadow-xs">
+      <div className={`grid grid-cols-2 gap-2 w-full ${aspectClass} rounded-2xl overflow-hidden border border-zinc-150 shadow-xs`}>
         {images.map((img, idx) => (
           <div key={idx} className="relative h-full overflow-hidden bg-zinc-950 group flex items-center justify-center">
             <img 
@@ -60,7 +77,7 @@ export const MultiPhotosLayout: React.FC<MultiPhotosLayoutProps> = ({
 
   if (count === 3) {
     return (
-      <div className="grid grid-cols-3 gap-2 w-full aspect-video rounded-2xl overflow-hidden border border-zinc-150 shadow-xs">
+      <div className={`grid grid-cols-3 gap-2 w-full ${aspectClass} rounded-2xl overflow-hidden border border-zinc-150 shadow-xs`}>
         <div className="col-span-2 relative h-full overflow-hidden bg-zinc-950 group flex items-center justify-center">
           <img 
             loading="lazy"
@@ -93,7 +110,7 @@ export const MultiPhotosLayout: React.FC<MultiPhotosLayoutProps> = ({
 
   if (count === 4) {
     return (
-      <div className="grid grid-cols-4 gap-2 w-full aspect-video rounded-2xl overflow-hidden border border-zinc-150 shadow-xs">
+      <div className={`grid grid-cols-4 gap-2 w-full ${aspectClass} rounded-2xl overflow-hidden border border-zinc-150 shadow-xs`}>
         <div className="col-span-2 relative h-full overflow-hidden bg-zinc-950 group flex items-center justify-center">
           <img 
             loading="lazy"
@@ -128,7 +145,7 @@ export const MultiPhotosLayout: React.FC<MultiPhotosLayoutProps> = ({
   // count >= 5
   const remaining = count - 4;
   return (
-    <div className="grid grid-cols-4 gap-2 w-full aspect-video rounded-2xl overflow-hidden border border-zinc-150 shadow-xs">
+    <div className={`grid grid-cols-4 gap-2 w-full ${aspectClass} rounded-2xl overflow-hidden border border-zinc-150 shadow-xs`}>
       <div className="col-span-2 relative h-full overflow-hidden bg-zinc-950 group flex items-center justify-center">
         <img 
           loading="lazy"

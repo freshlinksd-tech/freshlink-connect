@@ -16,10 +16,62 @@ export const PWAInstallPrompt: React.FC = () => {
   const [isVisible, setIsVisible] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [visitCount, setVisitCount] = useState<number>(1);
+  const [hasNudgeMetRequirements, setHasNudgeMetRequirements] = useState<boolean>(false);
 
   // Detect context
   const isIframe = window.self !== window.top;
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+
+  // Track visit count (tab session based)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const sessionVisited = sessionStorage.getItem('freshlink_session_visited');
+    let count = parseInt(localStorage.getItem('freshlink_visit_count') || '0', 10);
+    
+    if (!sessionVisited) {
+      count += 1;
+      localStorage.setItem('freshlink_visit_count', count.toString());
+      sessionStorage.setItem('freshlink_session_visited', 'true');
+    }
+    setVisitCount(count);
+  }, []);
+
+  // Monitor installation status and nudge eligibility
+  useEffect(() => {
+    if (isInstalled) return;
+
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
+    if (isStandalone) {
+      setIsInstalled(true);
+      return;
+    }
+
+    const dismissedAt = localStorage.getItem('freshlink_pwa_dismissed_at');
+    const dismissCount = parseInt(localStorage.getItem('freshlink_pwa_dismissed_count') || '0', 10);
+    
+    let shouldShow = false;
+    if (visitCount >= 2) {
+      if (!dismissedAt) {
+        shouldShow = true;
+      } else {
+        const timeDiff = Date.now() - parseInt(dismissedAt, 10);
+        // Cooldown: 24h for first dismiss, 3 days for second, 7 days for subsequent
+        const cooldownMs = dismissCount === 1 
+          ? 24 * 60 * 60 * 1000 
+          : dismissCount === 2 
+            ? 3 * 24 * 60 * 60 * 1000 
+            : 7 * 24 * 60 * 60 * 1000;
+            
+        if (timeDiff > cooldownMs) {
+          shouldShow = true;
+        }
+      }
+    }
+
+    setHasNudgeMetRequirements(shouldShow);
+  }, [visitCount, isInstalled]);
 
   useEffect(() => {
     // Check if app is already installed in standalone mode
@@ -33,8 +85,10 @@ export const PWAInstallPrompt: React.FC = () => {
       e.preventDefault();
       // Stash the event so it can be triggered later.
       setDeferredPrompt(e);
-      // Show our customized install prompt banner
-      setIsVisible(true);
+      // Show our customized install prompt banner if nudge requirements are met
+      if (hasNudgeMetRequirements) {
+        setIsVisible(true);
+      }
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -51,7 +105,7 @@ export const PWAInstallPrompt: React.FC = () => {
 
     // Also auto-trigger banner visible on mobile to increase engagement if prompt is null (fallback)
     const timer = setTimeout(() => {
-      if (!isInstalled && !deferredPrompt) {
+      if (!isInstalled && !deferredPrompt && hasNudgeMetRequirements) {
         setIsVisible(true);
       }
     }, 4000);
@@ -61,7 +115,7 @@ export const PWAInstallPrompt: React.FC = () => {
       window.removeEventListener('appinstalled', handleAppInstalled);
       clearTimeout(timer);
     };
-  }, [isInstalled]);
+  }, [isInstalled, hasNudgeMetRequirements]);
 
   useEffect(() => {
     const handleTriggerInstall = () => {
@@ -107,6 +161,11 @@ export const PWAInstallPrompt: React.FC = () => {
   const handleDismiss = () => {
     setIsVisible(false);
     setShowGuide(false);
+    
+    // Save dismissal info with timestamp and count to enforce polite nudge interval
+    localStorage.setItem('freshlink_pwa_dismissed_at', Date.now().toString());
+    const count = parseInt(localStorage.getItem('freshlink_pwa_dismissed_count') || '0', 10);
+    localStorage.setItem('freshlink_pwa_dismissed_count', (count + 1).toString());
   };
 
   if (isInstalled) {

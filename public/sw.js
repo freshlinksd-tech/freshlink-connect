@@ -64,6 +64,10 @@ self.addEventListener('fetch', (event) => {
     event.request.destination === 'script' ||
     event.request.destination === 'style' ||
     event.request.destination === 'font' ||
+    url.pathname.includes('/assets/') ||
+    url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.css') ||
+    url.pathname.endsWith('.ico') ||
     url.hostname.includes('fonts.googleapis.com') ||
     url.hostname.includes('fonts.gstatic.com');
 

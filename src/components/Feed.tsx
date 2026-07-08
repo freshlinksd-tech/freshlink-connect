@@ -52,7 +52,9 @@ import {
   Compass,
   Vote,
   BarChart2,
-  Crop
+  Crop,
+  Database,
+  WifiOff
 } from 'lucide-react';
 
 const COVER_SUGGESTIONS: Record<string, string[]> = {
@@ -145,7 +147,8 @@ export const Feed: React.FC<FeedProps> = ({
     loadMorePosts,
     reactToPost,
     getPostReactions,
-    getUserReaction
+    getUserReaction,
+    isOnline
   } = useSocialPlatform();
 
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
@@ -1361,6 +1364,7 @@ export const Feed: React.FC<FeedProps> = ({
                       <div className="rounded-2xl overflow-hidden border border-stone-200/40">
                         <MultiPhotosLayout 
                           images={[post.mediaUrl, ...post.mediaUrls].filter(Boolean) as string[]} 
+                          imageRatio={post.imageRatio}
                         />
                       </div>
                     </div>
@@ -1446,11 +1450,19 @@ export const Feed: React.FC<FeedProps> = ({
                   {/* Card Title & Content Summary */}
                   <div className="p-6">
                     <div className="flex items-center justify-between gap-2 mb-3">
-                      {!post.mediaUrl && (
-                        <span className="bg-orange-50 text-orange-600 font-bold uppercase text-[9px] tracking-widest px-3 py-1 rounded-full">
-                          #{post.category}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {!post.mediaUrl && (
+                          <span className="bg-orange-50 text-orange-600 font-bold uppercase text-[9px] tracking-widest px-3 py-1 rounded-full">
+                            #{post.category}
+                          </span>
+                        )}
+                        {!isOnline && (
+                          <span className="bg-amber-500/10 text-amber-700 border border-amber-550/20 font-black text-[8.5px] uppercase tracking-wide px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm font-sans shrink-0">
+                            <Database className="w-2.5 h-2.5 text-amber-600" />
+                            Offline-Cached
+                          </span>
+                        )}
+                      </div>
                       {post.isPremium && (
                         <span className="bg-amber-550/10 text-amber-700 border border-amber-205 font-black text-[8.5px] uppercase tracking-wide px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm font-sans shrink-0">
                           <Lock className="w-2.5 h-2.5 text-amber-600" />
@@ -1961,6 +1973,12 @@ export const Feed: React.FC<FeedProps> = ({
                     </div>
                   )}
 
+                  {!isOnline && (
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 text-amber-700 border border-amber-500/20 text-[10px] font-black uppercase tracking-wider rounded-lg mb-2.5">
+                      <Database className="w-3.5 h-3.5 shrink-0 text-amber-650" />
+                      <span>Offline-Cached Content Browsing</span>
+                    </div>
+                  )}
                   <h1 className="font-extrabold text-2xl md:text-3xl tracking-tight text-zinc-900 leading-tight">
                     {selectedPost.title}
                   </h1>

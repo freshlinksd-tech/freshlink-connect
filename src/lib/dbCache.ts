@@ -92,7 +92,7 @@ export async function getCache<T = any>(key: string): Promise<T | null> {
 
 export interface PendingInteraction {
   id: string;
-  type: 'like' | 'comment';
+  type: 'like' | 'comment' | 'post' | 'chat';
   postId: string;
   userId: string;
   payload: any; // e.g. commentText, commentId, etc.
