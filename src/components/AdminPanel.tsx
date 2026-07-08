@@ -102,6 +102,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
     notifications,
     currentUser, 
     blockUser, 
+    deleteUserByAdmin,
     setRoleByAdmin, 
     deletePost,
     createPost,
@@ -127,6 +128,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
   const [postSearch, setPostSearch] = useState('');
   const [postFilter, setPostFilter] = useState<'all' | 'published' | 'draft'>('all');
   const [postToDelete, setPostToDelete] = useState<Post | null>(null);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Custom simulation seeding state
@@ -716,6 +718,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                         >
                           {targetIsSuperAdmin ? 'Super Admin' : targetIsAdmin ? 'Make Regular' : 'Promote Admin'}
                         </button>
+
+                        {(() => {
+                          const canDeleteThisTarget = !targetIsSuperAdmin && u.id !== currentUser?.id && (isSuperAdmin || !targetIsAdmin);
+                          return (
+                            <button
+                              disabled={!canDeleteThisTarget}
+                              onClick={() => setUserToDelete(u)}
+                              className={`px-3.5 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
+                                !canDeleteThisTarget
+                                  ? 'opacity-40 bg-zinc-100 text-zinc-400 cursor-not-allowed'
+                                  : 'bg-red-50 text-red-600 hover:bg-red-100'
+                              }`}
+                              title={
+                                targetIsSuperAdmin 
+                                  ? "System Guard: Root accounts are protected and cannot be deleted"
+                                  : u.id === currentUser?.id
+                                  ? "Self Check Failed: You cannot delete your own admin account!"
+                                  : !canDeleteThisTarget 
+                                  ? "Access Denied: Standard Admins are protected. Only Super Admins can delete them." 
+                                  : "Permanently delete this user profile and remove them from the system"
+                              }
+                            >
+                              Delete User
+                            </button>
+                          );
+                        })()}
 
                         <button 
                           onClick={() => onSelectUser(u.id)}
@@ -2080,6 +2108,62 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                   </>
                 ) : (
                   <span>Delete Story</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom User Delete Confirmation Modal */}
+      {userToDelete && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in text-left">
+          <div className="bg-white border border-zinc-200/80 rounded-2xl p-6 max-w-sm w-full shadow-xl space-y-4 font-sans">
+            <div className="flex items-center gap-3 text-red-600">
+              <div className="p-2 bg-red-50 rounded-xl">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-extrabold text-zinc-900 font-sans">
+                Permanently Delete User?
+              </h3>
+            </div>
+            
+            <p className="text-xs text-zinc-500 leading-relaxed font-semibold">
+              Are you sure you want to permanently delete <span className="font-extrabold text-zinc-800">"{userToDelete.name}"</span>? This will remove their user account, profile photo, and credential details from the directory. This action cannot be undone.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setUserToDelete(null)}
+                className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold transition rounded-xl disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  try {
+                    setIsDeleting(true);
+                    await deleteUserByAdmin(userToDelete.id);
+                  } catch (err) {
+                    console.error(err);
+                  } finally {
+                    setIsDeleting(false);
+                    setUserToDelete(null);
+                  }
+                }}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition rounded-xl inline-flex items-center gap-1.5 disabled:opacity-50 shadow-sm shadow-red-500/10"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Delete User</span>
                 )}
               </button>
             </div>

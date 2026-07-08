@@ -92,6 +92,8 @@ interface SocialPlatformContextType {
   toggleSavePost: (postId: string) => Promise<void>;
   getUserAchievements: (userId: string) => Achievement[];
   blockUser: (userId: string, blocked: boolean) => Promise<void>;
+  deleteUserByAdmin: (userId: string) => Promise<void>;
+  deleteSelfAccount: () => Promise<void>;
   setRoleByAdmin: (userId: string, role: 'admin' | 'user') => Promise<void>;
   activeChatPartnerId: string | null;
   setActiveChatPartnerId: (id: string | null) => void;
@@ -1957,6 +1959,55 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     );
   };
 
+  const deleteUserByAdmin = async (userId: string) => {
+    await runWriteOperation(
+      async () => {
+        await deleteDoc(doc(db, 'users', userId));
+      },
+      () => {
+        setUsers(prev => prev.filter(u => u.id !== userId));
+      },
+      `users/${userId}`
+    );
+  };
+
+  const deleteSelfAccount = async () => {
+    if (!currentUserId) return;
+    const userId = currentUserId;
+
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('freshlink_current_user_id');
+        localStorage.removeItem('freshlink_cached_user');
+      }
+      
+      if (isQuotaFallbackMode) {
+        const cachedUsersStr = localStorage.getItem('freshlink_loc_users');
+        if (cachedUsersStr) {
+          try {
+            const cachedUsers = JSON.parse(cachedUsersStr) as User[];
+            const updated = cachedUsers.filter(u => u.id !== userId);
+            localStorage.setItem('freshlink_loc_users', JSON.stringify(updated));
+          } catch(e) {}
+        }
+      } else {
+        await runWriteOperation(
+          async () => {
+            await deleteDoc(doc(db, 'users', userId));
+          },
+          () => {},
+          `users/${userId}`
+        );
+      }
+    } catch (err) {
+      console.error("Self account deletion Firestore error, logging out anyway:", err);
+    } finally {
+      setUsers(prev => prev.filter(u => u.id !== userId));
+      setCurrentUserId(null);
+      await signOut(auth);
+    }
+  };
+
   const setRoleByAdmin = async (userId: string, role: 'admin' | 'user') => {
     await runWriteOperation(
       async () => {
@@ -2364,6 +2415,8 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         toggleSavePost,
         getUserAchievements,
         blockUser,
+        deleteUserByAdmin,
+        deleteSelfAccount,
         setRoleByAdmin,
         activeChatPartnerId,
         setActiveChatPartnerId,

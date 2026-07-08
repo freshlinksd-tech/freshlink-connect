@@ -21,6 +21,7 @@ import {
   Settings, 
   UserPlus, 
   UserCheck, 
+  Lock,
   BookOpen, 
   FileText, 
   PenTool, 
@@ -127,7 +128,8 @@ export const Profiles: React.FC<ProfilesProps> = ({
     markAllNotificationsAsRead,
     loading,
     userMap,
-    getUserReaction
+    getUserReaction,
+    deleteSelfAccount
   } = useSocialPlatform();
 
   // Determine active profile to display
@@ -148,6 +150,8 @@ export const Profiles: React.FC<ProfilesProps> = ({
   const [activeTab, setActiveTab] = useState<'published' | 'drafts' | 'liked' | 'bookmarks' | 'achievements' | 'notifications' | 'followers' | 'following'>('published');
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   // Profile Edit fields
   const [editName, setEditName] = useState('');
@@ -521,13 +525,39 @@ export const Profiles: React.FC<ProfilesProps> = ({
                     </button>
                   )}
                   {currentUser && (
-                    <button
-                      id="profile-dm-btn"
-                      onClick={() => onNavigateToChat(activeProfile.id)}
-                      className="px-4 py-2.5 bg-zinc-50 border border-zinc-200/60 text-zinc-700 hover:bg-zinc-100/90 font-bold text-xs rounded-xl transition-all"
-                    >
-                      Direct Message
-                    </button>
+                    (() => {
+                      const hasFollowRelationship = followers.some(f => 
+                        (f.followerId === currentUser.id && f.followingId === activeProfile.id) ||
+                        (f.followerId === activeProfile.id && f.followingId === currentUser.id)
+                      );
+                      return (
+                        <div className="flex flex-col items-end relative group">
+                          <button
+                            id="profile-dm-btn"
+                            disabled={!hasFollowRelationship}
+                            onClick={() => {
+                              if (hasFollowRelationship) {
+                                onNavigateToChat(activeProfile.id);
+                              }
+                            }}
+                            className={`px-4 py-2.5 font-sans font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 ${
+                              hasFollowRelationship
+                                ? 'bg-zinc-50 border border-zinc-200/60 text-zinc-700 hover:bg-zinc-100/90 cursor-pointer'
+                                : 'bg-zinc-100 border border-zinc-200/40 text-zinc-400 cursor-not-allowed opacity-70'
+                            }`}
+                            title={!hasFollowRelationship ? "You must follow each other or have a 1-way follow to enable direct messaging!" : "Start messaging this user"}
+                          >
+                            {!hasFollowRelationship && <Lock className="w-3.5 h-3.5 text-zinc-400" />}
+                            <span>Direct Message</span>
+                          </button>
+                          {!hasFollowRelationship && (
+                            <span className="absolute top-11 right-0 w-48 text-[9px] text-zinc-500 bg-stone-50 border border-stone-200 p-1.5 rounded-lg text-right opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 leading-normal font-medium shadow-xs">
+                              Follow this user first to unlock direct messaging!
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()
                   )}
                 </>
               )}
@@ -1387,6 +1417,31 @@ export const Profiles: React.FC<ProfilesProps> = ({
                     </div>
                   ))}
                 </div>
+
+                {/* Danger Zone */}
+                <div className="border border-red-200 p-5 space-y-3.5 bg-red-50/35 rounded-2xl mt-6">
+                  <div>
+                    <span className="text-xs font-black text-red-700 uppercase tracking-wide block">Danger Zone</span>
+                    <p className="text-[10px] text-zinc-500 font-sans leading-tight mt-0.5">Permanent account actions are irreversible.</p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-white border border-red-100 rounded-xl">
+                    <div className="space-y-0.5 min-w-0">
+                      <p className="text-xs font-bold text-zinc-800 font-sans">Delete Profile & Credentials</p>
+                      <p className="text-[10px] text-zinc-500 font-sans leading-tight">Permanently delete your profile and log out immediately. You will need to register a new account.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditing(false); // Close edit modal
+                        setShowDeleteConfirm(true); // Open custom confirm modal
+                      }}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-sans font-bold text-[11px] uppercase tracking-wider rounded-xl transition-all shadow-sm shrink-0 cursor-pointer"
+                    >
+                      Delete Account
+                    </button>
+                  </div>
+                </div>
+
               </div>
             </div>
 
@@ -1798,6 +1853,62 @@ export const Profiles: React.FC<ProfilesProps> = ({
                   </>
                 ) : (
                   <span>Delete Story</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Self Account Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in text-left">
+          <div className="bg-white border border-zinc-200/80 rounded-2xl p-6 max-w-sm w-full shadow-xl space-y-4 font-sans">
+            <div className="flex items-center gap-3 text-red-600">
+              <div className="p-2 bg-red-50 rounded-xl">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-extrabold text-zinc-900 font-sans">
+                Permanently Delete Your Account?
+              </h3>
+            </div>
+            
+            <p className="text-xs text-zinc-500 leading-relaxed font-semibold">
+              Are you sure you want to delete your account? This action is <span className="text-red-600 font-bold">permanent and irreversible</span>. It will completely erase your creator profile, bio, configuration data, and log you out immediately. To enter again, you must create a new account from scratch.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingAccount}
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold transition rounded-xl disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingAccount}
+                onClick={async () => {
+                  try {
+                    setIsDeletingAccount(true);
+                    await deleteSelfAccount();
+                  } catch (err) {
+                    console.error("Failed to delete self account:", err);
+                  } finally {
+                    setIsDeletingAccount(false);
+                    setShowDeleteConfirm(false);
+                  }
+                }}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition rounded-xl inline-flex items-center gap-1.5 disabled:opacity-50 shadow-sm shadow-red-500/10"
+              >
+                {isDeletingAccount ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting Account...</span>
+                  </>
+                ) : (
+                  <span>Yes, Delete Account</span>
                 )}
               </button>
             </div>

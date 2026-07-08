@@ -43,6 +43,7 @@ import {
   AlertTriangle,
   Bell,
   Megaphone,
+  Link,
   ExternalLink,
   ShieldAlert,
   Lock,
@@ -398,6 +399,19 @@ export const Feed: React.FC<FeedProps> = ({
 
   const [useAlgorithm, setUseAlgorithm] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeFloatingReactionBarPostId, setActiveFloatingReactionBarPostId] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const matchingUsers = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return users.filter(u => 
+      u.name.toLowerCase().includes(q) ||
+      (u.bio && u.bio.toLowerCase().includes(q)) ||
+      (u.interests && u.interests.some(i => i.toLowerCase().includes(q)))
+    );
+  }, [users, searchQuery]);
+
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [selectedWorkspaceAd, setSelectedWorkspaceAd] = useState<AdBanner | null>(null);
   const [activeDetailsImage, setActiveDetailsImage] = useState<string | null>(null);
@@ -705,9 +719,13 @@ export const Feed: React.FC<FeedProps> = ({
   const handleShare = (postId: string) => {
     setCopiedPostId(postId);
     navigator.clipboard.writeText(`${window.location.origin}/posts/${postId}`);
+    setToastMessage('Link Copied! 🔗');
     setTimeout(() => {
       setCopiedPostId(null);
     }, 2000);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 3000);
   };
 
   const handleCreateComment = async (e: React.FormEvent, postId: string) => {
@@ -1118,6 +1136,80 @@ export const Feed: React.FC<FeedProps> = ({
       })()}
 
 
+      {/* Search results for Users / Creators */}
+      {searchQuery.trim() && (
+        <div className="bg-zinc-50 border border-zinc-200/80 rounded-3xl p-5 space-y-4 shadow-xs" id="user-search-results">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-orange-600 animate-pulse" />
+              <span className="text-[10px] font-mono font-extrabold uppercase tracking-widest text-zinc-500">
+                Matching People & Creators ({matchingUsers.length})
+              </span>
+            </div>
+            {matchingUsers.length > 0 && (
+              <span className="text-[9px] text-zinc-400 font-sans font-bold uppercase tracking-wide">
+                Instantly follow & discover profiles
+              </span>
+            )}
+          </div>
+          
+          {matchingUsers.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {matchingUsers.slice(0, 6).map((u) => {
+                const isMe = currentUser?.id === u.id;
+                const isFollowed = isFollowing(u.id);
+                const followersCount = followers.filter(f => f.followingId === u.id).length;
+                return (
+                  <motion.div
+                    key={u.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-white border border-zinc-200/60 hover:border-orange-200 hover:shadow-md transition-all p-3.5 rounded-2xl flex items-center gap-3 relative min-w-0"
+                  >
+                    <img
+                      src={u.profileImage || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&h=80&q=80"}
+                      alt={u.name}
+                      onClick={() => onSelectUser(u.id)}
+                      className="w-10 h-10 rounded-full object-cover border border-zinc-100 shrink-0 cursor-pointer hover:opacity-90 transition-opacity"
+                    />
+                    <div className="flex-1 min-w-0 space-y-0.5 text-left">
+                      <h4 
+                        onClick={() => onSelectUser(u.id)}
+                        className="text-xs font-black uppercase text-zinc-950 truncate tracking-wide cursor-pointer hover:text-orange-600 transition-colors"
+                      >
+                        {u.name}
+                      </h4>
+                      <p className="text-[10px] text-zinc-500 truncate font-sans leading-none">{u.bio || "No bio added yet."}</p>
+                      <p className="text-[9px] font-mono text-zinc-400 leading-none font-bold uppercase">{followersCount} Followers</p>
+                    </div>
+
+                    {!isMe && currentUser && (
+                      <button
+                        type="button"
+                        onClick={() => toggleFollowUser(u.id)}
+                        className={`px-3 py-1.5 font-sans font-extrabold text-[9px] uppercase tracking-wider rounded-xl border transition-all shrink-0 cursor-pointer outline-none ${
+                          isFollowed
+                            ? 'bg-zinc-50 border-zinc-200 text-zinc-500 hover:bg-zinc-100'
+                            : 'bg-orange-600 hover:bg-orange-700 text-white border-orange-600 shadow-xs shadow-orange-600/10'
+                        }`}
+                      >
+                        {isFollowed ? 'Followed' : 'Follow'}
+                      </button>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-6 bg-white border border-dashed border-zinc-200 rounded-2xl">
+              <p className="text-xs text-zinc-400 font-sans font-bold uppercase tracking-wide">No creators match "{searchQuery}"</p>
+              <p className="text-[10px] text-zinc-400 font-sans mt-1">Try another search or find them under #tags.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+
       {/* Blogs / Posts Container */}
       <div className="space-y-8" id="feed-post-list">
         {loading ? (
@@ -1427,37 +1519,93 @@ export const Feed: React.FC<FeedProps> = ({
                   {/* Interactive Engagement panel */}
                   <div className="bg-zinc-50/55 border-t border-zinc-100 p-4 px-6 flex items-center justify-between text-zinc-500 text-xs">
                     <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap">
-                      {/* Likes integration */}
-                      <button
-                        id={`like-btn-${post.id}`}
-                        onClick={() => toggleLikePost(post.id)}
-                        className={`flex items-center gap-1.5 font-semibold transition-all focus:outline-none ${
-                          isLiked
-                            ? 'text-orange-600 scale-102 font-bold'
-                            : 'hover:text-zinc-850'
-                        }`}
+                      {/* Likes integration with Floating Reaction Bar */}
+                      <div 
+                        className="relative"
+                        onMouseEnter={() => setActiveFloatingReactionBarPostId(post.id)}
+                        onMouseLeave={() => setActiveFloatingReactionBarPostId(null)}
                       >
-                        {(() => {
-                          const reaction = getUserReactionWithLocal(post.id);
-                          return reaction ? (
-                            <span className="text-sm select-none animate-bounce">{reaction}</span>
-                          ) : (
-                            <Heart className={`w-4 h-4 ${isLiked ? 'fill-orange-600 stroke-orange-600' : ''}`} />
-                          );
-                        })()}
-                        <span>{likesCount}</span>
-                      </button>
+                        <button
+                          id={`like-btn-${post.id}`}
+                          onClick={() => toggleLikePost(post.id)}
+                          className={`flex items-center gap-1.5 font-semibold transition-all focus:outline-none py-1.5 px-2.5 rounded-xl hover:bg-zinc-100/60 ${
+                            isLiked
+                              ? 'text-orange-600 scale-102 font-bold'
+                              : 'hover:text-zinc-850'
+                          }`}
+                        >
+                          {(() => {
+                            const reaction = getUserReactionWithLocal(post.id);
+                            return reaction ? (
+                              <span className="text-sm select-none animate-bounce">{reaction}</span>
+                            ) : (
+                              <Heart className={`w-4 h-4 ${isLiked ? 'fill-orange-600 stroke-orange-600' : ''}`} />
+                            );
+                          })()}
+                          <span>{likesCount}</span>
+                        </button>
+
+                        <AnimatePresence>
+                          {activeFloatingReactionBarPostId === post.id && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 12, scale: 0.8 }}
+                              animate={{ opacity: 1, y: -45, scale: 1 }}
+                              exit={{ opacity: 0, y: 5, scale: 0.85 }}
+                              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                              className="absolute left-0 bottom-full mb-1 bg-white border border-zinc-200 shadow-xl rounded-full px-3 py-1.5 flex items-center gap-2.5 z-40 whitespace-nowrap"
+                              id={`floating-reaction-bar-${post.id}`}
+                            >
+                              {['👍', '❤️', '✨', '💡', '🔥'].map((emoji, index) => {
+                                const count = getPostReactionsWithLocal(post.id)[emoji] || 0;
+                                const userHasReacted = getUserReactionWithLocal(post.id) === emoji;
+                                const labels: Record<string, string> = {
+                                  '👍': 'Like',
+                                  '❤️': 'Heart',
+                                  '✨': 'Spark',
+                                  '💡': 'Insightful',
+                                  '🔥': 'Fire'
+                                };
+                                return (
+                                  <motion.button
+                                    key={emoji}
+                                    type="button"
+                                    initial={{ scale: 0.8, y: 5 }}
+                                    animate={{ scale: 1, y: 0 }}
+                                    transition={{ delay: index * 0.04, type: 'spring', stiffness: 300 }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleReactClick(post.id, emoji);
+                                      setActiveFloatingReactionBarPostId(null);
+                                    }}
+                                    className={`relative flex flex-col items-center group/emoji p-1 rounded-full hover:scale-125 transition-all outline-none cursor-pointer ${
+                                      userHasReacted ? 'bg-orange-100/80 scale-110' : 'hover:bg-zinc-100'
+                                    }`}
+                                  >
+                                    <span className="text-lg leading-none select-none">{emoji}</span>
+                                    
+                                    {/* Tooltip for Reaction Name and Count */}
+                                    <span className="absolute bottom-full mb-2 bg-zinc-900 text-white text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md opacity-0 group-hover/emoji:opacity-100 pointer-events-none transition-opacity shadow-sm z-50">
+                                      {labels[emoji]} {count > 0 ? `(${count})` : ''}
+                                    </span>
+                                  </motion.button>
+                                );
+                              })}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
    
                       {/* Quick Emoji Reactions */}
                       <div className="flex items-center gap-0.5 bg-stone-100 p-0.5 rounded-full border border-stone-200/40 shrink-0">
-                        {['👍', '❤️', '😂', '✨'].map((emoji) => {
+                        {['👍', '❤️', '✨', '💡', '🔥'].map((emoji) => {
                           const count = getPostReactionsWithLocal(post.id)[emoji] || 0;
                           const userHasReacted = getUserReactionWithLocal(post.id) === emoji;
                           const labels: Record<string, string> = {
                             '👍': 'like',
                             '❤️': 'love',
-                            '😂': 'laugh',
-                            '✨': 'spark'
+                            '✨': 'spark',
+                            '💡': 'insightful',
+                            '🔥': 'fire'
                           };
                           return (
                             <button
@@ -1511,16 +1659,46 @@ export const Feed: React.FC<FeedProps> = ({
 
                     <div className="flex items-center gap-3">
                       {/* Direct message instant shortcut */}
-                      {!authorIsMe && currentUser && author && (
-                        <button
-                          id={`chat-shortcut-btn-${post.id}`}
-                          onClick={() => onNavigateToChat(author.id)}
-                          className="text-zinc-400 hover:text-zinc-800 p-2 hover:bg-zinc-100/60 bg-zinc-50 rounded-xl transition-all border border-zinc-100/50"
-                          title={`Send direct Message to ${authorName.split(' ')[0]}`}
-                        >
-                          <MessageCircle className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                      {!authorIsMe && currentUser && author && (() => {
+                        const hasFollowRelationship = followers.some(f => 
+                          (f.followerId === currentUser.id && f.followingId === author.id) ||
+                          (f.followerId === author.id && f.followingId === currentUser.id)
+                        );
+                        return (
+                          <div className="relative group">
+                            <button
+                              id={`chat-shortcut-btn-${post.id}`}
+                              disabled={!hasFollowRelationship}
+                              onClick={() => {
+                                if (hasFollowRelationship) {
+                                  onNavigateToChat(author.id);
+                                }
+                              }}
+                              className={`p-2 rounded-xl transition-all border ${
+                                hasFollowRelationship
+                                  ? 'text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100/60 bg-zinc-50 border-zinc-150/50 cursor-pointer'
+                                  : 'text-zinc-300 bg-zinc-50/50 border-zinc-100/30 cursor-not-allowed opacity-50'
+                              }`}
+                              title={
+                                hasFollowRelationship
+                                  ? `Send direct Message to ${authorName.split(' ')[0]}`
+                                  : `Follow ${authorName.split(' ')[0]} to unlock messaging`
+                              }
+                            >
+                              {hasFollowRelationship ? (
+                                <MessageCircle className="w-3.5 h-3.5" />
+                              ) : (
+                                <Lock className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                            {!hasFollowRelationship && (
+                              <span className="absolute bottom-10 right-0 w-36 text-[8px] leading-normal font-medium text-zinc-500 bg-stone-50 border border-stone-200 p-1.5 rounded-lg text-right opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-xs">
+                                Follow to message
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* Report trigger */}
                       {!authorIsMe && currentUser && (
@@ -2882,6 +3060,25 @@ export const Feed: React.FC<FeedProps> = ({
           </div>
         </aside>
       </div>
+
+      {/* Toast Notification for Clipboard feedback */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+            className="fixed bottom-6 right-6 bg-zinc-900 border border-zinc-850 text-white px-4.5 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 z-50 text-[10.5px] font-bold uppercase tracking-wider font-sans"
+            id="copied-toast-alert"
+          >
+            <div className="w-5 h-5 bg-orange-600/20 border border-orange-500/30 text-orange-500 rounded-lg flex items-center justify-center animate-pulse shrink-0">
+              <Check className="w-3.5 h-3.5" />
+            </div>
+            <span>{toastMessage}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

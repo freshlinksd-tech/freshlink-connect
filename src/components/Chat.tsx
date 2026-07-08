@@ -21,7 +21,9 @@ import {
   Clock,
   Edit3,
   Trash2,
-  ChevronLeft
+  ChevronLeft,
+  Lock,
+  Users
 } from 'lucide-react';
 
 interface ChatProps {
@@ -61,6 +63,7 @@ export const Chat: React.FC<ChatProps> = ({ onSelectUser, targetChatUserId, setT
   const {
     currentUser,
     users,
+    followers,
     sendMessage,
     getChatRooms,
     getMessagesWith,
@@ -77,6 +80,22 @@ export const Chat: React.FC<ChatProps> = ({ onSelectUser, targetChatUserId, setT
   const [replyLoading, setReplyLoading] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingMessageText, setEditingMessageText] = useState('');
+
+  // Get current follow/friendship relationship detail
+  const getRelationshipDetails = (userId: string) => {
+    if (!currentUser || !followers) return null;
+    const iFollowThem = followers.some(f => f.followerId === currentUser.id && f.followingId === userId);
+    const theyFollowMe = followers.some(f => f.followerId === userId && f.followingId === currentUser.id);
+    
+    if (iFollowThem && theyFollowMe) {
+      return { label: 'Friend', style: 'bg-green-50 text-green-700 border-green-200/40' };
+    } else if (iFollowThem) {
+      return { label: 'Following', style: 'bg-blue-50 text-blue-700 border-blue-200/40' };
+    } else if (theyFollowMe) {
+      return { label: 'Follower', style: 'bg-purple-50 text-purple-700 border-purple-200/40' };
+    }
+    return null;
+  };
 
   // Synchronize active partner in context
   useEffect(() => {
@@ -105,8 +124,16 @@ export const Chat: React.FC<ChatProps> = ({ onSelectUser, targetChatUserId, setT
   }, [activeContactId, users]);
 
   const chatRooms = useMemo(() => {
-    return getChatRooms();
-  }, [getChatRooms, currentUser, activeContactId]);
+    const baseRooms = getChatRooms();
+    if (!currentUser || !followers) return baseRooms;
+    return baseRooms.filter(room => {
+      const userId = room.user.id;
+      return followers.some(f => 
+        (f.followerId === currentUser.id && f.followingId === userId) ||
+        (f.followerId === userId && f.followingId === currentUser.id)
+      );
+    });
+  }, [getChatRooms, currentUser, followers, activeContactId]);
 
   const conversation = useMemo(() => {
     if (!activeContactId) return [];
@@ -131,12 +158,16 @@ export const Chat: React.FC<ChatProps> = ({ onSelectUser, targetChatUserId, setT
 
   // Filter contacts lists based on query
   const filteredUsers = useMemo(() => {
-    if (!currentUser) return [];
+    if (!currentUser || !followers) return [];
     return users.filter(u => 
       u.id !== currentUser.id && 
-      u.name.toLowerCase().includes(chatSearchQuery.toLowerCase())
+      u.name.toLowerCase().includes(chatSearchQuery.toLowerCase()) &&
+      followers.some(f => 
+        (f.followerId === currentUser.id && f.followingId === u.id) ||
+        (f.followerId === u.id && f.followingId === currentUser.id)
+      )
     );
-  }, [users, currentUser, chatSearchQuery]);
+  }, [users, currentUser, followers, chatSearchQuery]);
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
@@ -282,7 +313,18 @@ export const Chat: React.FC<ChatProps> = ({ onSelectUser, targetChatUserId, setT
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <p className="text-xs font-black uppercase text-black truncate tracking-wide">{room.user.name}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <p className="text-xs font-black uppercase text-black truncate tracking-wide">{room.user.name}</p>
+                          {(() => {
+                            const relationship = getRelationshipDetails(room.user.id);
+                            if (!relationship) return null;
+                            return (
+                              <span className={`text-[8px] font-mono font-black uppercase px-1.5 py-0.5 rounded-md border shrink-0 ${relationship.style}`}>
+                                {relationship.label}
+                              </span>
+                            );
+                          })()}
+                        </div>
                         <div className="flex items-center gap-1.5 shrink-0">
                           {unreadInRoom > 0 && (
                             <span className="bg-orange-600 text-white font-mono text-[8px] font-bold px-1.5 py-0.5 rounded-full">
@@ -338,6 +380,15 @@ export const Chat: React.FC<ChatProps> = ({ onSelectUser, targetChatUserId, setT
                         className="w-6 h-6 rounded-none object-cover border border-black shrink-0"
                       />
                       <span className="truncate font-bold uppercase tracking-wider text-[10px]">{u.name}</span>
+                      {(() => {
+                        const relationship = getRelationshipDetails(u.id);
+                        if (!relationship) return null;
+                        return (
+                          <span className={`text-[8px] font-mono font-black uppercase px-1.5 py-0.5 rounded-md border shrink-0 ${relationship.style}`}>
+                            {relationship.label}
+                          </span>
+                        );
+                      })()}
                       {unreadInUser > 0 && (
                         <span className="ml-auto bg-orange-605/10 text-orange-650 font-mono text-[8px] font-black tracking-tighter px-2 py-0.5 rounded-full shrink-0">
                           {unreadInUser} NEW
