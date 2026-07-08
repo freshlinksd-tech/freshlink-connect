@@ -22,7 +22,8 @@ import {
   writeBatch,
   orderBy,
   limit,
-  increment
+  increment,
+  enableNetwork
 } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
@@ -132,6 +133,7 @@ interface SocialPlatformContextType {
   refetchData: (hasCache?: boolean) => Promise<void>;
   hasMorePosts: boolean;
   loadMorePosts: () => Promise<void>;
+  reconnectWithBackoff: (attempt?: number) => Promise<boolean>;
 }
 
 const DEFAULT_SEED_AD: AdBanner = {
@@ -454,11 +456,46 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     }
   };
 
+  const reconnectWithBackoff = async (attempt = 1): Promise<boolean> => {
+    const maxAttempts = 5;
+    const baseDelay = 1000; // 1 second
+    const maxDelay = 16000; // 16 seconds
+    
+    console.log(`[Network Reconnect] Attempt ${attempt} of ${maxAttempts} to reconnect Firebase database...`);
+    
+    try {
+      // Force Firestore to enable network and reconnect
+      await enableNetwork(db);
+      console.log(`[Network Reconnect] Successfully reconnected to Firebase database on attempt ${attempt}.`);
+      
+      // Connection successfully restored! Trigger the Background Sync process.
+      await syncPendingInteractions();
+      return true;
+    } catch (error) {
+      console.error(`[Network Reconnect] Reconnection attempt ${attempt} failed:`, error);
+      
+      if (attempt >= maxAttempts) {
+        console.error(`[Network Reconnect] Reconnection failed after maximum (${maxAttempts}) attempts.`);
+        return false;
+      }
+      
+      // Calculate delay with exponential backoff and randomized jitter
+      const exponentialDelay = Math.min(baseDelay * Math.pow(2, attempt - 1), maxDelay);
+      const jitter = Math.random() * 500; // up to 500ms of randomized jitter
+      const totalDelay = exponentialDelay + jitter;
+      
+      console.log(`[Network Reconnect] Retrying database connection in ${Math.round(totalDelay)}ms...`);
+      
+      await new Promise((resolve) => setTimeout(resolve, totalDelay));
+      return reconnectWithBackoff(attempt + 1);
+    }
+  };
+
   // Synchronize pending offline actions when connection comes back online
   useEffect(() => {
     const handleOnline = () => {
-      console.log("[Network] Connection restored, triggering sync...");
-      syncPendingInteractions();
+      console.log("[Network] Connection restored, triggering reconnect with backoff...");
+      reconnectWithBackoff();
     };
 
     const handleServiceWorkerMessage = (event: MessageEvent) => {
@@ -475,7 +512,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
 
     // Try to sync on mount if online
     if (navigator.onLine) {
-      syncPendingInteractions();
+      reconnectWithBackoff();
     }
 
     return () => {
@@ -2593,7 +2630,8 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         resolveSecurityChallenge,
         refetchData,
         hasMorePosts,
-        loadMorePosts
+        loadMorePosts,
+        reconnectWithBackoff
       }}
     >
       {children}

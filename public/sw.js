@@ -224,3 +224,36 @@ self.addEventListener('notificationclick', (event) => {
     })
   );
 });
+
+// Listener for prefetching neighboring posts media
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'PREFETCH_POSTS') {
+    const urls = event.data.urls || [];
+    console.log('[Service Worker] Prefetching neighboring posts assets:', urls);
+    
+    event.waitUntil(
+      caches.open(CACHE_NAME).then((cache) => {
+        return Promise.all(
+          urls.map((url) => {
+            return cache.match(url).then((cachedResponse) => {
+              if (cachedResponse) {
+                return; // Already cached
+              }
+              // Fetch and cache the asset
+              return fetch(url)
+                .then((response) => {
+                  if (response && response.status === 200) {
+                    return cache.put(url, response);
+                  }
+                })
+                .catch((err) => {
+                  console.warn('[Service Worker] Failed to prefetch asset:', url, err);
+                });
+            });
+          })
+        );
+      })
+    );
+  }
+});
+

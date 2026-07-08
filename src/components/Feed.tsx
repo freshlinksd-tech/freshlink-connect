@@ -16,6 +16,7 @@ import { ArrowDown } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { uploadToCloudinary, optimizeImageUrl } from '../lib/cloudinary';
+import { getCache } from '../lib/dbCache';
 import { 
   Heart, 
   MessageSquare, 
@@ -54,7 +55,8 @@ import {
   BarChart2,
   Crop,
   Database,
-  WifiOff
+  WifiOff,
+  History
 } from 'lucide-react';
 
 const COVER_SUGGESTIONS: Record<string, string[]> = {
@@ -402,6 +404,9 @@ export const Feed: React.FC<FeedProps> = ({
 
   const [useAlgorithm, setUseAlgorithm] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showViewedHistory, setShowViewedHistory] = useState(false);
+  const [viewedBlogIds, setViewedBlogIds] = useState<string[]>([]);
+  const [dbCachedPosts, setDbCachedPosts] = useState<Post[]>([]);
   const [activeFloatingReactionBarPostId, setActiveFloatingReactionBarPostId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -498,6 +503,31 @@ export const Feed: React.FC<FeedProps> = ({
     }
   };
 
+  // Load viewed blog IDs on mount
+  useEffect(() => {
+    try {
+      const ids = JSON.parse(localStorage.getItem('freshlink_viewed_blog_ids') || '[]');
+      setViewedBlogIds(ids);
+    } catch (e) {
+      console.warn("Failed to load viewed blog IDs:", e);
+    }
+  }, []);
+
+  // Sync / query cached posts directly from IndexedDB when offline or search changes
+  useEffect(() => {
+    const queryDbCache = async () => {
+      try {
+        const cached = await getCache<Post[]>('posts');
+        if (cached && cached.length > 0) {
+          setDbCachedPosts(cached);
+        }
+      } catch (err) {
+        console.warn("Direct IndexedDB cached posts lookup failed:", err);
+      }
+    };
+    queryDbCache();
+  }, [searchQuery, isOnline]);
+
   useEffect(() => {
     if (selectedPost) {
       setActiveDetailsImage(selectedPost.mediaUrl || (selectedPost.mediaUrls && selectedPost.mediaUrls.length > 0 ? selectedPost.mediaUrls[0] : null));
@@ -508,6 +538,18 @@ export const Feed: React.FC<FeedProps> = ({
       
       // Prevent recursive update but ensure details view has the incremented view count
       setSelectedPost(prev => prev && prev.id === selectedPost.id ? { ...prev, views: (prev.views || 0) + 1 } : prev);
+
+      // Track previously viewed blogs for offline local query persistence
+      try {
+        const ids = JSON.parse(localStorage.getItem('freshlink_viewed_blog_ids') || '[]');
+        if (!ids.includes(selectedPost.id)) {
+          const updated = [...ids, selectedPost.id];
+          localStorage.setItem('freshlink_viewed_blog_ids', JSON.stringify(updated));
+          setViewedBlogIds(updated);
+        }
+      } catch (e) {
+        console.warn("Failed to update viewed blog IDs:", e);
+      }
     } else {
       setActiveDetailsImage(null);
       setDetailsViewMode('image');
@@ -631,12 +673,18 @@ export const Feed: React.FC<FeedProps> = ({
 
   // Compute recommendation scores and rank posts
   const rankedPosts = useMemo(() => {
-    let list = [...posts].filter(p => p.status === 'published');
+    const sourcePosts = !isOnline && dbCachedPosts.length > 0 ? dbCachedPosts : posts;
+    let list = [...sourcePosts].filter(p => p.status === 'published');
 
     // Filter by bookmarks if requested
     if (isBookmarksOnly && currentUser) {
       const savedIds = currentUser.savedPosts || [];
       list = list.filter(p => savedIds.includes(p.id));
+    }
+
+    // Filter by viewed history if toggled
+    if (showViewedHistory) {
+      list = list.filter(p => viewedBlogIds.includes(p.id));
     }
 
     // Apply category filter
@@ -717,7 +765,67 @@ export const Feed: React.FC<FeedProps> = ({
     .sort((a, b) => b.score - a.score)
     .map(item => item.post);
 
-  }, [posts, userMap, isBookmarksOnly, activeCategoryFilter, selectedLocation, searchQuery, useAlgorithm, currentUser, followers, likes, comments, postReports]);
+  }, [posts, dbCachedPosts, isOnline, showViewedHistory, viewedBlogIds, userMap, isBookmarksOnly, activeCategoryFilter, selectedLocation, searchQuery, useAlgorithm, currentUser, followers, likes, comments, postReports]);
+
+  // Intelligently prefetch neighboring posts' media in the service worker for zero-latency transitions
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.serviceWorker || !navigator.serviceWorker.controller) {
+      return;
+    }
+    
+    // Find neighboring posts to prefetch
+    let postsToPrefetch: Post[] = [];
+    if (selectedPost) {
+      const index = rankedPosts.findIndex(p => p.id === selectedPost.id);
+      if (index !== -1) {
+        // Prefetch previous and next posts
+        if (index > 0) postsToPrefetch.push(rankedPosts[index - 1]);
+        if (index < rankedPosts.length - 1) postsToPrefetch.push(rankedPosts[index + 1]);
+      }
+    } else {
+      // If we are just browsing the main feed, prefetch the top 3 posts' media to make sure they load instantly
+      postsToPrefetch = rankedPosts.slice(0, 3);
+    }
+    
+    // Extract media URLs to prefetch
+    const urlsToPrefetch: string[] = [];
+    postsToPrefetch.forEach(p => {
+      if (p.mediaUrl) {
+        urlsToPrefetch.push(p.mediaUrl);
+        const optUrl = optimizeImageUrl(p.mediaUrl, { width: 1200, height: 800 });
+        if (optUrl) urlsToPrefetch.push(optUrl);
+      }
+      if (p.videoUrl) {
+        urlsToPrefetch.push(p.videoUrl);
+      }
+      if (p.mediaUrls && p.mediaUrls.length > 0) {
+        p.mediaUrls.forEach(url => {
+          urlsToPrefetch.push(url);
+          const optUrl = optimizeImageUrl(url, { width: 1200, height: 800 });
+          if (optUrl) urlsToPrefetch.push(optUrl);
+        });
+      }
+      
+      // Also prefetch author's avatar!
+      const author = userMap[p.userId];
+      if (author && author.avatar) {
+        urlsToPrefetch.push(author.avatar);
+      }
+    });
+    
+    // De-duplicate URLs and filter out any invalid ones
+    const uniqueUrls = Array.from(new Set(urlsToPrefetch)).filter(url => 
+      url && (url.startsWith('http://') || url.startsWith('https://'))
+    );
+    
+    if (uniqueUrls.length > 0) {
+      console.log('[PWA Prefetch] Sending neighboring posts media URLs to Service Worker:', uniqueUrls);
+      navigator.serviceWorker.controller.postMessage({
+        type: 'PREFETCH_POSTS',
+        urls: uniqueUrls
+      });
+    }
+  }, [selectedPost?.id, rankedPosts, userMap]);
 
   const handleShare = (postId: string) => {
     setCopiedPostId(postId);
@@ -905,6 +1013,13 @@ export const Feed: React.FC<FeedProps> = ({
         </div>
       </header>
 
+      {!isOnline && (
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-550/10 border border-amber-500/20 text-amber-800 text-[10.5px] font-bold rounded-xl mb-4 font-sans uppercase tracking-wide shadow-sm">
+          <Database className="w-4 h-4 text-amber-600 shrink-0 animate-bounce" />
+          <span>Offline Query Mode: Searching previously viewed and cached blogs from local IndexedDB storage</span>
+        </div>
+      )}
+
       {/* Search and Sorting controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-zinc-200/60 shadow-sm">
         <div className="relative flex-1">
@@ -918,6 +1033,28 @@ export const Feed: React.FC<FeedProps> = ({
             className="w-full pl-10 pr-4 py-3 text-xs font-semibold rounded-xl border border-zinc-200 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100 bg-zinc-50/50 font-sans transition-all text-zinc-805 placeholder-zinc-400 font-bold"
           />
         </div>
+
+        {/* Viewed History / Offline Search Toggle */}
+        <button
+          type="button"
+          onClick={() => setShowViewedHistory(!showViewedHistory)}
+          className={`flex items-center gap-1.5 border rounded-xl px-3.5 py-2.5 hover:opacity-90 transition cursor-pointer font-sans font-bold uppercase text-[10px] tracking-wider outline-none h-[42px] shrink-0 justify-center min-w-[130px] ${
+            showViewedHistory
+              ? 'bg-orange-50 border-orange-200 text-orange-600 font-extrabold shadow-sm'
+              : 'bg-zinc-50 border-zinc-200 hover:bg-zinc-100 text-zinc-600'
+          }`}
+          title="Filter by previously viewed blogs"
+        >
+          <History className={`w-3.5 h-3.5 ${showViewedHistory ? 'text-orange-500 animate-pulse' : 'text-zinc-400'}`} />
+          <span>{showViewedHistory ? 'Viewed' : 'All History'}</span>
+          {viewedBlogIds.length > 0 && (
+            <span className={`text-[8.5px] px-1.5 py-0.2 rounded-full font-black ${
+              showViewedHistory ? 'bg-orange-200 text-orange-700' : 'bg-zinc-200 text-zinc-700'
+            }`}>
+              {viewedBlogIds.length}
+            </span>
+          )}
+        </button>
 
         {/* Dynamic Location Filter Option - Type and Select Combobox */}
         <div ref={locDropdownRef} className="relative select-none shrink-0" id="feed-location-filter">
@@ -1460,6 +1597,12 @@ export const Feed: React.FC<FeedProps> = ({
                           <span className="bg-amber-500/10 text-amber-700 border border-amber-550/20 font-black text-[8.5px] uppercase tracking-wide px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm font-sans shrink-0">
                             <Database className="w-2.5 h-2.5 text-amber-600" />
                             Offline-Cached
+                          </span>
+                        )}
+                        {viewedBlogIds.includes(post.id) && (
+                          <span className="bg-zinc-100 text-zinc-700 border border-zinc-200 font-bold text-[8.5px] uppercase tracking-wide px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm font-sans shrink-0">
+                            <History className="w-2.5 h-2.5 text-zinc-500" />
+                            Opened
                           </span>
                         )}
                       </div>
