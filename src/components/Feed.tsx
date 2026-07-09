@@ -407,6 +407,8 @@ export const Feed: React.FC<FeedProps> = ({
   const [showViewedHistory, setShowViewedHistory] = useState(false);
   const [viewedBlogIds, setViewedBlogIds] = useState<string[]>([]);
   const [dbCachedPosts, setDbCachedPosts] = useState<Post[]>([]);
+  const [dismissedPostIds, setDismissedPostIds] = useState<string[]>([]);
+  const [lastDismissedPostId, setLastDismissedPostId] = useState<string | null>(null);
   const [activeFloatingReactionBarPostId, setActiveFloatingReactionBarPostId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -676,6 +678,9 @@ export const Feed: React.FC<FeedProps> = ({
     const sourcePosts = !isOnline && dbCachedPosts.length > 0 ? dbCachedPosts : posts;
     let list = [...sourcePosts].filter(p => p.status === 'published');
 
+    // Filter out swiped/dismissed posts
+    list = list.filter(p => !dismissedPostIds.includes(p.id));
+
     // Filter by bookmarks if requested
     if (isBookmarksOnly && currentUser) {
       const savedIds = currentUser.savedPosts || [];
@@ -765,7 +770,7 @@ export const Feed: React.FC<FeedProps> = ({
     .sort((a, b) => b.score - a.score)
     .map(item => item.post);
 
-  }, [posts, dbCachedPosts, isOnline, showViewedHistory, viewedBlogIds, userMap, isBookmarksOnly, activeCategoryFilter, selectedLocation, searchQuery, useAlgorithm, currentUser, followers, likes, comments, postReports]);
+  }, [posts, dbCachedPosts, isOnline, showViewedHistory, viewedBlogIds, dismissedPostIds, userMap, isBookmarksOnly, activeCategoryFilter, selectedLocation, searchQuery, useAlgorithm, currentUser, followers, likes, comments, postReports]);
 
   // Intelligently prefetch neighboring posts' media in the service worker for zero-latency transitions
   useEffect(() => {
@@ -1412,12 +1417,88 @@ export const Feed: React.FC<FeedProps> = ({
               );
             })();
 
+            const isBookmarked = currentUser?.savedPosts?.includes(post.id) || false;
+
             return (
               <VirtualPost key={post.id} id={post.id}>
-                <article
-                  id={`post-card-${post.id}`}
-                  className="bg-white border border-stone-200/45 rounded-[2rem] card-shadow hover:shadow-2xl hover:scale-[1.012] hover:-translate-y-1 hover:border-stone-300/65 transition-all duration-300 ease-out overflow-hidden transform"
-                >
+                <div className="relative overflow-hidden rounded-[2rem] touch-pan-y" style={{ contentVisibility: 'auto' }}>
+                  {/* Underlay swipe actions background indicator */}
+                  <div className="absolute inset-0 flex items-center justify-between px-8 bg-zinc-50 rounded-[2rem] pointer-events-none select-none z-0 border border-zinc-150">
+                    {/* Left swipe-right indicator (Bookmark) */}
+                    <div 
+                      id={`swipe-indicator-right-${post.id}`}
+                      className="flex items-center gap-2 text-emerald-600 font-black font-sans text-[11px] uppercase tracking-wider opacity-0 transition-opacity duration-150"
+                    >
+                      <Bookmark className={`w-5 h-5 text-emerald-500 ${isBookmarked ? 'fill-emerald-500' : ''} animate-bounce`} />
+                      <span>{isBookmarked ? "Saved" : "Save / Bookmark"}</span>
+                    </div>
+
+                    {/* Right swipe-left indicator (Dismiss) */}
+                    <div 
+                      id={`swipe-indicator-left-${post.id}`}
+                      className="flex items-center gap-2 text-rose-600 font-black font-sans text-[11px] uppercase tracking-wider opacity-0 transition-opacity duration-150"
+                    >
+                      <span>Dismiss Post</span>
+                      <Trash2 className="w-5 h-5 text-rose-500 animate-bounce" />
+                    </div>
+                  </div>
+
+                  {/* Swipable Card Body */}
+                  <motion.div
+                    drag="x"
+                    dragDirectionLock
+                    dragConstraints={{ left: 0, right: 0 }}
+                    dragElastic={{ left: 0.6, right: 0.6 }}
+                    onDrag={(event, info) => {
+                      const rightIndicator = document.getElementById(`swipe-indicator-right-${post.id}`);
+                      const leftIndicator = document.getElementById(`swipe-indicator-left-${post.id}`);
+                      const swipeX = info.offset.x;
+                      
+                      if (rightIndicator && leftIndicator) {
+                        if (swipeX > 15) {
+                          rightIndicator.style.opacity = Math.min(swipeX / 100, 1).toString();
+                          leftIndicator.style.opacity = '0';
+                        } else if (swipeX < -15) {
+                          leftIndicator.style.opacity = Math.min(Math.abs(swipeX) / 100, 1).toString();
+                          rightIndicator.style.opacity = '0';
+                        } else {
+                          rightIndicator.style.opacity = '0';
+                          leftIndicator.style.opacity = '0';
+                        }
+                      }
+                    }}
+                    onDragEnd={async (event, info) => {
+                      const swipeX = info.offset.x;
+                      const rightIndicator = document.getElementById(`swipe-indicator-right-${post.id}`);
+                      const leftIndicator = document.getElementById(`swipe-indicator-left-${post.id}`);
+                      
+                      if (rightIndicator) rightIndicator.style.opacity = '0';
+                      if (leftIndicator) leftIndicator.style.opacity = '0';
+
+                      if (swipeX > 100) {
+                        // SWIPE RIGHT -> Bookmark/Save Post
+                        if (!currentUser) {
+                          setToastMessage("Log in to bookmark posts!");
+                          setTimeout(() => setToastMessage(null), 3000);
+                        } else {
+                          toggleSavePost(post.id);
+                          setToastMessage(isBookmarked ? "Removed from bookmarks" : "Post bookmarked!");
+                          setTimeout(() => setToastMessage(null), 3000);
+                        }
+                      } else if (swipeX < -100) {
+                        // SWIPE LEFT -> Dismiss/Hide Post
+                        setLastDismissedPostId(post.id);
+                        setDismissedPostIds(prev => [...prev, post.id]);
+                        setToastMessage("Post dismissed");
+                        setTimeout(() => setToastMessage(null), 4000);
+                      }
+                    }}
+                    className="relative z-10 w-full"
+                  >
+                    <article
+                      id={`post-card-${post.id}`}
+                      className="bg-white border border-stone-200/45 rounded-[2rem] card-shadow hover:shadow-2xl hover:scale-[1.012] hover:-translate-y-1 hover:border-stone-300/65 transition-all duration-300 ease-out overflow-hidden transform"
+                    >
                   {/* Author Info row */}
                   <div className="p-6 flex items-center justify-between border-b border-stone-100/50 bg-white">
                     <div className="flex items-center gap-3">
@@ -1916,7 +1997,9 @@ export const Feed: React.FC<FeedProps> = ({
                     </div>
                   </div>
                 </article>
-              </VirtualPost>
+              </motion.div>
+            </div>
+          </VirtualPost>
             );
           })
         ) : (
@@ -3237,6 +3320,20 @@ export const Feed: React.FC<FeedProps> = ({
               <Check className="w-3.5 h-3.5" />
             </div>
             <span>{toastMessage}</span>
+            {toastMessage === "Post dismissed" && lastDismissedPostId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDismissedPostIds(prev => prev.filter(id => id !== lastDismissedPostId));
+                  setLastDismissedPostId(null);
+                  setToastMessage("Dismiss undone");
+                  setTimeout(() => setToastMessage(null), 1500);
+                }}
+                className="ml-3 px-2 py-1 bg-white/10 hover:bg-white/20 text-orange-400 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer border-0 outline-none hover:text-orange-350"
+              >
+                Undo
+              </button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

@@ -48,13 +48,14 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Bypass non-GET requests and Firestore control planes
-  if (
-    event.request.method !== 'GET' ||
-    url.hostname.includes('identitytoolkit.googleapis.com') ||
-    url.hostname.includes('securetoken.googleapis.com') ||
-    url.hostname.includes('firebaseinstallations.googleapis.com')
-  ) {
+  // Only handle GET requests and exclude any third-party APIs/Firestore/Firebase entirely
+  const isAllowedOrigin = 
+    url.origin === self.location.origin ||
+    url.hostname.includes('images.unsplash.com') ||
+    url.hostname.includes('fonts.googleapis.com') ||
+    url.hostname.includes('fonts.gstatic.com');
+
+  if (event.request.method !== 'GET' || !isAllowedOrigin) {
     return;
   }
 
@@ -79,7 +80,6 @@ self.addEventListener('fetch', (event) => {
     (url.hostname.includes('images.unsplash.com') && url.search.includes('avatar'));
 
   const isFeedContent = 
-    url.hostname.includes('firestore.googleapis.com') || // Firestore data endpoints
     url.pathname.includes('/api/feed') ||
     url.pathname.includes('/api/posts') ||
     (url.hostname.includes('images.unsplash.com') && !url.search.includes('avatar')); // Post illustrations/media

@@ -166,17 +166,6 @@ export const Navigation: React.FC<NavigationProps> = ({
                 </div>
               </div>
             </div>
-            
-            <button
-              type="button"
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent('trigger-pwa-monitor'));
-              }}
-              className="w-full py-2 bg-zinc-950 hover:bg-zinc-900 text-white text-[9.5px] font-black uppercase tracking-wider rounded-xl transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer outline-none"
-            >
-              <Cpu className="w-3.5 h-3.5" />
-              <span>PWA Control Center</span>
-            </button>
           </div>
         ) : (
           <div className="space-y-3">
@@ -200,17 +189,6 @@ export const Navigation: React.FC<NavigationProps> = ({
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Install Native PWA</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent('trigger-pwa-monitor'));
-                }}
-                className="w-full py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-650 text-[9px] font-black uppercase tracking-wider rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer outline-none border border-zinc-200/30"
-              >
-                <Cpu className="w-3 h-3 text-zinc-400" />
-                <span>Diagnostics & Sync</span>
               </button>
             </div>
           </div>

@@ -634,7 +634,16 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
           } catch (err: any) {
             console.error("Failed to guarantee user profile document in Firestore, falling back to local database:", err);
             const errMsg = err instanceof Error ? err.message : String(err);
-            if (errMsg.includes('Quota limit') || errMsg.includes('quota') || errMsg.includes('exceeded') || errMsg.includes('resource-exhausted') || errMsg.includes('Resource exhausted')) {
+            if (
+              errMsg.includes('Quota limit') || 
+              errMsg.includes('quota') || 
+              errMsg.includes('exceeded') || 
+              errMsg.includes('resource-exhausted') || 
+              errMsg.includes('Resource exhausted') ||
+              errMsg.includes('already-exists') ||
+              errMsg.includes('already exists') ||
+              errMsg.includes('Target ID')
+            ) {
               triggerLocalQuotaFallback();
               
               const cachedUsersStr = localStorage.getItem('freshlink_loc_users');
@@ -690,25 +699,40 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   // Real-time listener for ads
   useEffect(() => {
     if (isQuotaFallbackMode) return;
-    const adsQuery = collection(db, 'ads');
-    const unsubAds = onSnapshot(adsQuery, (snap) => {
-      const updatedAds: AdBanner[] = [];
-      snap.forEach((doc) => updatedAds.push(doc.data() as AdBanner));
-      if (updatedAds.length === 0) {
-        updatedAds.push(DEFAULT_SEED_AD);
-      }
-      setAds(updatedAds);
-    }, (error) => {
-      handleSubError(error, 'ads');
-    });
+    let unsubAds: (() => void) | null = null;
+    const timer = setTimeout(() => {
+      const adsQuery = collection(db, 'ads');
+      unsubAds = onSnapshot(adsQuery, (snap) => {
+        const updatedAds: AdBanner[] = [];
+        snap.forEach((doc) => updatedAds.push(doc.data() as AdBanner));
+        if (updatedAds.length === 0) {
+          updatedAds.push(DEFAULT_SEED_AD);
+        }
+        setAds(updatedAds);
+      }, (error) => {
+        handleSubError(error, 'ads');
+      });
+    }, 150);
 
-    return () => unsubAds();
+    return () => {
+      clearTimeout(timer);
+      if (unsubAds) unsubAds();
+    };
   }, [isQuotaFallbackMode]);
 
   // 2. High-Performance One-Time Initial Data Load & Caching
   const handleSubError = (error: any, collectionName: string) => {
     const errMsg = error instanceof Error ? error.message : String(error);
-    if (errMsg.includes('Quota limit') || errMsg.includes('quota') || errMsg.includes('exceeded') || errMsg.includes('resource-exhausted') || errMsg.includes('Resource exhausted')) {
+    if (
+      errMsg.includes('Quota limit') || 
+      errMsg.includes('quota') || 
+      errMsg.includes('exceeded') || 
+      errMsg.includes('resource-exhausted') || 
+      errMsg.includes('Resource exhausted') ||
+      errMsg.includes('already-exists') ||
+      errMsg.includes('already exists') ||
+      errMsg.includes('Target ID')
+    ) {
       triggerLocalQuotaFallback();
     } else {
       handleFirestoreError(error, OperationType.GET, collectionName);
@@ -789,7 +813,16 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     } catch (err: any) {
       console.error("An error occurred during Firestore load:", err);
       const errMsg = err instanceof Error ? err.message : String(err);
-      if (errMsg.includes('Quota limit') || errMsg.includes('quota') || errMsg.includes('exceeded') || errMsg.includes('resource-exhausted') || errMsg.includes('Resource exhausted')) {
+      if (
+        errMsg.includes('Quota limit') || 
+        errMsg.includes('quota') || 
+        errMsg.includes('exceeded') || 
+        errMsg.includes('resource-exhausted') || 
+        errMsg.includes('Resource exhausted') ||
+        errMsg.includes('already-exists') ||
+        errMsg.includes('already exists') ||
+        errMsg.includes('Target ID')
+      ) {
         triggerLocalQuotaFallback();
       }
     } finally {
@@ -976,8 +1009,16 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
 
   // 2. Real-time collections listener
   useEffect(() => {
-    let unsubWithdrawals = () => {};
-    if (currentUserId && !isQuotaFallbackMode) {
+    let unsubWithdrawals: (() => void) | null = null;
+    let unsubNotifications: (() => void) | null = null;
+
+    if (!currentUserId || isQuotaFallbackMode) {
+      setWithdrawals([]);
+      setNotifications([]);
+      return;
+    }
+
+    const timer = setTimeout(() => {
       unsubWithdrawals = onSnapshot(collection(db, 'withdrawals'), (snap) => {
         const list: WithdrawalRequest[] = [];
         snap.forEach((d) => list.push(d.data() as WithdrawalRequest));
@@ -985,12 +1026,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       }, (error) => {
         handleSubError(error, 'withdrawals');
       });
-    } else {
-      setWithdrawals([]);
-    }
 
-    let unsubNotifications = () => {};
-    if (currentUserId && !isQuotaFallbackMode) {
       const qNotif = query(collection(db, 'notifications'), where('userId', '==', currentUserId));
       unsubNotifications = onSnapshot(qNotif, (snap) => {
         const list: Notification[] = [];
@@ -1023,13 +1059,12 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       }, (error) => {
         handleSubError(error, 'notifications');
       });
-    } else {
-      setNotifications([]);
-    }
+    }, 150);
 
     return () => {
-      unsubWithdrawals();
-      unsubNotifications();
+      clearTimeout(timer);
+      if (unsubWithdrawals) unsubWithdrawals();
+      if (unsubNotifications) unsubNotifications();
     };
   }, [currentUserId, isQuotaFallbackMode]);
 
@@ -1053,58 +1088,64 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       return;
     }
 
-    // Load messages where user is the sender
-    const qSender = query(collection(db, 'messages'), where('senderId', '==', currentUserId));
-    const unsubSender = onSnapshot(qSender, (snap) => {
-      if (isQuotaFallbackMode) return;
-      setMessages((prev) => {
-        const otherMsgs = prev.filter((m) => m.senderId !== currentUserId);
-        const updatedSenderMsgs: Message[] = [];
-        snap.forEach((doc) => updatedSenderMsgs.push(doc.data() as Message));
-        const merged = [...otherMsgs, ...updatedSenderMsgs];
-        return Array.from(new Map(merged.map((m) => [m.id, m])).values());
-      });
-    }, (error) => {
-      handleSubError(error, 'messages_sender');
-    });
+    let unsubSender: (() => void) | null = null;
+    let unsubReceiver: (() => void) | null = null;
 
-    // Load messages where user is the receiver
-    const qReceiver = query(collection(db, 'messages'), where('receiverId', '==', currentUserId));
-    const unsubReceiver = onSnapshot(qReceiver, (snap) => {
-      if (isQuotaFallbackMode) return;
-      setMessages((prev) => {
-        const otherMsgs = prev.filter((m) => m.receiverId !== currentUserId);
-        const updatedReceiverMsgs: Message[] = [];
-        snap.forEach((doc) => updatedReceiverMsgs.push(doc.data() as Message));
-        const merged = [...otherMsgs, ...updatedReceiverMsgs];
-        return Array.from(new Map(merged.map((m) => [m.id, m])).values());
+    const timer = setTimeout(() => {
+      // Load messages where user is the sender
+      const qSender = query(collection(db, 'messages'), where('senderId', '==', currentUserId));
+      unsubSender = onSnapshot(qSender, (snap) => {
+        if (isQuotaFallbackMode) return;
+        setMessages((prev) => {
+          const otherMsgs = prev.filter((m) => m.senderId !== currentUserId);
+          const updatedSenderMsgs: Message[] = [];
+          snap.forEach((doc) => updatedSenderMsgs.push(doc.data() as Message));
+          const merged = [...otherMsgs, ...updatedSenderMsgs];
+          return Array.from(new Map(merged.map((m) => [m.id, m])).values());
+        });
+      }, (error) => {
+        handleSubError(error, 'messages_sender');
       });
 
-      // Automatically batch-update messages to 'seen' or 'delivered'
-      const batch = writeBatch(db);
-      let needsCommit = false;
-      snap.forEach((docSnap) => {
-        const data = docSnap.data() as Message;
-        if (data.receiverId === currentUserId && !data.read) {
-          if (data.senderId === activeChatPartnerRef.current) {
-            batch.update(docSnap.ref, { read: true, status: 'seen' });
-            needsCommit = true;
-          } else if (!data.status || data.status === 'sent') {
-            batch.update(docSnap.ref, { status: 'delivered' });
-            needsCommit = true;
+      // Load messages where user is the receiver
+      const qReceiver = query(collection(db, 'messages'), where('receiverId', '==', currentUserId));
+      unsubReceiver = onSnapshot(qReceiver, (snap) => {
+        if (isQuotaFallbackMode) return;
+        setMessages((prev) => {
+          const otherMsgs = prev.filter((m) => m.receiverId !== currentUserId);
+          const updatedReceiverMsgs: Message[] = [];
+          snap.forEach((doc) => updatedReceiverMsgs.push(doc.data() as Message));
+          const merged = [...otherMsgs, ...updatedReceiverMsgs];
+          return Array.from(new Map(merged.map((m) => [m.id, m])).values());
+        });
+
+        // Automatically batch-update messages to 'seen' or 'delivered'
+        const batch = writeBatch(db);
+        let needsCommit = false;
+        snap.forEach((docSnap) => {
+          const data = docSnap.data() as Message;
+          if (data.receiverId === currentUserId && !data.read) {
+            if (data.senderId === activeChatPartnerRef.current) {
+              batch.update(docSnap.ref, { read: true, status: 'seen' });
+              needsCommit = true;
+            } else if (!data.status || data.status === 'sent') {
+              batch.update(docSnap.ref, { status: 'delivered' });
+              needsCommit = true;
+            }
           }
+        });
+        if (needsCommit) {
+          batch.commit().catch(e => console.error("Error committing message status update:", e));
         }
+      }, (error) => {
+        handleSubError(error, 'messages_receiver');
       });
-      if (needsCommit) {
-        batch.commit().catch(e => console.error("Error committing message status update:", e));
-      }
-    }, (error) => {
-      handleSubError(error, 'messages_receiver');
-    });
+    }, 150);
 
     return () => {
-      unsubSender();
-      unsubReceiver();
+      clearTimeout(timer);
+      if (unsubSender) unsubSender();
+      if (unsubReceiver) unsubReceiver();
     };
   }, [currentUserId, isQuotaFallbackMode]);
 

@@ -9,7 +9,6 @@ import { Navigation } from './components/Navigation';
 import { FreshLinkLogo } from './components/FreshLinkLogo';
 import { motion } from 'motion/react';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
-import { PWAMonitor } from './components/PWAMonitor';
 import { FeedPostSkeleton } from './components/SkeletonLoader';
 
 const Auth = lazy(() => import('./components/Auth').then(m => ({ default: m.Auth })));
@@ -50,23 +49,37 @@ function AppContent() {
   const [authOpen, setAuthOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('all');
-  const [pwaMonitorOpen, setPwaMonitorOpen] = useState<boolean>(false);
-
-  useEffect(() => {
-    const handleTriggerMonitor = () => {
-      setPwaMonitorOpen(true);
-    };
-    window.addEventListener('trigger-pwa-monitor', handleTriggerMonitor);
-    return () => {
-      window.removeEventListener('trigger-pwa-monitor', handleTriggerMonitor);
-    };
-  }, []);
   
   if (loading) {
     return (
       <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-center">
         <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mb-4" />
         <p className="text-zinc-600 text-xs font-semibold uppercase tracking-wider animate-pulse font-mono">Synchronizing Live Channels...</p>
+      </div>
+    );
+  }
+
+  if (isQuotaFallbackMode) {
+    return (
+      <div className="min-h-screen bg-[#F8F7F4] flex flex-col items-center justify-center p-6 text-center select-none font-sans" id="maintenance-fullscreen-screen">
+        <div className="bg-white p-8 max-w-md w-full rounded-[2rem] shadow-xl border border-amber-200/40 flex flex-col items-center">
+          <div className="w-16 h-16 bg-amber-500/[0.06] text-amber-600 rounded-2xl flex items-center justify-center mb-6 shadow-xs border border-amber-200/30">
+            <Cpu className="w-8 h-8 animate-pulse" />
+          </div>
+          <h2 className="text-xl font-extrabold text-zinc-900 uppercase tracking-tight">System Under Maintenance</h2>
+          <p className="text-zinc-500 text-xs mt-3 leading-relaxed font-semibold">
+            The platform is currently undergoing scheduled database maintenance or experiencing high volume. Some operations are temporarily offline while we optimize server performance.
+          </p>
+          <div className="bg-amber-50/60 text-amber-800 text-[9.5px] font-mono leading-relaxed p-4 rounded-xl mt-5 w-full text-center border border-amber-200/20 font-bold">
+            DATABASE CAPACITY LIMIT REACHED
+          </div>
+          <button
+            onClick={() => resetQuotaFallback()}
+            className="w-full mt-6 py-3 bg-zinc-950 hover:bg-zinc-900 text-white font-sans font-bold uppercase tracking-widest text-[10px] rounded-xl transition-all cursor-pointer shadow-sm active:scale-98"
+          >
+            Retry Connection
+          </button>
+        </div>
       </div>
     );
   }
@@ -371,34 +384,7 @@ function AppContent() {
           </div>
         )}
 
-        {/* System Under Maintenance / Offline Fallback Notice */}
-        {isQuotaFallbackMode && (
-          <div 
-            id="maintenance-offline-notice" 
-            className="m-4 md:m-6 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 rounded-2xl p-4 md:p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all animate-pulse"
-          >
-            <div className="flex items-start gap-3.5">
-              <div className="bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20 text-orange-600 shrink-0">
-                <WifiOff className="w-5 h-5" />
-              </div>
-              <div className="space-y-1">
-                <h4 className="font-sans font-black text-xs text-zinc-900 uppercase tracking-wider flex items-center gap-2">
-                  🛠️ System Under Maintenance — Offline Fallback Active
-                </h4>
-                <p className="text-[11px] text-zinc-650 leading-relaxed font-semibold max-w-xl">
-                  Cloud server database query quota limit was reached. The application is running seamlessly in <strong className="text-orange-700">Offline Fallback Mode</strong> using your high-speed cached local storage.
-                </p>
-              </div>
-            </div>
-            <button
-              id="reconnect-system-db-btn"
-              onClick={resetQuotaFallback}
-              className="px-4 py-2 bg-white hover:bg-stone-50 text-orange-700 hover:text-orange-800 border border-orange-200 hover:border-orange-300 font-sans font-bold uppercase tracking-wider text-[10px] rounded-xl shadow-xs transition cursor-pointer active:scale-98 shrink-0 flex items-center gap-2 outline-none"
-            >
-              <span>Reconnect Now</span>
-            </button>
-          </div>
-        )}
+
 
         {/* Screen Routing logic */}
         <motion.div
@@ -485,8 +471,6 @@ function AppContent() {
       {/* PWA Smart Installation Banner */}
       <PWAInstallPrompt />
 
-      {/* PWA Operations Diagnostics & Control Dashboard */}
-      <PWAMonitor isOpen={pwaMonitorOpen} onClose={() => setPwaMonitorOpen(false)} />
     </div>
   );
 }

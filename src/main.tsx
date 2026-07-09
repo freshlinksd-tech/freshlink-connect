@@ -9,6 +9,8 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js')
       .then((reg) => {
         console.log('ServiceWorker registration successful with scope: ', reg.scope);
+        // Force checking for updates immediately on load to trigger skipWaiting & claim
+        reg.update().catch(err => console.warn('ServiceWorker update check failed:', err));
       })
       .catch((err) => {
         console.error('ServiceWorker registration failed: ', err);
