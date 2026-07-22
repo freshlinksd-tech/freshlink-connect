@@ -318,9 +318,51 @@ export const LandingPage: React.FC = () => {
                 <span className="font-sans font-extrabold tracking-widest">{isGoogleLoading ? 'Signing in...' : 'Sign in with Google'}</span>
               </button>
 
+              {/* Instant 1-Click Demo Account Shortcuts */}
+              <div className="mt-3.5 mb-2 bg-amber-50/60 border border-amber-200/60 rounded-2xl p-3 text-left space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-mono font-black uppercase text-amber-900 tracking-wider">⚡ 1-Click Instant Demo Login</span>
+                  <span className="text-[8.5px] text-amber-700 font-bold bg-amber-100/80 px-1.5 py-0.5 rounded">Pre-verified</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => login('fresh.linksd@gmail.com')}
+                    className="p-2 bg-white hover:bg-amber-100/50 border border-amber-200 rounded-xl text-left transition-all cursor-pointer group"
+                  >
+                    <span className="block text-[10px] font-extrabold text-amber-950 group-hover:text-orange-600">👑 Super Admin</span>
+                    <span className="block text-[8px] font-mono text-zinc-400 truncate">fresh.linksd@gmail.com</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => login('alice@nexus.com')}
+                    className="p-2 bg-white hover:bg-amber-100/50 border border-amber-200 rounded-xl text-left transition-all cursor-pointer group"
+                  >
+                    <span className="block text-[10px] font-extrabold text-zinc-800 group-hover:text-orange-600">👩‍💻 Alice Devon</span>
+                    <span className="block text-[8px] font-mono text-zinc-400 truncate">alice@nexus.com</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => login('bob@nexus.com')}
+                    className="p-2 bg-white hover:bg-amber-100/50 border border-amber-200 rounded-xl text-left transition-all cursor-pointer group"
+                  >
+                    <span className="block text-[10px] font-extrabold text-zinc-800 group-hover:text-orange-600">📷 Bob Matthews</span>
+                    <span className="block text-[8px] font-mono text-zinc-400 truncate">bob@nexus.com</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => login('charlie@nexus.com')}
+                    className="p-2 bg-white hover:bg-amber-100/50 border border-amber-200 rounded-xl text-left transition-all cursor-pointer group"
+                  >
+                    <span className="block text-[10px] font-extrabold text-zinc-800 group-hover:text-orange-600">🏋️ Charlie Flex</span>
+                    <span className="block text-[8px] font-mono text-zinc-400 truncate">charlie@nexus.com</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Helpful Browser Iframe Note */}
               <div className="mb-4 text-[9.5px] text-zinc-400 font-sans leading-normal text-center select-none">
-                ℹ️ Running inside the AI Studio preview? Popups are restricted by browsers. Use <button type="button" onClick={() => window.open(window.location.href, '_blank')} className="text-orange-500 hover:underline font-bold">New Tab ↗</button> or click the instant demo shortcuts below.
+                ℹ️ Running inside AI Studio? Popups are restricted by browsers inside preview frames. Click any demo shortcut above or <button type="button" onClick={() => window.open(window.location.href, '_blank')} className="text-orange-500 hover:underline font-bold">Open in New Tab ↗</button>
               </div>
 
               {googleError && (

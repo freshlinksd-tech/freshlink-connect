@@ -9,7 +9,7 @@ import { Navigation } from './components/Navigation';
 import { FreshLinkLogo } from './components/FreshLinkLogo';
 import { motion } from 'motion/react';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
-import { FeedPostSkeleton } from './components/SkeletonLoader';
+import { FeedPostSkeleton, ProfileSkeleton } from './components/SkeletonLoader';
 
 const Auth = lazy(() => import('./components/Auth').then(m => ({ default: m.Auth })));
 const Feed = lazy(() => import('./components/Feed').then(m => ({ default: m.Feed })));
@@ -403,7 +403,7 @@ function AppContent() {
           transition={{ duration: 0.22, ease: "easeOut" }}
           className="h-full"
         >
-          <Suspense fallback={<FeedPostSkeleton />}>
+          <Suspense fallback={activeTab === 'profile' ? <ProfileSkeleton /> : <FeedPostSkeleton />}>
             {(() => {
               switch (activeTab) {
                 case 'feed':

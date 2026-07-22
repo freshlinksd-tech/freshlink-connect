@@ -153,6 +153,18 @@ export const Profiles: React.FC<ProfilesProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
+  // Profile transition / fetching loading state
+  const [isFetchingUser, setIsFetchingUser] = useState<boolean>(false);
+
+  useEffect(() => {
+    // Show skeleton screen during user profile transitions for seamless UX
+    setIsFetchingUser(true);
+    const timer = setTimeout(() => {
+      setIsFetchingUser(false);
+    }, 280);
+    return () => clearTimeout(timer);
+  }, [targetUserId]);
+
   // Profile Edit fields
   const [editName, setEditName] = useState('');
   const [editBio, setEditBio] = useState('');
@@ -431,7 +443,7 @@ export const Profiles: React.FC<ProfilesProps> = ({
     return achievements.filter(a => a.isEarned).length;
   }, [achievements]);
 
-  if (loading) {
+  if (loading || isFetchingUser) {
     return <ProfileSkeleton />;
   }
 
