@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, Suspense, lazy, Component } from 'react';
 import { SocialPlatformProvider, useSocialPlatform } from './context/SocialPlatformContext';
 import { Navigation } from './components/Navigation';
 import { FreshLinkLogo } from './components/FreshLinkLogo';
@@ -11,17 +11,47 @@ import { motion } from 'motion/react';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { FeedPostSkeleton, ProfileSkeleton } from './components/SkeletonLoader';
 
-const Auth = lazy(() => import('./components/Auth').then(m => ({ default: m.Auth })));
-const Feed = lazy(() => import('./components/Feed').then(m => ({ default: m.Feed })));
-const CreatePost = lazy(() => import('./components/CreatePost').then(m => ({ default: m.CreatePost })));
-const Chat = lazy(() => import('./components/Chat').then(m => ({ default: m.Chat })));
-const Profiles = lazy(() => import('./components/Profiles').then(m => ({ default: m.Profiles })));
-const LandingPage = lazy(() => import('./components/LandingPage').then(m => ({ default: m.LandingPage })));
-const OnboardingSetup = lazy(() => import('./components/OnboardingSetup').then(m => ({ default: m.OnboardingSetup })));
-const AdminPanel = lazy(() => import('./components/AdminPanel').then(m => ({ default: m.AdminPanel })));
-const VerificationSetup = lazy(() => import('./components/VerificationSetup').then(m => ({ default: m.VerificationSetup })));
-const MonetizationPanel = lazy(() => import('./components/MonetizationPanel').then(m => ({ default: m.MonetizationPanel })));
-const Notifications = lazy(() => import('./components/Notifications').then(m => ({ default: m.Notifications })));
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  componentImport: () => Promise<any>,
+  exportName?: string
+) {
+  return lazy(async () => {
+    const pageHasBeenReloaded = typeof window !== 'undefined' && JSON.parse(
+      sessionStorage.getItem('freshlink_chunk_reload_attempt') || 'false'
+    );
+
+    try {
+      const module = await componentImport();
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('freshlink_chunk_reload_attempt', 'false');
+      }
+      if (exportName) {
+        return { default: module[exportName] };
+      }
+      return module.default ? module : { default: module };
+    } catch (error) {
+      console.error('Failed to dynamically load module chunk:', error);
+      if (typeof window !== 'undefined' && !pageHasBeenReloaded) {
+        sessionStorage.setItem('freshlink_chunk_reload_attempt', 'true');
+        window.location.reload();
+        return new Promise<{ default: T }>(() => {});
+      }
+      throw error;
+    }
+  });
+}
+
+const Auth = lazyWithRetry(() => import('./components/Auth'), 'Auth');
+const Feed = lazyWithRetry(() => import('./components/Feed'), 'Feed');
+const CreatePost = lazyWithRetry(() => import('./components/CreatePost'), 'CreatePost');
+const Chat = lazyWithRetry(() => import('./components/Chat'), 'Chat');
+const Profiles = lazyWithRetry(() => import('./components/Profiles'), 'Profiles');
+const LandingPage = lazyWithRetry(() => import('./components/LandingPage'), 'LandingPage');
+const OnboardingSetup = lazyWithRetry(() => import('./components/OnboardingSetup'), 'OnboardingSetup');
+const AdminPanel = lazyWithRetry(() => import('./components/AdminPanel'), 'AdminPanel');
+const VerificationSetup = lazyWithRetry(() => import('./components/VerificationSetup'), 'VerificationSetup');
+const MonetizationPanel = lazyWithRetry(() => import('./components/MonetizationPanel'), 'MonetizationPanel');
+const Notifications = lazyWithRetry(() => import('./components/Notifications'), 'Notifications');
 import { useTheme } from './hooks/useTheme';
 import { 
   Sparkles, 
@@ -484,10 +514,53 @@ function AppContent() {
   );
 }
 
+class ChunkErrorBoundary extends (Component as any) {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any) {
+    console.error("Chunk Error Boundary caught an error:", error);
+  }
+
+  render() {
+    if ((this as any).state.hasError) {
+      return (
+        <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-center">
+          <div className="bg-white p-8 max-w-md w-full rounded-2xl shadow-xl border border-stone-200 flex flex-col items-center">
+            <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mb-4">
+              <Sparkles className="w-6 h-6 animate-pulse text-orange-600" />
+            </div>
+            <h2 className="text-lg font-extrabold text-stone-900 uppercase tracking-tight">App Update Available</h2>
+            <p className="text-stone-600 text-xs mt-2 leading-relaxed">
+              A newer version of FreshLink Connect is available. Please reload the page to apply updates.
+            </p>
+            <button
+              onClick={() => {
+                sessionStorage.removeItem('freshlink_chunk_reload_attempt');
+                window.location.reload();
+              }}
+              className="mt-6 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer"
+            >
+              Reload Application
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (this as any).props.children;
+  }
+}
+
 export default function App() {
   return (
-    <SocialPlatformProvider>
-      <AppContent />
-    </SocialPlatformProvider>
+    <ChunkErrorBoundary>
+      <SocialPlatformProvider>
+        <AppContent />
+      </SocialPlatformProvider>
+    </ChunkErrorBoundary>
   );
 }
