@@ -257,60 +257,6 @@ export const Auth: React.FC<AuthProps> = ({ onClose }) => {
             )}
           </button>
 
-          {/* Instant 1-Click Demo Account Shortcuts */}
-          <div className="bg-amber-50/70 border border-amber-200/70 rounded-2xl p-3 text-left space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[9px] font-mono font-black uppercase text-amber-900 tracking-wider">⚡ 1-Click Instant Demo Login</span>
-              <span className="text-[8.5px] text-amber-700 font-bold bg-amber-100/80 px-1.5 py-0.5 rounded">Pre-verified</span>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                onClick={async () => {
-                  const success = await login('fresh.linksd@gmail.com');
-                  if (success) onClose();
-                }}
-                className="p-2 bg-white hover:bg-amber-100/50 border border-amber-200 rounded-xl text-left transition-all cursor-pointer group"
-              >
-                <span className="block text-[10px] font-extrabold text-amber-950 group-hover:text-orange-600">👑 Super Admin</span>
-                <span className="block text-[8px] font-mono text-zinc-400 truncate">fresh.linksd@gmail.com</span>
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const success = await login('alice@nexus.com');
-                  if (success) onClose();
-                }}
-                className="p-2 bg-white hover:bg-amber-100/50 border border-amber-200 rounded-xl text-left transition-all cursor-pointer group"
-              >
-                <span className="block text-[10px] font-extrabold text-zinc-800 group-hover:text-orange-600">👩‍💻 Alice Devon</span>
-                <span className="block text-[8px] font-mono text-zinc-400 truncate">alice@nexus.com</span>
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const success = await login('bob@nexus.com');
-                  if (success) onClose();
-                }}
-                className="p-2 bg-white hover:bg-amber-100/50 border border-amber-200 rounded-xl text-left transition-all cursor-pointer group"
-              >
-                <span className="block text-[10px] font-extrabold text-zinc-800 group-hover:text-orange-600">📷 Bob Matthews</span>
-                <span className="block text-[8px] font-mono text-zinc-400 truncate">bob@nexus.com</span>
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const success = await login('charlie@nexus.com');
-                  if (success) onClose();
-                }}
-                className="p-2 bg-white hover:bg-amber-100/50 border border-amber-200 rounded-xl text-left transition-all cursor-pointer group"
-              >
-                <span className="block text-[10px] font-extrabold text-zinc-800 group-hover:text-orange-600">🏋️ Charlie Flex</span>
-                <span className="block text-[8px] font-mono text-zinc-400 truncate">charlie@nexus.com</span>
-              </button>
-            </div>
-          </div>
-
           {googleError && (
             <div className="animate-in fade-in slide-in-from-top-1 duration-200">
               {googleError === 'IFRAME_POPUP_BLOCKED' ? (
