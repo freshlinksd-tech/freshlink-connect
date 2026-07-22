@@ -227,6 +227,21 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
 
     const initUser = async () => {
       let cachedId = localStorage.getItem('freshlink_current_user_id');
+      const cachedUserStr = localStorage.getItem('freshlink_cached_user');
+      if (cachedUserStr) {
+        try {
+          const cachedUser = JSON.parse(cachedUserStr);
+          if (cachedUser && cachedUser.id) {
+            setUsers(prev => {
+              const filtered = prev.filter(u => u.id !== cachedUser.id);
+              return [...filtered, cachedUser];
+            });
+          }
+        } catch (e) {
+          // ignore cache parse error
+        }
+      }
+
       if (!cachedId) {
         cachedId = `anon_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
         localStorage.setItem('freshlink_current_user_id', cachedId);
@@ -416,6 +431,10 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     }
 
     // Bind local environment user session to this matched user profile
+    setUsers(prev => {
+      const filtered = prev.filter(u => u.id !== matched!.id);
+      return [...filtered, matched!];
+    });
     setCurrentUserId(matched.id);
     localStorage.setItem('freshlink_current_user_id', matched.id);
     localStorage.setItem('freshlink_cached_user', JSON.stringify(matched));
@@ -467,6 +486,10 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(googleDemoUser)
+        });
+        setUsers(prev => {
+          const filtered = prev.filter(u => u.id !== googleDemoUser.id);
+          return [...filtered, googleDemoUser];
         });
         setCurrentUserId(googleDemoUser.id);
         localStorage.setItem('freshlink_current_user_id', googleDemoUser.id);
@@ -523,27 +546,31 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         if (matched.isBlocked) {
           throw new Error("This account has been blocked by community administrators.");
         }
+        setUsers(prev => {
+          const filtered = prev.filter(u => u.id !== matched!.id);
+          return [...filtered, matched!];
+        });
         setCurrentUserId(matched.id);
         localStorage.setItem('freshlink_current_user_id', matched.id);
         localStorage.setItem('freshlink_cached_user', JSON.stringify(matched));
         await refetchData();
         return true;
       } else {
-        // Create an un-onboarded profile for them so they can choose their interests/onboard
+        // Create an onboarded user profile for them
         const googleUserId = `google_${firebaseUser.uid}`;
         const newGoogleUser: User = {
           id: googleUserId,
           name: displayName,
           email: email,
-          bio: 'A new discoverer navigating via Google credentials.',
+          bio: 'A creator navigating via Google credentials.',
           profileImage: photoURL,
           coverImage: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=1200&q=80',
           location: 'Internet',
-          interests: [],
+          interests: ['technology'],
           socialLinks: {},
           savedPosts: [],
           createdAt: new Date().toISOString(),
-          hasSetupAccount: false, // forces onboarding setup to run!
+          hasSetupAccount: true,
           isBlocked: false,
           role: 'user',
           isAdmin: false,
@@ -551,7 +578,9 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
           walletCredits: 500,
           isMonetizationEnabled: false,
           monthlySubscriptionPrice: 4.99,
-          subscribedCreators: []
+          subscribedCreators: [],
+          hasVerifiedDetails: true,
+          isApprovedByAdmin: true
         };
         
         await fetch('/api/users', {
@@ -560,6 +589,10 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
           body: JSON.stringify(newGoogleUser)
         });
         
+        setUsers(prev => {
+          const filtered = prev.filter(u => u.id !== newGoogleUser.id);
+          return [...filtered, newGoogleUser];
+        });
         setCurrentUserId(googleUserId);
         localStorage.setItem('freshlink_current_user_id', googleUserId);
         localStorage.setItem('freshlink_cached_user', JSON.stringify(newGoogleUser));
