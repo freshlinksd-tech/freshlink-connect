@@ -196,3 +196,20 @@ export interface AdBanner {
   paymentStatus?: string;
 }
 
+export interface Draft {
+  id: string;
+  userId: string;
+  title: string;
+  content: string;
+  category: string;
+  tagsString: string;
+  multiplePhotos: string[];
+  videoUrl: string;
+  isPremium: boolean;
+  imageRatio: 'auto' | '16/9' | '4/3' | '1/1';
+  hasPoll: boolean;
+  pollQuestion: string;
+  pollOptions: string[];
+  updatedAt: string;
+}
+

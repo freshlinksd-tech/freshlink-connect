@@ -1,37 +1,16 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
-import { User, Post, PostPoll, Like, Comment, Follower, Message, Achievement, WithdrawalRequest, Notification, PostReport, AdBanner } from '../types';
-import { SEED_USERS, SEED_POSTS, SEED_FOLLOWERS, SEED_COMMENTS, SEED_MESSAGES } from '../data/seedData';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import { User, Post, PostPoll, Like, Comment, Follower, Message, Achievement, WithdrawalRequest, Notification, PostReport, AdBanner, Draft } from '../types';
 import { censorText } from '../lib/security';
-import { checkRateLimit, resetRateLimit } from '../lib/rateLimiter';
-import {
-  collection,
-  doc,
-  setDoc,
-  getDocs,
-  onSnapshot,
-  getDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  writeBatch,
-  orderBy,
-  limit,
-  increment,
-  enableNetwork
-} from 'firebase/firestore';
-import { signInAnonymously, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from 'firebase/auth';
-import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
-import { getCache, setCache, addPendingInteraction, getPendingInteractions, clearPendingInteractions } from '../lib/dbCache';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import firebaseConfig from '../../firebase-applet-config.json';
 
 interface SocialPlatformContextType {
   users: User[];
   posts: Post[];
+  drafts: Draft[];
+  saveDraft: (draft: Draft) => Promise<void>;
+  deleteDraft: (draftId: string) => Promise<void>;
   followers: Follower[];
   comments: Comment[];
   messages: Message[];
@@ -124,6 +103,8 @@ interface SocialPlatformContextType {
   trackAdClick: (adId: string) => Promise<void>;
   toggleAllAds: (active: boolean) => Promise<void>;
   isQuotaFallbackMode: boolean;
+  isManualSandbox: boolean;
+  setManualSandbox: (active: boolean) => void;
   isOnline: boolean;
   userMap: Record<string, User>;
   resetQuotaFallback: () => void;
@@ -136,46 +117,12 @@ interface SocialPlatformContextType {
   reconnectWithBackoff: (attempt?: number) => Promise<boolean>;
 }
 
-const DEFAULT_SEED_AD: AdBanner = {
-  id: 'ad_default_nepal_tourism',
-  name: 'Explore the Majesty of Nepal Mountains & Homestays',
-  purpose: 'Tourism & Travel',
-  contact: '+977-1-4200000',
-  content: 'Discover organic tea trails, spectacular Everest panorama homestays, and get 20% off with partner local communities today!',
-  location: 'Nepal',
-  email: 'info@visitnepal.com',
-  title: 'Explore the Majesty of Nepal Mountains & Homestays',
-  description: 'Discover organic tea trails, spectacular Everest panorama homestays, and get 20% off with partner local communities today!',
-  imageUrl: 'https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=600&q=80',
-  targetUrl: 'https://www.visitnepaltours.com',
-  active: true,
-  placement: 'workspace',
-  status: 'published',
-  paymentStatus: 'verified',
-  amountPaid: 1000,
-  clickCount: 142,
-  createdAt: '2026-07-07T00:00:00.000Z',
-  userId: 'seed_admin_user_id'
-};
-
 const SocialPlatformContext = createContext<SocialPlatformContextType | undefined>(undefined);
 
 export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [users, setUsers] = useState<User[]>(() => {
-    if (typeof window !== 'undefined') {
-      const cachedUserStr = localStorage.getItem('freshlink_cached_user');
-      if (cachedUserStr) {
-        try {
-          const parsed = JSON.parse(cachedUserStr);
-          if (parsed && typeof parsed === 'object' && parsed.id) {
-            return [parsed];
-          }
-        } catch (e) {}
-      }
-    }
-    return [];
-  });
+  const [users, setUsers] = useState<User[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [drafts, setDrafts] = useState<Draft[]>([]);
   const [followers, setFollowers] = useState<Follower[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -184,1015 +131,164 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [postReports, setPostReports] = useState<PostReport[]>([]);
   const [ads, setAds] = useState<AdBanner[]>([]);
+  
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('freshlink_current_user_id') || null;
     }
     return null;
   });
-  const [loading, setLoading] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const cachedUserId = localStorage.getItem('freshlink_current_user_id');
-      const cachedUserStr = localStorage.getItem('freshlink_cached_user');
-      return !(cachedUserId && cachedUserStr);
-    }
-    return true;
-  });
+
+  const [loading, setLoading] = useState(true);
   const [activeChatPartnerId, setActiveChatPartnerId] = useState<string | null>(null);
-  const activeChatPartnerRef = useRef<string | null>(null);
-
-  const [isQuotaFallbackMode, setIsQuotaFallbackMode] = useState<boolean>(() => {
-    return localStorage.getItem('freshlink_quota_fallback') === 'true';
-  });
-  const [isOnline, setIsOnline] = useState<boolean>(() => {
-    return typeof navigator !== 'undefined' ? navigator.onLine : true;
-  });
-
-  useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-    };
-    const handleOffline = () => {
-      setIsOnline(false);
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
   const [securityBlock, setSecurityBlock] = useState<{ actionType: string; remainingMs: number } | null>(null);
-  const [postLimit, setPostLimit] = useState<number>(20);
-  const [hasMorePosts, setHasMorePosts] = useState<boolean>(true);
+
+  // Computed states
+  const currentUser = useMemo(() => {
+    return users.find(u => u.id === currentUserId) || null;
+  }, [users, currentUserId]);
 
   const userMap = useMemo(() => {
     const map: Record<string, User> = {};
-    users.forEach((u) => {
+    users.forEach(u => {
       map[u.id] = u;
     });
     return map;
   }, [users]);
 
-  const resolveSecurityChallenge = () => {
-    if (securityBlock) {
-      resetRateLimit(currentUserId || 'anonymous', securityBlock.actionType);
-      setSecurityBlock(null);
-    }
-  };
+  // Dynamic states
+  const [isQuotaFallbackMode, setIsQuotaFallbackMode] = useState(false);
+  const isManualSandbox = false;
+  const isOnline = true;
+  const hasMorePosts = false;
 
-  // Helper is triggered to activate offline fallback mode when Firestore is exhausted
-  const triggerLocalQuotaFallback = () => {
-    localStorage.setItem('freshlink_quota_fallback', 'true');
-    setIsQuotaFallbackMode(true);
-    console.warn("Firebase Quota Limit reached! Fallback to Offline/Maintenance Mode activated.");
-  };
-
+  const setManualSandbox = () => {};
   const resetQuotaFallback = () => {
-    localStorage.removeItem('freshlink_quota_fallback');
     setIsQuotaFallbackMode(false);
-    window.location.reload();
   };
+  const resolveSecurityChallenge = () => {};
+  const loadMorePosts = async () => {};
+  const reconnectWithBackoff = async () => true;
 
-  const saveLocalValue = <T,>(key: string, list: T[]) => {
-    localStorage.setItem(`freshlink_loc_${key}`, JSON.stringify(list));
-  };
-
-  const runWriteOperation = async (
-    firestoreCallback: () => Promise<void>,
-    localFallbackCallback: () => void,
-    pathInfo: string
-  ) => {
-    // Client-side Anti-Spam / Anti-DDoS rate limiter layer
-    const actionType = pathInfo.split('/')[0] || 'write';
-    const limitCheck = checkRateLimit(currentUserId || 'anonymous', actionType);
-    if (!limitCheck.allowed) {
-      setSecurityBlock({ actionType, remainingMs: limitCheck.blockedRemainingMs });
-      console.warn(`Spam Defense System blocked write to ${pathInfo} (cooling down)`);
-      return; // Stop execution of the write to protect server resources
-    }
-
-    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-      localFallbackCallback();
-      return;
-    }
+  // --- Core Sync Engine ---
+  const refetchData = async () => {
     try {
-      await firestoreCallback();
-      localFallbackCallback(); // Always update local React state on successful write to avoid needing real-time sync listeners
-    } catch (err: any) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      if (errMsg.includes('Quota limit') || errMsg.includes('quota') || errMsg.includes('exceeded') || errMsg.includes('resource-exhausted') || errMsg.includes('Resource exhausted')) {
-        triggerLocalQuotaFallback();
-        localFallbackCallback();
-      } else if (errMsg.includes('offline') || errMsg.includes('network') || errMsg.includes('failed to fetch') || errMsg.includes('Failed to get document')) {
-        console.log("[PWA Offline] Connection unavailable. Saving write locally.");
-        localFallbackCallback();
-      } else {
-        throw err;
-      }
-    }
-  };
-
-  // Automatic side-effect listeners to guarantee absolute state data integrity for offline sandbox testing
-  useEffect(() => {
-    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-      saveLocalValue('users', users);
-      setCache('users', users).catch(e => console.warn(e));
-    }
-  }, [users, isQuotaFallbackMode, isOnline]);
-
-  useEffect(() => {
-    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-      saveLocalValue('posts', posts);
-      setCache('posts', posts).catch(e => console.warn(e));
-    }
-  }, [posts, isQuotaFallbackMode, isOnline]);
-
-  useEffect(() => {
-    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-      saveLocalValue('followers', followers);
-      setCache('followers', followers).catch(e => console.warn(e));
-    }
-  }, [followers, isQuotaFallbackMode, isOnline]);
-
-  useEffect(() => {
-    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-      saveLocalValue('comments', comments);
-      setCache('comments', comments).catch(e => console.warn(e));
-    }
-  }, [comments, isQuotaFallbackMode, isOnline]);
-
-  useEffect(() => {
-    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-      saveLocalValue('messages', messages);
-      setCache('messages', messages).catch(e => console.warn(e));
-    }
-  }, [messages, isQuotaFallbackMode, isOnline]);
-
-  useEffect(() => {
-    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-      saveLocalValue('likes', likes);
-      setCache('likes', likes).catch(e => console.warn(e));
-    }
-  }, [likes, isQuotaFallbackMode, isOnline]);
-
-  useEffect(() => {
-    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-      saveLocalValue('withdrawals', withdrawals);
-      setCache('withdrawals', withdrawals).catch(e => console.warn(e));
-    }
-  }, [withdrawals, isQuotaFallbackMode, isOnline]);
-
-  useEffect(() => {
-    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-      saveLocalValue('notifications', notifications);
-      setCache('notifications', notifications).catch(e => console.warn(e));
-    }
-  }, [notifications, isQuotaFallbackMode, isOnline]);
-
-  useEffect(() => {
-    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-      saveLocalValue('postReports', postReports);
-      setCache('postReports', postReports).catch(e => console.warn(e));
-    }
-  }, [postReports, isQuotaFallbackMode, isOnline]);
-
-  useEffect(() => {
-    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-      saveLocalValue('ads', ads);
-      setCache('ads', ads).catch(e => console.warn(e));
-    }
-  }, [ads, isQuotaFallbackMode, isOnline]);
-
-  useEffect(() => {
-    activeChatPartnerRef.current = activeChatPartnerId;
-  }, [activeChatPartnerId]);
-
-  const syncPendingInteractions = async () => {
-    if (!navigator.onLine || !currentUserId) return;
-    try {
-      const pending = await getPendingInteractions();
-      if (pending.length === 0) return;
-
-      console.log(`[PWA Sync] Syncing ${pending.length} pending interactions...`);
-      const successfullySyncedIds: string[] = [];
-
-      for (const item of pending) {
-        try {
-          if (item.type === 'like') {
-            const { isLikedAlready, likeId } = item.payload;
-            if (isLikedAlready) {
-              await deleteDoc(doc(db, 'likes', likeId));
-            } else {
-              await setDoc(doc(db, 'likes', likeId), {
-                userId: item.userId,
-                postId: item.postId
-              });
-              // Notify post owner
-              const post = posts.find(p => p.id === item.postId);
-              if (post && post.userId !== item.userId) {
-                await addNotification(
-                  post.userId,
-                  'like',
-                  `liked your post "${post.title}"`,
-                  item.postId
-                );
-              }
-            }
-          } else if (item.type === 'comment') {
-            const { id, comment, createdAt } = item.payload;
-            const commentObj: Comment = {
-              id,
-              userId: item.userId,
-              postId: item.postId,
-              comment,
-              createdAt
-            };
-            await setDoc(doc(db, 'comments', id), commentObj);
-
-            // Notify post owner
-            const post = posts.find(p => p.id === item.postId);
-            if (post && post.userId !== item.userId) {
-              await addNotification(
-                post.userId,
-                'comment',
-                `commented on your post "${post.title}": "${comment.slice(0, 30)}${comment.length > 30 ? '...' : ''}"`,
-                item.postId
-              );
-            }
-          } else if (item.type === 'post') {
-            const postObj = item.payload;
-            await setDoc(doc(db, 'posts', postObj.id), postObj);
-            console.log(`[PWA Sync] Post ${postObj.id} successfully synced.`);
-          } else if (item.type === 'chat') {
-            const msgObj = item.payload;
-            await setDoc(doc(db, 'messages', msgObj.id), msgObj);
-            console.log(`[PWA Sync] Message ${msgObj.id} successfully synced.`);
-            try {
-              await addNotification(
-                msgObj.receiverId,
-                'system',
-                `sent you a chat message: "${msgObj.message.slice(0, 35)}${msgObj.message.length > 35 ? '...' : ''}"`
-              );
-            } catch (notifErr) {
-              console.warn("Failed to create message sync notification:", notifErr);
-            }
-          }
-          successfullySyncedIds.push(item.id);
-        } catch (itemErr) {
-          console.error(`[PWA Sync] Failed to sync item ${item.id}:`, itemErr);
-        }
-      }
-
-      if (successfullySyncedIds.length > 0) {
-        await clearPendingInteractions(successfullySyncedIds);
-        console.log(`[PWA Sync] Successfully synced ${successfullySyncedIds.length} interactions.`);
-        await refetchData();
-      }
-    } catch (err) {
-      console.warn("[PWA Sync] Error in syncPendingInteractions:", err);
-    }
-  };
-
-  const reconnectWithBackoff = async (attempt = 1): Promise<boolean> => {
-    const maxAttempts = 5;
-    const baseDelay = 1000; // 1 second
-    const maxDelay = 16000; // 16 seconds
-    
-    console.log(`[Network Reconnect] Attempt ${attempt} of ${maxAttempts} to reconnect Firebase database...`);
-    
-    try {
-      // Force Firestore to enable network and reconnect
-      await enableNetwork(db);
-      console.log(`[Network Reconnect] Successfully reconnected to Firebase database on attempt ${attempt}.`);
-      
-      // Connection successfully restored! Trigger the Background Sync process.
-      await syncPendingInteractions();
-      return true;
-    } catch (error) {
-      console.error(`[Network Reconnect] Reconnection attempt ${attempt} failed:`, error);
-      
-      if (attempt >= maxAttempts) {
-        console.error(`[Network Reconnect] Reconnection failed after maximum (${maxAttempts}) attempts.`);
-        return false;
-      }
-      
-      // Calculate delay with exponential backoff and randomized jitter
-      const exponentialDelay = Math.min(baseDelay * Math.pow(2, attempt - 1), maxDelay);
-      const jitter = Math.random() * 500; // up to 500ms of randomized jitter
-      const totalDelay = exponentialDelay + jitter;
-      
-      console.log(`[Network Reconnect] Retrying database connection in ${Math.round(totalDelay)}ms...`);
-      
-      await new Promise((resolve) => setTimeout(resolve, totalDelay));
-      return reconnectWithBackoff(attempt + 1);
-    }
-  };
-
-  // Synchronize pending offline actions when connection comes back online
-  useEffect(() => {
-    const handleOnline = () => {
-      console.log("[Network] Connection restored, triggering reconnect with backoff...");
-      reconnectWithBackoff();
-    };
-
-    const handleServiceWorkerMessage = (event: MessageEvent) => {
-      if (event.data && event.data.type === 'SYNC_PENDING_INTERACTIONS') {
-        console.log("[Service Worker] Sync request received...");
-        syncPendingInteractions();
-      }
-    };
-
-    window.addEventListener('online', handleOnline);
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
-    }
-
-    // Try to sync on mount if online
-    if (navigator.onLine) {
-      reconnectWithBackoff();
-    }
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
-      }
-    };
-  }, [currentUserId, posts]);
-
-  // 1. Initial Authentication & User Profile Sync
-  useEffect(() => {
-    let authUnsub = () => {};
-
-    const syncAuthAndUser = async () => {
-      authUnsub = onAuthStateChanged(auth, async (user) => {
-        if (!user) {
-          try {
-            // Authenticate anonymously only if no session (Google or Anonymous) is active
-            await signInAnonymously(auth);
-          } catch (err) {
-            console.warn("Silent anonymous authentication skipped (use Google Sign-In or sandbox accounts):", err);
-          }
-          return;
-        }
-
-        if (user) {
-          setCurrentUserId(user.uid);
-          localStorage.setItem('freshlink_current_user_id', user.uid);
-
-          // Guarantee user document exists in Firestore
-          try {
-            if (isQuotaFallbackMode) {
-              const cachedUsersStr = localStorage.getItem('freshlink_loc_users');
-              let cachedUsers: User[] = [];
-              if (cachedUsersStr) {
-                try { cachedUsers = JSON.parse(cachedUsersStr); } catch(e) {}
-              }
-              if (cachedUsers.length === 0) {
-                cachedUsers = [...SEED_USERS];
-              }
-              const isRootAdmin = user.email?.toLowerCase() === 'fresh.linksd@gmail.com';
-              let existingLocal = cachedUsers.find(u => u.id === user.uid);
-              if (!existingLocal) {
-                existingLocal = {
-                  id: user.uid,
-                  name: isRootAdmin ? 'Super Admin' : (user.displayName || `Writer ${user.uid.slice(0, 5)}`),
-                  email: isRootAdmin ? 'fresh.linksd@gmail.com' : (user.email || `${user.uid}@freshlinkconnect.info`),
-                  bio: isRootAdmin ? 'Root Developer & Primary System clearing administrator.' : 'A creator exploring the FreshLink connection platform.',
-                  profileImage: user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&h=250&q=80',
-                  coverImage: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=1200&q=80',
-                  location: isRootAdmin ? 'HQ' : 'Earth',
-                  interests: isRootAdmin ? ['technology', 'business'] : ['technology'],
-                  socialLinks: {},
-                  savedPosts: [],
-                  createdAt: new Date().toISOString(),
-                  hasSetupAccount: isRootAdmin,
-                  isBlocked: false,
-                  role: isRootAdmin ? 'super_admin' : 'user',
-                  isAdmin: isRootAdmin,
-                  walletBalance: isRootAdmin ? 1000.00 : 25.00,
-                  walletCredits: isRootAdmin ? 99999 : 500,
-                  isMonetizationEnabled: isRootAdmin,
-                  monthlySubscriptionPrice: isRootAdmin ? 0.00 : 4.99,
-                  subscribedCreators: []
-                };
-                cachedUsers.push(existingLocal);
-                localStorage.setItem('freshlink_loc_users', JSON.stringify(cachedUsers));
-              }
-              setUsers(cachedUsers);
-              return;
-            }
-
-            const userDocRef = doc(db, 'users', user.uid);
-            const userSnap = await getDoc(userDocRef);
-            const isRootAdmin = user.email?.toLowerCase() === 'fresh.linksd@gmail.com';
- 
-            if (!userSnap.exists()) {
-              // Create default profile for this Firebase Auth session
-              const defaultUser: User = {
-                id: user.uid,
-                name: isRootAdmin ? 'Super Admin' : (user.displayName || `Writer ${user.uid.slice(0, 5)}`),
-                email: isRootAdmin ? 'fresh.linksd@gmail.com' : (user.email || `${user.uid}@freshlinkconnect.info`),
-                bio: isRootAdmin ? 'Root Developer & Primary System clearing administrator.' : 'A creator exploring the FreshLink connection platform.',
-                profileImage: user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&h=250&q=80',
-                coverImage: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=1200&q=80',
-                location: isRootAdmin ? 'HQ' : 'Earth',
-                interests: isRootAdmin ? ['technology', 'business'] : ['technology'],
-                socialLinks: {},
-                savedPosts: [],
-                createdAt: new Date().toISOString(),
-                hasSetupAccount: isRootAdmin,
-                isBlocked: false,
-                role: isRootAdmin ? 'super_admin' : 'user',
-                isAdmin: isRootAdmin,
-                walletBalance: isRootAdmin ? 1000.00 : 25.00,
-                walletCredits: isRootAdmin ? 99999 : 500,
-                isMonetizationEnabled: isRootAdmin,
-                monthlySubscriptionPrice: isRootAdmin ? 0.00 : 4.99,
-                subscribedCreators: []
-              };
-              await setDoc(userDocRef, defaultUser);
-            } else {
-              // Document exists! If they are the root admin, force email, role & isAdmin to be correct
-              if (isRootAdmin) {
-                const currentData = userSnap.data();
-                if (currentData.email?.toLowerCase() !== 'fresh.linksd@gmail.com' || currentData.role !== 'super_admin' || !currentData.isAdmin) {
-                  await updateDoc(userDocRef, {
-                    name: currentData.name || 'Super Admin',
-                    email: 'fresh.linksd@gmail.com',
-                    role: 'super_admin',
-                    isAdmin: true,
-                    hasSetupAccount: true,
-                    isBlocked: false
-                  });
-                }
-              }
-            }
-          } catch (err: any) {
-            console.error("Failed to guarantee user profile document in Firestore, falling back to local database:", err);
-            const errMsg = err instanceof Error ? err.message : String(err);
-            if (
-              errMsg.includes('Quota limit') || 
-              errMsg.includes('quota') || 
-              errMsg.includes('exceeded') || 
-              errMsg.includes('resource-exhausted') || 
-              errMsg.includes('Resource exhausted') ||
-              errMsg.includes('already-exists') ||
-              errMsg.includes('already exists') ||
-              errMsg.includes('Target ID')
-            ) {
-              triggerLocalQuotaFallback();
-              
-              const cachedUsersStr = localStorage.getItem('freshlink_loc_users');
-              let cachedUsers: User[] = [];
-              if (cachedUsersStr) {
-                try { cachedUsers = JSON.parse(cachedUsersStr); } catch(e) {}
-              }
-              if (cachedUsers.length === 0) {
-                cachedUsers = [...SEED_USERS];
-              }
-              const isRootAdmin = user.email?.toLowerCase() === 'fresh.linksd@gmail.com';
-              let existingLocal = cachedUsers.find(u => u.id === user.uid);
-              if (!existingLocal) {
-                existingLocal = {
-                  id: user.uid,
-                  name: isRootAdmin ? 'Super Admin' : (user.displayName || `Writer ${user.uid.slice(0, 5)}`),
-                  email: isRootAdmin ? 'fresh.linksd@gmail.com' : (user.email || `${user.uid}@freshlinkconnect.info`),
-                  bio: isRootAdmin ? 'Root Developer & Primary System clearing administrator.' : 'A creator exploring the FreshLink connection platform.',
-                  profileImage: user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&h=250&q=80',
-                  coverImage: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=1200&q=80',
-                  location: isRootAdmin ? 'HQ' : 'Earth',
-                  interests: isRootAdmin ? ['technology', 'business'] : ['technology'],
-                  socialLinks: {},
-                  savedPosts: [],
-                  createdAt: new Date().toISOString(),
-                  hasSetupAccount: isRootAdmin,
-                  isBlocked: false,
-                  role: isRootAdmin ? 'super_admin' : 'user',
-                  isAdmin: isRootAdmin,
-                  walletBalance: isRootAdmin ? 1000.00 : 25.00,
-                  walletCredits: isRootAdmin ? 99999 : 500,
-                  isMonetizationEnabled: isRootAdmin,
-                  monthlySubscriptionPrice: isRootAdmin ? 0.00 : 4.99,
-                  subscribedCreators: []
-                };
-                cachedUsers.push(existingLocal);
-                localStorage.setItem('freshlink_loc_users', JSON.stringify(cachedUsers));
-              }
-              setUsers(cachedUsers);
-            }
-          }
-        } else {
-          setCurrentUserId(null);
-        }
-      });
-    };
-
-    syncAuthAndUser();
-
-    return () => authUnsub();
-  }, []);
-
-  // Real-time listener for ads
-  useEffect(() => {
-    if (isQuotaFallbackMode) return;
-    let unsubAds: (() => void) | null = null;
-    const timer = setTimeout(() => {
-      const adsQuery = collection(db, 'ads');
-      unsubAds = onSnapshot(adsQuery, (snap) => {
-        const updatedAds: AdBanner[] = [];
-        snap.forEach((doc) => updatedAds.push(doc.data() as AdBanner));
-        if (updatedAds.length === 0) {
-          updatedAds.push(DEFAULT_SEED_AD);
-        }
-        setAds(updatedAds);
-      }, (error) => {
-        handleSubError(error, 'ads');
-      });
-    }, 150);
-
-    return () => {
-      clearTimeout(timer);
-      if (unsubAds) unsubAds();
-    };
-  }, [isQuotaFallbackMode]);
-
-  // 2. High-Performance One-Time Initial Data Load & Caching
-  const handleSubError = (error: any, collectionName: string) => {
-    const errMsg = error instanceof Error ? error.message : String(error);
-    if (
-      errMsg.includes('Quota limit') || 
-      errMsg.includes('quota') || 
-      errMsg.includes('exceeded') || 
-      errMsg.includes('resource-exhausted') || 
-      errMsg.includes('Resource exhausted') ||
-      errMsg.includes('already-exists') ||
-      errMsg.includes('already exists') ||
-      errMsg.includes('Target ID')
-    ) {
-      triggerLocalQuotaFallback();
-    } else {
-      handleFirestoreError(error, OperationType.GET, collectionName);
-    }
-  };
-
-  const refetchData = async (hasCache = false) => {
-    if (isQuotaFallbackMode || !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-      setLoading(false);
-      return;
-    }
-    try {
-      if (!hasCache) {
-        setLoading(true);
-      }
-      // Execute single-round concurrent reads instead of maintaining heavy, permanent wide-collection listeners
-      const [usersSnap, postsSnap, likesSnap, commentsSnap, followersSnap, adsSnap] = await Promise.all([
-        getDocs(collection(db, 'users')),
-        getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(postLimit))),
-        getDocs(collection(db, 'likes')),
-        getDocs(collection(db, 'comments')),
-        getDocs(collection(db, 'followers')),
-        getDocs(collection(db, 'ads'))
+      const [uRes, pRes, dRes, fRes, cRes, mRes, lRes, wRes, nRes, rRes, aRes, statusRes] = await Promise.all([
+        fetch('/api/users').then(res => res.json()),
+        fetch('/api/posts').then(res => res.json()),
+        fetch('/api/drafts').then(res => res.json()).catch(() => []),
+        fetch('/api/followers').then(res => res.json()),
+        fetch('/api/comments').then(res => res.json()),
+        fetch('/api/messages').then(res => res.json()),
+        fetch('/api/likes').then(res => res.json()),
+        fetch('/api/withdrawals').then(res => res.json()),
+        fetch('/api/notifications').then(res => res.json()),
+        fetch('/api/post-reports').then(res => res.json()),
+        fetch('/api/ads').then(res => res.json()),
+        fetch('/api/db-status').then(res => res.json()).catch(() => ({ engine: 'In-Memory Fallback DB Engine' }))
       ]);
 
-      const usersList: User[] = [];
-      usersSnap.forEach((d) => usersList.push(d.data() as User));
-      setUsers(usersList);
-
-      const postsList: Post[] = [];
-      postsSnap.forEach((d) => postsList.push(d.data() as Post));
-      setPosts(postsList);
-      setHasMorePosts(postsSnap.docs.length >= postLimit);
-
-      const likesList: Like[] = [];
-      likesSnap.forEach((d) => likesList.push(d.data() as Like));
-      setLikes(likesList);
-
-      const commentsList: Comment[] = [];
-      commentsSnap.forEach((d) => commentsList.push(d.data() as Comment));
-      setComments(commentsList);
-
-      const followersList: Follower[] = [];
-      followersSnap.forEach((d) => followersList.push(d.data() as Follower));
-      setFollowers(followersList);
-
-      const adsList: AdBanner[] = [];
-      adsSnap.forEach((d) => adsList.push(d.data() as AdBanner));
-      
-      if (adsList.length === 0) {
-        adsList.push(DEFAULT_SEED_AD);
-      }
-      setAds(adsList);
-
-      // Save fresh lists to IndexedDB for offline access
-      try {
-        await setCache('users', usersList);
-        await setCache('posts', postsList);
-        await setCache('likes', likesList);
-        await setCache('comments', commentsList);
-        await setCache('followers', followersList);
-        await setCache('ads', adsList);
-      } catch (cacheErr) {
-        console.warn("Failed to update IndexedDB cache:", cacheErr);
-      }
-
-      // Fetch postReports separately and handle permissions gracefully (since only admins can read them)
-      try {
-        const reportsSnap = await getDocs(collection(db, 'postReports'));
-        const reportsList: PostReport[] = [];
-        reportsSnap.forEach((d) => reportsList.push(d.data() as PostReport));
-        setPostReports(reportsList);
-      } catch (reportErr: any) {
-        console.log("Post reports skipped or permission denied (expected for non-admins):", reportErr.message || reportErr);
-        setPostReports([]);
-      }
-
-    } catch (err: any) {
-      console.error("An error occurred during Firestore load:", err);
-      const errMsg = err instanceof Error ? err.message : String(err);
-      if (
-        errMsg.includes('Quota limit') || 
-        errMsg.includes('quota') || 
-        errMsg.includes('exceeded') || 
-        errMsg.includes('resource-exhausted') || 
-        errMsg.includes('Resource exhausted') ||
-        errMsg.includes('already-exists') ||
-        errMsg.includes('already exists') ||
-        errMsg.includes('Target ID')
-      ) {
-        triggerLocalQuotaFallback();
-      }
+      setUsers(uRes || []);
+      setPosts(pRes || []);
+      setDrafts(dRes || []);
+      setFollowers(fRes || []);
+      setComments(cRes || []);
+      setMessages(mRes || []);
+      setLikes(lRes || []);
+      setWithdrawals(wRes || []);
+      setNotifications(nRes || []);
+      setPostReports(rRes || []);
+      setAds(aRes || []);
+      setIsQuotaFallbackMode(statusRes?.engine === 'In-Memory Fallback DB Engine');
+    } catch (err) {
+      console.error("Error synchronizing database state:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    const loadCacheAndFetch = async () => {
-      // 1. Load cached state from IndexedDB instantly to enable offline / zero latency startup
-      let hasCache = false;
-      try {
-        let cachedUsers = await getCache('users');
-        let cachedPosts = await getCache('posts');
-        let cachedComments = await getCache('comments');
-        let cachedLikes = await getCache('likes');
-        let cachedFollowers = await getCache('followers');
-        let cachedAds = await getCache('ads');
-
-        // Check localStorage backups as a high-reliability fallback
-        if (!cachedUsers || cachedUsers.length === 0) {
-          const backup = localStorage.getItem('freshlink_loc_users');
-          if (backup) {
-            try { cachedUsers = JSON.parse(backup); } catch (e) {}
-          }
-        }
-        if (!cachedPosts || cachedPosts.length === 0) {
-          const backup = localStorage.getItem('freshlink_loc_posts');
-          if (backup) {
-            try { cachedPosts = JSON.parse(backup); } catch (e) {}
-          }
-        }
-        if (!cachedComments || cachedComments.length === 0) {
-          const backup = localStorage.getItem('freshlink_loc_comments');
-          if (backup) {
-            try { cachedComments = JSON.parse(backup); } catch (e) {}
-          }
-        }
-        if (!cachedLikes || cachedLikes.length === 0) {
-          const backup = localStorage.getItem('freshlink_loc_likes');
-          if (backup) {
-            try { cachedLikes = JSON.parse(backup); } catch (e) {}
-          }
-        }
-        if (!cachedFollowers || cachedFollowers.length === 0) {
-          const backup = localStorage.getItem('freshlink_loc_followers');
-          if (backup) {
-            try { cachedFollowers = JSON.parse(backup); } catch (e) {}
-          }
-        }
-        if (!cachedAds || cachedAds.length === 0) {
-          const backup = localStorage.getItem('freshlink_loc_ads');
-          if (backup) {
-            try { cachedAds = JSON.parse(backup); } catch (e) {}
-          }
-        }
-
-        if (cachedUsers && cachedUsers.length > 0) {
-          setUsers(cachedUsers);
-          hasCache = true;
-        }
-        if (cachedPosts && cachedPosts.length > 0) {
-          setPosts(cachedPosts);
-          hasCache = true;
-        }
-        if (cachedComments) setComments(cachedComments);
-        if (cachedLikes) setLikes(cachedLikes);
-        if (cachedFollowers) setFollowers(cachedFollowers);
-        if (cachedAds) {
-          setAds(cachedAds.length === 0 ? [DEFAULT_SEED_AD] : cachedAds);
-        }
-      } catch (e) {
-        console.warn("Failed to read IndexedDB startup cache:", e);
-      }
-
-      if (hasCache) {
-        setLoading(false);
-      }
-
-      // 2. Fetch fresh network updates
-      await refetchData(hasCache);
-    };
-
-    loadCacheAndFetch();
-  }, [currentUserId, isQuotaFallbackMode, postLimit]);
-
-  // Periodic automatic background revalidation every 60 seconds
-  useEffect(() => {
-    if (isQuotaFallbackMode) return;
-    const interval = setInterval(() => {
-      if (navigator.onLine) {
-        refetchData(true).catch(err => console.warn("Background revalidation failed:", err));
-      }
-    }, 60000);
-    return () => clearInterval(interval);
-  }, [isQuotaFallbackMode]);
-
-  // Request browser notification permissions on login/mount
+  // Request browser notification permissions & establish user
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       if (window.Notification.permission === 'default') {
         window.Notification.requestPermission();
       }
     }
-  }, [currentUserId]);
 
-  const triggerDeviceNotification = (notif: Notification) => {
-    console.log("[Notification System] triggerDeviceNotification called for:", notif);
-    if (typeof window === 'undefined') {
-      console.warn("[Notification System] window is undefined - skipping device alert");
-      return;
-    }
-    if (!('Notification' in window)) {
-      console.warn("[Notification System] 'Notification' is not supported in this browser");
-      return;
-    }
+    const initUser = async () => {
+      let cachedId = localStorage.getItem('freshlink_current_user_id');
+      if (!cachedId) {
+        cachedId = `anon_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
+        localStorage.setItem('freshlink_current_user_id', cachedId);
+      }
+      setCurrentUserId(cachedId);
 
-    console.log("[Notification System] Current browser Notification permission state:", window.Notification.permission);
-    
-    // Read and respect target user's notification toggles
-    const userToNotify = users.find(u => u.id === notif.userId);
-    if (userToNotify && userToNotify.notificationSettings) {
-      const settings = userToNotify.notificationSettings;
-      console.log("[Notification System] Evaluating target user notification preferences:", settings);
-      if (notif.type === 'like' && settings.likes === false) {
-        console.log("[Notification System] Blocked: user 'likes' notifications are disabled");
-        return;
-      }
-      if (notif.type === 'comment' && settings.comments === false) {
-        console.log("[Notification System] Blocked: user 'comments' notifications are disabled");
-        return;
-      }
-      if (notif.type === 'follow' && settings.follows === false) {
-        console.log("[Notification System] Blocked: user 'follows' notifications are disabled");
-        return;
-      }
-      if (notif.type === 'system' && settings.system === false) {
-        console.log("[Notification System] Blocked: user 'system' notifications are disabled");
-        return;
-      }
-      if (notif.type === 'ad_alert' && settings.adAlerts === false) {
-        console.log("[Notification System] Blocked: user 'ad_alert' notifications are disabled");
-        return;
-      }
-    }
-
-    if (window.Notification.permission === 'granted') {
+      // Check or register this profile on backend
       try {
-        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-          console.log("[Notification System] Service Worker controller detected. Using registration to display alert...");
-          navigator.serviceWorker.ready.then((reg) => {
-            reg.showNotification("FreshLinkConnect", {
-              body: notif.message,
-              icon: notif.senderImage || "/favicon.png",
-              tag: notif.id,
-              badge: "/favicon.png"
-            }).then(() => {
-              console.log("[Notification System] Service Worker successfully scheduled/rendered notification banner");
-            }).catch((swErr) => {
-              console.error("[Notification System] SW registration notification failed, falling back to legacy constructor:", swErr);
-              new window.Notification("FreshLinkConnect", {
-                body: notif.message,
-                icon: notif.senderImage || "/favicon.png",
-                tag: notif.id,
-              });
-            });
+        const checkRes = await fetch(`/api/users/${cachedId}`);
+        if (!checkRes.ok) {
+          const isRootAdmin = cachedId === 'user_root_admin' || cachedId.toLowerCase().includes('admin');
+          const defaultUser: User = {
+            id: cachedId,
+            name: `Explorer ${cachedId.slice(-5)}`,
+            email: `${cachedId}@freshlinkconnect.info`,
+            bio: 'A creator exploring the FreshLink connection platform.',
+            profileImage: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&h=250&q=80',
+            coverImage: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=1200&q=80',
+            location: 'Earth',
+            interests: ['technology'],
+            socialLinks: {},
+            savedPosts: [],
+            createdAt: new Date().toISOString(),
+            hasSetupAccount: false,
+            isBlocked: false,
+            role: 'user',
+            isAdmin: false,
+            walletBalance: 25.00,
+            walletCredits: 500,
+            isMonetizationEnabled: false,
+            monthlySubscriptionPrice: 4.99,
+            subscribedCreators: []
+          };
+          await fetch('/api/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(defaultUser)
           });
-        } else {
-          console.log("[Notification System] Service Worker not active. Spawning direct browser window.Notification...");
-          new window.Notification("FreshLinkConnect", {
-            body: notif.message,
-            icon: notif.senderImage || "/favicon.png",
-            tag: notif.id,
-          });
-          console.log("[Notification System] Direct window.Notification constructor executed successfully");
         }
-      } catch (e) {
-        console.error("[Notification System] Failed to render native notification banner:", e);
+      } catch (err) {
+        console.error("Failed to secure current user profile in Database:", err);
       }
-    } else {
-      console.warn("[Notification System] Notification permission is not 'granted' (current status: " + window.Notification.permission + "). Banner cannot be rendered directly. Please prompt user to grant permissions.");
+
+      await refetchData();
+    };
+
+    initUser();
+
+    // Setup periodic polling to get real-time-like sync for comments/messages/likes
+    const interval = setInterval(refetchData, 6000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Native notification trigger helper
+  const triggerDeviceNotification = (notif: Notification) => {
+    if (typeof window === 'undefined' || !('Notification' in window) || window.Notification.permission !== 'granted') {
+      return;
+    }
+    try {
+      new window.Notification("FreshLinkConnect", {
+        body: notif.message,
+        icon: notif.senderImage || "/favicon.png",
+        tag: notif.id
+      });
+    } catch (e) {
+      console.error("Native notification display failed:", e);
     }
   };
 
-  // 2. Real-time collections listener
-  useEffect(() => {
-    let unsubWithdrawals: (() => void) | null = null;
-    let unsubNotifications: (() => void) | null = null;
-
-    if (!currentUserId || isQuotaFallbackMode) {
-      setWithdrawals([]);
-      setNotifications([]);
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      unsubWithdrawals = onSnapshot(collection(db, 'withdrawals'), (snap) => {
-        const list: WithdrawalRequest[] = [];
-        snap.forEach((d) => list.push(d.data() as WithdrawalRequest));
-        setWithdrawals(list);
-      }, (error) => {
-        handleSubError(error, 'withdrawals');
-      });
-
-      const qNotif = query(collection(db, 'notifications'), where('userId', '==', currentUserId));
-      unsubNotifications = onSnapshot(qNotif, (snap) => {
-        const list: Notification[] = [];
-        const newlyArrived: Notification[] = [];
-        const nowMs = Date.now();
-        
-        snap.forEach((d) => {
-          list.push(d.data() as Notification);
-        });
-        
-        setNotifications(prev => {
-          list.forEach(n => {
-            if (!n.read) {
-              const createdMs = n.createdAt ? new Date(n.createdAt).getTime() : 0;
-              // Created in the last 15 seconds, and not already in state
-              if (nowMs - createdMs < 15000) {
-                const alreadyExists = prev.some(p => p.id === n.id);
-                if (!alreadyExists) {
-                  newlyArrived.push(n);
-                }
-              }
-            }
-          });
-          return list;
-        });
-
-        newlyArrived.forEach(notif => {
-          triggerDeviceNotification(notif);
-        });
-      }, (error) => {
-        handleSubError(error, 'notifications');
-      });
-    }, 150);
-
-    return () => {
-      clearTimeout(timer);
-      if (unsubWithdrawals) unsubWithdrawals();
-      if (unsubNotifications) unsubNotifications();
-    };
-  }, [currentUserId, isQuotaFallbackMode]);
-
-  // 3. User Private Messages subscription
-  useEffect(() => {
-    if (!currentUserId) {
-      setMessages([]);
-      return;
-    }
-
-    if (isQuotaFallbackMode) {
-      // Offline/Sandbox Mode: read cached local messages instead of subscribing to Firestore
-      const cachedMsgsStr = localStorage.getItem('freshlink_loc_messages');
-      if (cachedMsgsStr) {
-        try {
-          setMessages(JSON.parse(cachedMsgsStr));
-        } catch (e) {}
-      } else {
-        setMessages(SEED_MESSAGES);
-      }
-      return;
-    }
-
-    let unsubSender: (() => void) | null = null;
-    let unsubReceiver: (() => void) | null = null;
-
-    const timer = setTimeout(() => {
-      // Load messages where user is the sender
-      const qSender = query(collection(db, 'messages'), where('senderId', '==', currentUserId));
-      unsubSender = onSnapshot(qSender, (snap) => {
-        if (isQuotaFallbackMode) return;
-        setMessages((prev) => {
-          const otherMsgs = prev.filter((m) => m.senderId !== currentUserId);
-          const updatedSenderMsgs: Message[] = [];
-          snap.forEach((doc) => updatedSenderMsgs.push(doc.data() as Message));
-          const merged = [...otherMsgs, ...updatedSenderMsgs];
-          return Array.from(new Map(merged.map((m) => [m.id, m])).values());
-        });
-      }, (error) => {
-        handleSubError(error, 'messages_sender');
-      });
-
-      // Load messages where user is the receiver
-      const qReceiver = query(collection(db, 'messages'), where('receiverId', '==', currentUserId));
-      unsubReceiver = onSnapshot(qReceiver, (snap) => {
-        if (isQuotaFallbackMode) return;
-        setMessages((prev) => {
-          const otherMsgs = prev.filter((m) => m.receiverId !== currentUserId);
-          const updatedReceiverMsgs: Message[] = [];
-          snap.forEach((doc) => updatedReceiverMsgs.push(doc.data() as Message));
-          const merged = [...otherMsgs, ...updatedReceiverMsgs];
-          return Array.from(new Map(merged.map((m) => [m.id, m])).values());
-        });
-
-        // Automatically batch-update messages to 'seen' or 'delivered'
-        const batch = writeBatch(db);
-        let needsCommit = false;
-        snap.forEach((docSnap) => {
-          const data = docSnap.data() as Message;
-          if (data.receiverId === currentUserId && !data.read) {
-            if (data.senderId === activeChatPartnerRef.current) {
-              batch.update(docSnap.ref, { read: true, status: 'seen' });
-              needsCommit = true;
-            } else if (!data.status || data.status === 'sent') {
-              batch.update(docSnap.ref, { status: 'delivered' });
-              needsCommit = true;
-            }
-          }
-        });
-        if (needsCommit) {
-          batch.commit().catch(e => console.error("Error committing message status update:", e));
-        }
-      }, (error) => {
-        handleSubError(error, 'messages_receiver');
-      });
-    }, 150);
-
-    return () => {
-      clearTimeout(timer);
-      if (unsubSender) unsubSender();
-      if (unsubReceiver) unsubReceiver();
-    };
-  }, [currentUserId, isQuotaFallbackMode]);
-
-   const rawCurrentUser = users.find(u => u.id === currentUserId) || null;
-  const currentUser = React.useMemo(() => {
-    if (!rawCurrentUser) return null;
-    const isRootAdmin = rawCurrentUser.email?.toLowerCase() === 'fresh.linksd@gmail.com' || auth.currentUser?.email?.toLowerCase() === 'fresh.linksd@gmail.com';
-    if (isRootAdmin) {
-      return {
-        ...rawCurrentUser,
-        email: 'fresh.linksd@gmail.com',
-        role: 'super_admin' as const,
-        isAdmin: true
-      };
-    }
-    return rawCurrentUser;
-  }, [rawCurrentUser, auth.currentUser?.email]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      if (currentUser) {
-        localStorage.setItem('freshlink_current_user_id', currentUser.id);
-        localStorage.setItem('freshlink_cached_user', JSON.stringify(currentUser));
-      } else {
-        localStorage.removeItem('freshlink_current_user_id');
-        localStorage.removeItem('freshlink_cached_user');
-      }
-    }
-  }, [currentUser]);
-
-  useEffect(() => {
-    const isRootGmail = rawCurrentUser?.email?.toLowerCase() === 'fresh.linksd@gmail.com' || auth.currentUser?.email?.toLowerCase() === 'fresh.linksd@gmail.com';
-    if (rawCurrentUser && isRootGmail) {
-      if (rawCurrentUser.role !== 'super_admin' || !rawCurrentUser.isAdmin || rawCurrentUser.email?.toLowerCase() !== 'fresh.linksd@gmail.com') {
-        const userDocRef = doc(db, 'users', rawCurrentUser.id);
-        updateDoc(userDocRef, {
-          email: 'fresh.linksd@gmail.com',
-          role: 'super_admin',
-          isAdmin: true
-        }).catch(err => console.error("Auto-promoting root user to super_admin failed:", err));
-      }
-    }
-  }, [rawCurrentUser, auth.currentUser?.email]);
-
-  // Custom User Profile Registration
+  // --- AUTH OPERATIONS ---
   const register = async (name: string, email: string, interests: string[], extraDetails?: Partial<User>) => {
-    if (!currentUserId) throw new Error("Authenticated session is required for registering profiles");
+    if (!currentUserId) throw new Error("Anonymous session is missing.");
     const isRootAdmin = email.toLowerCase() === 'fresh.linksd@gmail.com';
     const newUser: User = {
       id: currentUserId,
@@ -1218,40 +314,102 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       ...extraDetails
     };
 
-    await runWriteOperation(
-      async () => {
-        await setDoc(doc(db, 'users', currentUserId), newUser);
-      },
-      () => {
-        setUsers(prev => {
-          const index = prev.findIndex(u => u.id === currentUserId);
-          if (index >= 0) {
-            const updated = [...prev];
-            updated[index] = newUser;
-            return updated;
-          } else {
-            return [...prev, newUser];
-          }
-        });
-      },
-      `users/${currentUserId}`
-    );
+    await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newUser)
+    });
+
+    localStorage.setItem('freshlink_cached_user', JSON.stringify(newUser));
+    setUsers(prev => {
+      const filtered = prev.filter(u => u.id !== currentUserId);
+      return [...filtered, newUser];
+    });
     return newUser;
   };
 
-  // Login via Copying Attributes from Registered Template
   const login = async (email: string) => {
     let matched = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    
-    // Auto-create/guarantee root super_admin if they login with this specific email
-    if (!matched && email.toLowerCase() === 'fresh.linksd@gmail.com' && currentUserId) {
-      try {
+
+    // Secure Auto-seeding of Root Admin if they log in
+    if (!matched && email.toLowerCase() === 'fresh.linksd@gmail.com') {
+      const defaultSuperAdmin: User = {
+        id: 'super_admin_id',
+        name: 'Super Admin',
+        email: 'fresh.linksd@gmail.com',
+        bio: 'Root Developer & Primary System clearing administrator.',
+        profileImage: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&h=250&q=80',
+        coverImage: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=1200&q=80',
+        location: 'HQ',
+        interests: ['technology', 'business'],
+        socialLinks: {},
+        savedPosts: [],
+        createdAt: new Date().toISOString(),
+        hasSetupAccount: true,
+        isBlocked: false,
+        role: 'super_admin',
+        isAdmin: true,
+        walletBalance: 1000.00,
+        walletCredits: 99999,
+        isMonetizationEnabled: true,
+        monthlySubscriptionPrice: 0.00,
+        subscribedCreators: [],
+        hasVerifiedDetails: true
+      };
+      await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(defaultSuperAdmin)
+      });
+      matched = defaultSuperAdmin;
+    }
+
+    if (!matched) return false;
+
+    if (matched.isBlocked) {
+      throw new Error("This account has been blocked by community administrators.");
+    }
+
+    // Bind local environment user session to this matched user profile
+    setCurrentUserId(matched.id);
+    localStorage.setItem('freshlink_current_user_id', matched.id);
+    localStorage.setItem('freshlink_cached_user', JSON.stringify(matched));
+    await refetchData();
+    return true;
+  };
+
+  const loginWithGoogle = async () => {
+    try {
+      const apps = getApps();
+      const fbApp = apps.length === 0 ? initializeApp(firebaseConfig) : getApp();
+      const auth = getAuth(fbApp);
+      const provider = new GoogleAuthProvider();
+      
+      // Request standard profile fields and configure prompt
+      provider.setCustomParameters({ prompt: 'select_account' });
+      
+      const result = await signInWithPopup(auth, provider);
+      const firebaseUser = result.user;
+      
+      if (!firebaseUser || !firebaseUser.email) {
+        throw new Error('Google authentication succeeded but did not return an email address.');
+      }
+      
+      const email = firebaseUser.email;
+      const displayName = firebaseUser.displayName || 'Google User';
+      const photoURL = firebaseUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&h=250&q=80';
+      
+      // Find matching user profile by email (case-insensitive)
+      let matched = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      
+      // Auto-seeding for root admin if fresh.linksd@gmail.com logs in
+      if (!matched && email.toLowerCase() === 'fresh.linksd@gmail.com') {
         const defaultSuperAdmin: User = {
-          id: currentUserId,
-          name: 'Super Admin',
+          id: 'super_admin_id',
+          name: displayName,
           email: 'fresh.linksd@gmail.com',
           bio: 'Root Developer & Primary System clearing administrator.',
-          profileImage: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&h=250&q=80',
+          profileImage: photoURL,
           coverImage: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=1200&q=80',
           location: 'HQ',
           interests: ['technology', 'business'],
@@ -1269,126 +427,96 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
           subscribedCreators: [],
           hasVerifiedDetails: true
         };
-        await setDoc(doc(db, 'users', defaultSuperAdmin.id), defaultSuperAdmin);
+        await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(defaultSuperAdmin)
+        });
         matched = defaultSuperAdmin;
-      } catch (err) {
-        console.error("Failed to seed fresh.linksd@gmail.com on-demand:", err);
       }
-    }
-
-    if (!matched || !currentUserId) return false;
-
-    if (matched.isBlocked) {
-      throw new Error("This account has been blocked by community administrators.");
-    }
-
-    const isRootAdmin = matched.email.toLowerCase() === 'fresh.linksd@gmail.com';
-    const updatedAttrs: Partial<User> = {
-      name: matched.name,
-      email: matched.email,
-      bio: matched.bio,
-      profileImage: matched.profileImage,
-      coverImage: matched.coverImage,
-      location: matched.location,
-      interests: matched.interests,
-      socialLinks: matched.socialLinks || {},
-      savedPosts: matched.savedPosts || [],
-      hasSetupAccount: true,
-      isBlocked: matched.isBlocked || false,
-      role: isRootAdmin ? 'super_admin' : (matched.role || 'user'),
-      isAdmin: isRootAdmin ? true : (matched.isAdmin || false),
-      phoneNumber: matched.phoneNumber || '',
-      panNumber: matched.panNumber || '',
-      officialDocId: matched.officialDocId || '',
-      idPhoto: matched.idPhoto || '',
-      isApprovedByAdmin: matched.isApprovedByAdmin || false,
-      walletBalance: matched.walletBalance !== undefined ? matched.walletBalance : 25.00,
-      walletCredits: matched.walletCredits !== undefined ? matched.walletCredits : 500,
-      isMonetizationEnabled: matched.isMonetizationEnabled || false,
-      monthlySubscriptionPrice: matched.monthlySubscriptionPrice !== undefined ? matched.monthlySubscriptionPrice : 4.99,
-      subscribedCreators: matched.subscribedCreators || [],
-      subscribedTiers: matched.subscribedTiers || {},
-      hasVerifiedDetails: matched.hasVerifiedDetails || false
-    };
-
-    await runWriteOperation(
-      async () => {
-        await updateDoc(doc(db, 'users', currentUserId), updatedAttrs);
-      },
-      () => {
-        setUsers(prev => prev.map(u => u.id === currentUserId ? { ...u, ...updatedAttrs } : u));
-      },
-      `users/${currentUserId}`
-    );
-    return true;
-  };
-
-  // Login via Google Sign-In (real auth session)
-  const loginWithGoogle = async () => {
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
-    
-    const isIframe = window.self !== window.top;
-
-    try {
-      const result = await signInWithPopup(auth, provider);
-      return result.user !== null;
-    } catch (err: any) {
-      console.error("Google signInWithPopup failed:", err);
       
-      const isPopupBlocked = err?.code === 'auth/popup-blocked' || 
-                             err?.message?.toLowerCase().includes('popup') || 
-                             err?.message?.toLowerCase().includes('blocked');
-
-      if (isPopupBlocked) {
-        if (isIframe) {
-          // In an iframe, Google Auth Redirect will also fail because accounts.google.com has frame ancestors restriction.
-          // Throw a specialized error so the front-end UI can guide the user.
-          throw new Error('IFRAME_POPUP_BLOCKED');
-        } else {
-          // Outside iframe, try fallback redirect
-          try {
-            await signInWithRedirect(auth, provider);
-            return false;
-          } catch (redirectErr) {
-            console.error("Google signInWithRedirect fallback failed:", redirectErr);
-            throw redirectErr;
-          }
+      if (matched) {
+        if (matched.isBlocked) {
+          throw new Error("This account has been blocked by community administrators.");
         }
+        setCurrentUserId(matched.id);
+        localStorage.setItem('freshlink_current_user_id', matched.id);
+        localStorage.setItem('freshlink_cached_user', JSON.stringify(matched));
+        await refetchData();
+        return true;
+      } else {
+        // Create an un-onboarded profile for them so they can choose their interests/onboard
+        const googleUserId = `google_${firebaseUser.uid}`;
+        const newGoogleUser: User = {
+          id: googleUserId,
+          name: displayName,
+          email: email,
+          bio: 'A new discoverer navigating via Google credentials.',
+          profileImage: photoURL,
+          coverImage: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=1200&q=80',
+          location: 'Internet',
+          interests: [],
+          socialLinks: {},
+          savedPosts: [],
+          createdAt: new Date().toISOString(),
+          hasSetupAccount: false, // forces onboarding setup to run!
+          isBlocked: false,
+          role: 'user',
+          isAdmin: false,
+          walletBalance: 25.00,
+          walletCredits: 500,
+          isMonetizationEnabled: false,
+          monthlySubscriptionPrice: 4.99,
+          subscribedCreators: []
+        };
+        
+        await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newGoogleUser)
+        });
+        
+        setCurrentUserId(googleUserId);
+        localStorage.setItem('freshlink_current_user_id', googleUserId);
+        localStorage.setItem('freshlink_cached_user', JSON.stringify(newGoogleUser));
+        await refetchData();
+        return true;
+      }
+    } catch (err: any) {
+      console.error("Client Google authentication error details:", {
+        message: err.message,
+        code: err.code,
+        stack: err.stack,
+        fullError: err
+      });
+      // Map to correct error code so Auth.tsx shows the iframe popup warning
+      if (err?.code === 'auth/popup-blocked' || err?.message?.includes('popup') || err?.message?.includes('closed by user')) {
+        throw new Error('IFRAME_POPUP_BLOCKED');
       }
       throw err;
     }
   };
 
-  // Sign out cleanly
   const logout = async () => {
-    try {
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('freshlink_current_user_id');
-        localStorage.removeItem('freshlink_cached_user');
-      }
-      setCurrentUserId(null);
-      await signOut(auth);
-    } catch (err) {
-      console.error("Auth session signout error:", err);
-    }
+    // Return back to fresh random browsing session
+    const anonId = `anon_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
+    setCurrentUserId(anonId);
+    localStorage.setItem('freshlink_current_user_id', anonId);
+    localStorage.removeItem('freshlink_cached_user');
+    await refetchData();
   };
 
-  // Profile fields updating
   const updateProfile = async (updated: Partial<User>) => {
     if (!currentUserId) return;
-    await runWriteOperation(
-      async () => {
-        await updateDoc(doc(db, 'users', currentUserId), updated);
-      },
-      () => {
-        setUsers(prev => prev.map(u => u.id === currentUserId ? { ...u, ...updated } : u));
-      },
-      `users/${currentUserId}`
-    );
+    await fetch(`/api/users/${currentUserId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated)
+    });
+    setUsers(prev => prev.map(u => u.id === currentUserId ? { ...u, ...updated } : u));
   };
 
-  // Create article blog post
+  // --- POST OPERATIONS ---
   const createPost = async (
     title: string,
     content: string,
@@ -1402,122 +530,36 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     poll?: PostPoll,
     imageRatio?: 'auto' | '16/9' | '4/3' | '1/1'
   ) => {
-    if (!currentUserId) throw new Error("Authentication required to publish articles");
-    const id = `post_${Date.now()}`;
-    const readingTime = Math.max(1, Math.ceil(content.split(/\s+/).length / 200));
-
+    if (!currentUserId) throw new Error("Auth required");
     const newPost: Post = {
-      id,
+      id: `post_${Date.now()}`,
       userId: currentUserId,
       title,
       content,
-      mediaUrl: mediaUrl || '',
+      mediaUrl,
       category,
-      tags: tags.map(t => t.trim().replace(/^#/, '')).filter(Boolean),
+      tags,
       status,
       createdAt: new Date().toISOString(),
-      readingTime,
-      mediaUrls: mediaUrls || [],
-      videoUrl: videoUrl || '',
-      isPremium: isPremium || false,
-      poll: poll || undefined,
+      readingTime: Math.ceil(content.split(/\s+/).length / 200) || 1,
+      mediaUrls,
+      videoUrl,
+      isPremium,
+      poll,
       views: 0,
-      imageRatio: imageRatio || 'auto'
+      imageRatio
     };
 
-    await runWriteOperation(
-      async () => {
-        await setDoc(doc(db, 'posts', id), newPost);
-      },
-      () => {
-        setPosts(prev => [...prev, newPost]);
-      },
-      `posts/${id}`
-    );
+    await fetch('/api/posts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newPost)
+    });
 
-    if (!navigator.onLine) {
-      console.log(`[PWA Offline] Queueing post ${id}`);
-      try {
-        await addPendingInteraction({
-          type: 'post',
-          postId: id,
-          userId: currentUserId,
-          payload: newPost
-        });
-        if ('serviceWorker' in navigator && 'SyncManager' in window) {
-          const reg = await navigator.serviceWorker.ready;
-          await (reg as any).sync.register('sync-interactions');
-        }
-      } catch (e) {
-        console.warn("Failed to register offline post sync:", e);
-      }
-    }
-
+    setPosts(prev => [...prev, newPost]);
     return newPost;
   };
 
-  // Delete article blog post
-  const deletePost = async (postId: string) => {
-    await runWriteOperation(
-      async () => {
-        await deleteDoc(doc(db, 'posts', postId));
-      },
-      () => {
-        setPosts(prev => prev.filter(p => p.id !== postId));
-      },
-      `posts/${postId}`
-    );
-  };
-
-  // Vote in a post's attached poll
-  const voteInPostPoll = async (postId: string, optionIndex: number) => {
-    if (!currentUserId) throw new Error("Authentication required to vote in polls");
-    const post = posts.find(p => p.id === postId);
-    if (!post || !post.poll) return;
-
-    const updatedPoll = { ...post.poll };
-    if (!updatedPoll.votes) {
-      updatedPoll.votes = {};
-    }
-    // Remove user's previous vote if any
-    Object.keys(updatedPoll.votes).forEach(optIdx => {
-      if (updatedPoll.votes[optIdx]) {
-        updatedPoll.votes[optIdx] = updatedPoll.votes[optIdx].filter(uid => uid !== currentUserId);
-      }
-    });
-    // Add user's vote
-    const optStr = String(optionIndex);
-    if (!updatedPoll.votes[optStr]) {
-      updatedPoll.votes[optStr] = [];
-    }
-    updatedPoll.votes[optStr].push(currentUserId);
-
-    await runWriteOperation(
-      async () => {
-        const postRef = doc(db, 'posts', postId);
-        await updateDoc(postRef, { poll: updatedPoll });
-      },
-      () => {
-        setPosts(prev => prev.map(p => p.id === postId ? { ...p, poll: updatedPoll } : p));
-      },
-      `posts/${postId}`
-    );
-  };
-
-  // Increment view count of a post
-  const incrementPostViews = async (postId: string) => {
-    try {
-      const postRef = doc(db, 'posts', postId);
-      await updateDoc(postRef, {
-        views: increment(1)
-      });
-      setPosts(prev => prev.map(p => p.id === postId ? { ...p, views: (p.views || 0) + 1 } : p));
-    } catch (err) {
-      console.warn("Could not increment post views on server:", err);
-    }
-  };
-
-  // Update article blog post
   const updatePost = async (
     postId: string,
     title: string,
@@ -1530,119 +572,108 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     isPremium?: boolean,
     imageRatio?: 'auto' | '16/9' | '4/3' | '1/1'
   ) => {
-    const updateData: any = {
-      title,
-      content,
-      category,
-      tags: tags.map(t => t.trim().replace(/^#/, '')).filter(Boolean),
-      mediaUrl: mediaUrl || '',
-      updatedAt: new Date().toISOString()
-    };
-    if (mediaUrls !== undefined) {
-      updateData.mediaUrls = mediaUrls;
-    }
-    if (videoUrl !== undefined) {
-      updateData.videoUrl = videoUrl;
-    }
-    if (isPremium !== undefined) {
-      updateData.isPremium = isPremium;
-    }
-    if (imageRatio !== undefined) {
-      updateData.imageRatio = imageRatio;
-    }
-
-    await runWriteOperation(
-      async () => {
-        const postRef = doc(db, 'posts', postId);
-        await updateDoc(postRef, updateData);
-      },
-      () => {
-        setPosts(prev => prev.map(p => p.id === postId ? { ...p, ...updateData } : p));
-      },
-      `posts/${postId}`
-    );
+    const updates = { title, content, category, tags, mediaUrl, mediaUrls, videoUrl, isPremium, imageRatio };
+    await fetch(`/api/posts/${postId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+    setPosts(prev => prev.map(p => p.id === postId ? { ...p, ...updates } : p));
   };
 
-  // Toggle Like on Post
+  const deletePost = async (postId: string) => {
+    await fetch(`/api/posts/${postId}`, { method: 'DELETE' });
+    setPosts(prev => prev.filter(p => p.id !== postId));
+  };
+
+  const saveDraft = async (draft: Draft) => {
+    await fetch('/api/drafts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(draft)
+    });
+    setDrafts(prev => {
+      const idx = prev.findIndex(d => d.id === draft.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = draft;
+        return next;
+      }
+      return [...prev, draft];
+    });
+  };
+
+  const deleteDraft = async (draftId: string) => {
+    await fetch(`/api/drafts/${draftId}`, { method: 'DELETE' });
+    setDrafts(prev => prev.filter(d => d.id !== draftId));
+  };
+
+  const incrementPostViews = async (postId: string) => {
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+    const views = (post.views || 0) + 1;
+    await fetch(`/api/posts/${postId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ views })
+    });
+    setPosts(prev => prev.map(p => p.id === postId ? { ...p, views } : p));
+  };
+
+  const voteInPostPoll = async (postId: string, optionIndex: number) => {
+    if (!currentUserId) throw new Error("Auth required");
+    const post = posts.find(p => p.id === postId);
+    if (!post || !post.poll) return;
+
+    const updatedPoll = { ...post.poll };
+    if (!updatedPoll.votes) updatedPoll.votes = {};
+
+    // Clear previous votes
+    Object.keys(updatedPoll.votes).forEach(idx => {
+      if (updatedPoll.votes![idx]) {
+        updatedPoll.votes![idx] = updatedPoll.votes![idx].filter(uid => uid !== currentUserId);
+      }
+    });
+
+    const optStr = String(optionIndex);
+    if (!updatedPoll.votes[optStr]) updatedPoll.votes[optStr] = [];
+    updatedPoll.votes[optStr].push(currentUserId);
+
+    await fetch(`/api/posts/${postId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ poll: updatedPoll })
+    });
+
+    setPosts(prev => prev.map(p => p.id === postId ? { ...p, poll: updatedPoll } : p));
+  };
+
+  // --- LIKES & REACTIONS ---
   const toggleLikePost = async (postId: string) => {
     if (!currentUserId) return;
-    const likeId = `${currentUserId}_${postId}`;
-    const isLikedAlready = likes.some(l => l.userId === currentUserId && l.postId === postId);
+    const liked = likes.some(l => l.userId === currentUserId && l.postId === postId);
+    
+    await fetch('/api/likes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: currentUserId, postId, isDelete: liked })
+    });
 
-    // Save current state for rollback
-    const previousLikes = [...likes];
-
-    // Optimistically update state immediately
-    if (isLikedAlready) {
-      setLikes(prev => prev.filter(l => l.userId !== currentUserId || l.postId !== postId));
+    if (liked) {
+      setLikes(prev => prev.filter(l => !(l.userId === currentUserId && l.postId === postId)));
     } else {
-      setLikes(prev => [...prev, { id: likeId, userId: currentUserId, postId, createdAt: new Date().toISOString() }]);
-    }
+      const newLike: Like = { userId: currentUserId, postId };
+      setLikes(prev => [...prev, newLike]);
 
-    if (!navigator.onLine) {
-      console.log(`[PWA Offline] Queueing like for post ${postId}`);
-      
-      try {
-        await addPendingInteraction({
-          type: 'like',
-          postId,
-          userId: currentUserId,
-          payload: { isLikedAlready, likeId }
-        });
-
-        // Trigger PWA background sync registration
-        if ('serviceWorker' in navigator && 'SyncManager' in window) {
-          const reg = await navigator.serviceWorker.ready;
-          await (reg as any).sync.register('sync-interactions');
-        }
-      } catch (err) {
-        console.warn("Failed to register offline like sync:", err);
+      const post = posts.find(p => p.id === postId);
+      if (post && post.userId !== currentUserId) {
+        await addNotification(
+          post.userId,
+          'like',
+          `liked your post "${post.title.slice(0, 20)}..."`,
+          postId
+        );
       }
-      return;
-    }
-
-    try {
-      await runWriteOperation(
-        async () => {
-          if (isLikedAlready) {
-            await deleteDoc(doc(db, 'likes', likeId));
-          } else {
-            await setDoc(doc(db, 'likes', likeId), {
-              userId: currentUserId,
-              postId
-            });
-
-            // Notify post owner
-            const post = posts.find(p => p.id === postId);
-            if (post && post.userId !== currentUserId) {
-              await addNotification(
-                post.userId,
-                'like',
-                `liked your post "${post.title}"`,
-                postId
-              );
-            }
-          }
-        },
-        () => {
-          // Notify post owner locally (only in local fallback mode / quota mode)
-          if (!isLikedAlready) {
-            const post = posts.find(p => p.id === postId);
-            if (post && post.userId !== currentUserId && isQuotaFallbackMode) {
-              addNotification(
-                post.userId,
-                'like',
-                `liked your post "${post.title}"`,
-                postId
-              );
-            }
-          }
-        },
-        `likes/${likeId}`
-      );
-    } catch (err) {
-      console.error("Failed to toggle like post, rolling back optimistic update:", err);
-      setLikes(previousLikes);
     }
   };
 
@@ -1657,254 +688,127 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
 
   const reactToPost = async (postId: string, reactionType: string) => {
     if (!currentUserId) return;
-    const likeId = `${currentUserId}_${postId}`;
-    const existingLike = likes.find(l => l.userId === currentUserId && l.postId === postId);
+    const existing = likes.find(l => l.userId === currentUserId && l.postId === postId);
+    const isDelete = existing && existing.reactionType === reactionType;
 
-    // Save previous state for rollback on error
-    const previousLikes = [...likes];
+    await fetch('/api/likes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: currentUserId, postId, reactionType, isDelete })
+    });
 
-    // Optimistically update local state synchronously and immediately
-    if (existingLike) {
-      if (existingLike.reactionType === reactionType) {
-        // Remove reaction
-        setLikes(prev => prev.filter(l => l.userId !== currentUserId || l.postId !== postId));
-      } else {
-        // Change reaction
-        setLikes(prev => prev.map(l => l.userId === currentUserId && l.postId === postId ? { ...l, reactionType } : l));
-      }
+    if (isDelete) {
+      setLikes(prev => prev.filter(l => !(l.userId === currentUserId && l.postId === postId)));
     } else {
-      // Add new reaction
-      setLikes(prev => [...prev, { id: likeId, userId: currentUserId, postId, reactionType, createdAt: new Date().toISOString() }]);
-    }
+      const newReaction: Like = { userId: currentUserId, postId, reactionType };
+      setLikes(prev => {
+        const filtered = prev.filter(l => !(l.userId === currentUserId && l.postId === postId));
+        return [...filtered, newReaction];
+      });
 
-    if (!navigator.onLine) {
-      console.log(`[PWA Offline] Queueing reaction ${reactionType} for post ${postId}`);
-      return;
-    }
-
-    try {
-      await runWriteOperation(
-        async () => {
-          if (existingLike) {
-            if (existingLike.reactionType === reactionType) {
-              // Delete reaction document
-              await deleteDoc(doc(db, 'likes', likeId));
-            } else {
-              // Update reaction document
-              await setDoc(doc(db, 'likes', likeId), {
-                userId: currentUserId,
-                postId,
-                reactionType
-              });
-            }
-          } else {
-            // Create reaction document
-            await setDoc(doc(db, 'likes', likeId), {
-              userId: currentUserId,
-              postId,
-              reactionType
-            });
-
-            // Notify post owner
-            const post = posts.find(p => p.id === postId);
-            if (post && post.userId !== currentUserId) {
-              await addNotification(
-                post.userId,
-                'like',
-                `reacted with ${reactionType} to your post "${post.title}"`,
-                postId
-              );
-            }
-          }
-        },
-        () => {
-          // Since we already performed the optimistic update, we don't need to do anything here on success.
-          // However, if we are in local quota fallback mode, we still ensure local notification works
-          if (!existingLike) {
-            const post = posts.find(p => p.id === postId);
-            if (post && post.userId !== currentUserId && isQuotaFallbackMode) {
-              addNotification(
-                post.userId,
-                'like',
-                `reacted with ${reactionType} to your post "${post.title}"`,
-                postId
-              );
-            }
-          }
-        },
-        `likes/${likeId}`
-      );
-    } catch (err) {
-      console.error("Failed to persist reaction, rolling back optimistic update:", err);
-      // Rollback to previous state
-      setLikes(previousLikes);
+      const post = posts.find(p => p.id === postId);
+      if (post && post.userId !== currentUserId) {
+        await addNotification(
+          post.userId,
+          'like',
+          `reacted with ${reactionType} to your post "${post.title.slice(0, 20)}..."`,
+          postId
+        );
+      }
     }
   };
 
   const getPostReactions = (postId: string) => {
-    const postLikes = likes.filter(l => l.postId === postId);
-    const reactionCounts: Record<string, number> = {};
-    postLikes.forEach(l => {
-      const type = l.reactionType || '👍';
-      reactionCounts[type] = (reactionCounts[type] || 0) + 1;
+    const counts: Record<string, number> = {};
+    likes.filter(l => l.postId === postId).forEach(l => {
+      if (l.reactionType) {
+        counts[l.reactionType] = (counts[l.reactionType] || 0) + 1;
+      }
     });
-    return reactionCounts;
+    return counts;
   };
 
   const getUserReaction = (postId: string) => {
     if (!currentUserId) return null;
-    const existing = likes.find(l => l.userId === currentUserId && l.postId === postId);
-    if (!existing) return null;
-    return existing.reactionType || '👍';
+    const l = likes.find(l => l.userId === currentUserId && l.postId === postId);
+    return l?.reactionType || null;
   };
 
-  // Comments write, edit, delete & lookup
+  // --- COMMENTS ---
   const addComment = async (postId: string, commentText: string) => {
-    if (!currentUserId) throw new Error("Authenticated session is required for commenting");
-    const id = `com_${Date.now()}`;
-    const cleanText = censorText(commentText);
+    if (!currentUserId) throw new Error("Auth required");
     const newComment: Comment = {
-      id,
+      id: `com_${Date.now()}`,
       userId: currentUserId,
       postId,
-      comment: cleanText,
+      comment: censorText(commentText),
       createdAt: new Date().toISOString()
     };
 
-    if (!navigator.onLine) {
-      console.log(`[PWA Offline] Queueing comment for post ${postId}`);
-      // Optimistically update local state immediately
-      setComments(prev => [...prev, newComment]);
+    await fetch('/api/comments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newComment)
+    });
 
-      try {
-        await addPendingInteraction({
-          type: 'comment',
-          postId,
-          userId: currentUserId,
-          payload: { id, comment: cleanText, createdAt: newComment.createdAt }
-        });
+    setComments(prev => [...prev, newComment]);
 
-        // Trigger PWA background sync registration
-        if ('serviceWorker' in navigator && 'SyncManager' in window) {
-          const reg = await navigator.serviceWorker.ready;
-          await (reg as any).sync.register('sync-interactions');
-        }
-      } catch (err) {
-        console.warn("Failed to register offline comment sync:", err);
-      }
-      return newComment;
+    const post = posts.find(p => p.id === postId);
+    if (post && post.userId !== currentUserId) {
+      await addNotification(
+        post.userId,
+        'comment',
+        `commented on "${post.title.slice(0, 20)}...": "${commentText.slice(0, 15)}..."`,
+        postId
+      );
     }
-
-    await runWriteOperation(
-      async () => {
-        await setDoc(doc(db, 'comments', id), newComment);
-
-        // Notify post owner
-        const post = posts.find(p => p.id === postId);
-        if (post && post.userId !== currentUserId) {
-          await addNotification(
-            post.userId,
-            'comment',
-            `commented on your post "${post.title}": "${commentText.slice(0, 30)}${commentText.length > 30 ? '...' : ''}"`,
-            postId
-          );
-        }
-      },
-      () => {
-        setComments(prev => [...prev, newComment]);
-
-        // Notify post owner locally (only in local fallback mode)
-        const post = posts.find(p => p.id === postId);
-        if (post && post.userId !== currentUserId && isQuotaFallbackMode) {
-          addNotification(
-            post.userId,
-            'comment',
-            `commented on your post "${post.title}": "${commentText.slice(0, 30)}${commentText.length > 30 ? '...' : ''}"`,
-            postId
-          );
-        }
-      },
-      `comments/${id}`
-    );
     return newComment;
   };
 
   const getPostComments = (postId: string) => {
-    return comments
-      .filter(c => c.postId === postId)
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    return comments.filter(c => c.postId === postId);
   };
 
   const editComment = async (commentId: string, newText: string) => {
-    const cleanText = censorText(newText);
-    const updatedAt = new Date().toISOString();
-    await runWriteOperation(
-      async () => {
-        const commentRef = doc(db, 'comments', commentId);
-        await updateDoc(commentRef, {
-          comment: cleanText,
-          updatedAt
-        });
-      },
-      () => {
-        setComments(prev => prev.map(c => c.id === commentId ? { ...c, comment: cleanText, updatedAt } : c));
-      },
-      `comments/${commentId}`
-    );
+    const comment = comments.find(c => c.id === commentId);
+    if (!comment) return;
+    const updated = { ...comment, comment: censorText(newText) };
+    
+    await fetch('/api/comments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated)
+    });
+
+    setComments(prev => prev.map(c => c.id === commentId ? updated : c));
   };
 
   const deleteComment = async (commentId: string) => {
-    await runWriteOperation(
-      async () => {
-        await deleteDoc(doc(db, 'comments', commentId));
-      },
-      () => {
-        setComments(prev => prev.filter(c => c.id !== commentId));
-      },
-      `comments/${commentId}`
-    );
+    await fetch(`/api/comments/${commentId}`, { method: 'DELETE' });
+    setComments(prev => prev.filter(c => c.id !== commentId));
   };
 
-  // Creators Following system
+  // --- FOLLOWERS & FOLLOWING ---
   const toggleFollowUser = async (targetUserId: string) => {
     if (!currentUserId || currentUserId === targetUserId) return;
-    const followId = `${currentUserId}_${targetUserId}`;
     const followingAlready = followers.some(f => f.followerId === currentUserId && f.followingId === targetUserId);
 
-    await runWriteOperation(
-      async () => {
-        if (followingAlready) {
-          await deleteDoc(doc(db, 'followers', followId));
-        } else {
-          await setDoc(doc(db, 'followers', followId), {
-            followerId: currentUserId,
-            followingId: targetUserId
-          });
+    await fetch('/api/followers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ followerId: currentUserId, followingId: targetUserId, isDelete: followingAlready })
+    });
 
-          // Notify the creator
-          await addNotification(
-            targetUserId,
-            'follow',
-            `started following you`
-          );
-        }
-      },
-      () => {
-        if (followingAlready) {
-          setFollowers(prev => prev.filter(f => f.followerId !== currentUserId || f.followingId !== targetUserId));
-        } else {
-          setFollowers(prev => [...prev, { followerId: currentUserId, followingId: targetUserId }]);
-          if (isQuotaFallbackMode) {
-            addNotification(
-              targetUserId,
-              'follow',
-              `started following you`
-            );
-          }
-        }
-      },
-      `followers/${followId}`
-    );
+    if (followingAlready) {
+      setFollowers(prev => prev.filter(f => f.followerId !== currentUserId || f.followingId !== targetUserId));
+    } else {
+      setFollowers(prev => [...prev, { followerId: currentUserId, followingId: targetUserId }]);
+      await addNotification(
+        targetUserId,
+        'follow',
+        `started following you`
+      );
+    }
   };
 
   const isFollowing = (userId: string) => {
@@ -1918,181 +822,124 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     return { followers: fers, following: fing };
   };
 
-  // Instant messaging systems with editing and deleting support
+  // --- INSTANT MESSAGING ---
   const sendMessage = async (receiverId: string, text: string, mediaUrl?: string) => {
-    if (!currentUserId) throw new Error("Sender authentication required for instant chatting");
-    const id = `msg_${Date.now()}`;
-    const cleanText = censorText(text);
+    if (!currentUserId) throw new Error("Auth required");
     const newMsg: Message = {
-      id,
+      id: `msg_${Date.now()}`,
       senderId: currentUserId,
       receiverId,
-      message: cleanText,
+      message: censorText(text),
       mediaUrl: mediaUrl || '',
       createdAt: new Date().toISOString(),
       read: false,
       status: 'sent'
     };
 
-    await runWriteOperation(
-      async () => {
-        await setDoc(doc(db, 'messages', id), newMsg);
-      },
-      () => {
-        setMessages(prev => {
-          if (prev.some(m => m.id === id)) return prev;
-          return [...prev, newMsg];
-        });
-      },
-      `messages/${id}`
-    );
+    await fetch('/api/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newMsg)
+    });
 
-    if (!navigator.onLine) {
-      console.log(`[PWA Offline] Queueing message ${id}`);
-      try {
-        await addPendingInteraction({
-          type: 'chat',
-          postId: '',
-          userId: currentUserId,
-          payload: newMsg
-        });
-        if ('serviceWorker' in navigator && 'SyncManager' in window) {
-          const reg = await navigator.serviceWorker.ready;
-          await (reg as any).sync.register('sync-interactions');
-        }
-      } catch (e) {
-        console.warn("Failed to register offline chat sync:", e);
-      }
-    } else {
-      // Create a real-time notification to trigger device and system alerts for the recipient
-      try {
-        await addNotification(
-          receiverId,
-          'system',
-          `✉️ texted you: "${cleanText.length > 60 ? cleanText.substring(0, 60) + '...' : cleanText}"`
-        );
-      } catch (err) {
-        console.warn("Failed to create message system/device notification:", err);
-      }
-    }
-
+    setMessages(prev => [...prev, newMsg]);
     return newMsg;
   };
 
   const editMessage = async (messageId: string, newText: string) => {
-    const cleanText = censorText(newText);
-    const updatedAt = new Date().toISOString();
-    await runWriteOperation(
-      async () => {
-        const msgRef = doc(db, 'messages', messageId);
-        await updateDoc(msgRef, {
-          message: cleanText,
-          updatedAt
-        });
-      },
-      () => {
-        setMessages(prev => prev.map(m => m.id === messageId ? { ...m, message: cleanText, updatedAt } : m));
-      },
-      `messages/${messageId}`
-    );
+    const msg = messages.find(m => m.id === messageId);
+    if (!msg) return;
+    const updates = { message: censorText(newText) };
+
+    await fetch(`/api/messages/${messageId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, ...updates } : m));
   };
 
   const deleteMessage = async (messageId: string) => {
-    await runWriteOperation(
-      async () => {
-        await deleteDoc(doc(db, 'messages', messageId));
-      },
-      () => {
-        setMessages(prev => prev.filter(m => m.id !== messageId));
-      },
-      `messages/${messageId}`
-    );
+    // Standard delete: update to placeholder message for clarity or just remove it
+    const updates = { message: 'Message deleted.' };
+    await fetch(`/api/messages/${messageId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, ...updates } : m));
   };
 
   const getChatRooms = () => {
     if (!currentUserId) return [];
+    const roomsMap: Record<string, { user: User; lastMessage: Message }> = {};
 
-    const interactedUserIdsSet = new Set<string>();
-    messages.forEach(msg => {
-      if (msg.senderId === currentUserId) {
-        interactedUserIdsSet.add(msg.receiverId);
-      } else if (msg.receiverId === currentUserId) {
-        interactedUserIdsSet.add(msg.senderId);
+    messages.forEach(m => {
+      if (m.senderId === currentUserId || m.receiverId === currentUserId) {
+        const partnerId = m.senderId === currentUserId ? m.receiverId : m.senderId;
+        const partner = users.find(u => u.id === partnerId);
+        if (partner) {
+          const existing = roomsMap[partnerId];
+          if (!existing || new Date(m.createdAt) > new Date(existing.lastMessage.createdAt)) {
+            roomsMap[partnerId] = { user: partner, lastMessage: m };
+          }
+        }
       }
     });
 
-    const rooms = Array.from(interactedUserIdsSet).map(userId => {
-      const chatUser = users.find(u => u.id === userId);
-      const conversation = messages.filter(
-        msg => (msg.senderId === currentUserId && msg.receiverId === userId) ||
-               (msg.senderId === userId && msg.receiverId === currentUserId)
-      );
-
-      const sortedConv = [...conversation].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-      return {
-        user: chatUser!,
-        lastMessage: sortedConv[0]
-      };
-    }).filter(room => room.user !== undefined);
-
-    return rooms.sort((a, b) => new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime());
+    return Object.values(roomsMap).sort((a, b) => {
+      return new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime();
+    });
   };
 
   const getMessagesWith = (userId: string) => {
     if (!currentUserId) return [];
-    return messages
-      .filter(
-        msg => (msg.senderId === currentUserId && msg.receiverId === userId) ||
-               (msg.senderId === userId && msg.receiverId === currentUserId)
-      )
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    return messages.filter(m => {
+      return (m.senderId === currentUserId && m.receiverId === userId) ||
+             (m.senderId === userId && m.receiverId === currentUserId);
+    }).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   };
 
   const markMessagesAsRead = async (senderId: string) => {
     if (!currentUserId) return;
-    const unreadMessages = messages.filter(
-      msg => msg.senderId === senderId && msg.receiverId === currentUserId && !msg.read
-    );
+    const unread = messages.filter(m => m.senderId === senderId && m.receiverId === currentUserId && !m.read);
+    
+    await Promise.all(unread.map(m => {
+      return fetch(`/api/messages/${m.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ read: true, status: 'seen' })
+      });
+    }));
 
-    const batch = writeBatch(db);
-    let needsUpdate = false;
-    unreadMessages.forEach(msg => {
-      const msgRef = doc(db, 'messages', msg.id);
-      batch.update(msgRef, { read: true, status: 'seen' });
-      needsUpdate = true;
-    });
-
-    try {
-      if (needsUpdate) {
-        await batch.commit();
+    setMessages(prev => prev.map(m => {
+      if (m.senderId === senderId && m.receiverId === currentUserId && !m.read) {
+        return { ...m, read: true, status: 'seen' };
       }
-    } catch (err) {
-      console.error("Failed to mark messages as read:", err);
-    }
+      return m;
+    }));
   };
 
-  // Saved Posts bookmark triggers
+  // --- BOOKMARKS & ACHIEVEMENTS ---
   const toggleSavePost = async (postId: string) => {
-    if (!currentUserId) return;
-    const userToUpdate = users.find(u => u.id === currentUserId);
-    if (!userToUpdate) return;
-
-    let savedPosts = userToUpdate.savedPosts || [];
+    if (!currentUser) return;
+    let savedPosts = currentUser.savedPosts || [];
     if (savedPosts.includes(postId)) {
       savedPosts = savedPosts.filter(id => id !== postId);
     } else {
       savedPosts = [...savedPosts, postId];
     }
 
-    try {
-      await updateDoc(doc(db, 'users', currentUserId), { savedPosts });
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `users/${currentUserId}`);
-    }
+    await fetch(`/api/users/${currentUser.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ savedPosts })
+    });
+
+    setUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, savedPosts } : u));
   };
 
-  // Achievements dynamic progress checks
   const getUserAchievements = (userId: string): Achievement[] => {
     const userPosts = posts.filter(p => p.userId === userId);
     const userPublishedPosts = userPosts.filter(p => p.status === 'published');
@@ -2171,81 +1018,40 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     ];
   };
 
+  // --- BACKEND ADMIN CLEARING WORKFLOWS ---
   const blockUser = async (userId: string, blocked: boolean) => {
-    await runWriteOperation(
-      async () => {
-        await updateDoc(doc(db, 'users', userId), { isBlocked: blocked });
-      },
-      () => {
-        setUsers(prev => prev.map(u => u.id === userId ? { ...u, isBlocked: blocked } : u));
-      },
-      `users/${userId}`
-    );
+    await fetch(`/api/users/${userId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isBlocked: blocked })
+    });
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, isBlocked: blocked } : u));
   };
 
   const deleteUserByAdmin = async (userId: string) => {
-    await runWriteOperation(
-      async () => {
-        await deleteDoc(doc(db, 'users', userId));
-      },
-      () => {
-        setUsers(prev => prev.filter(u => u.id !== userId));
-      },
-      `users/${userId}`
-    );
+    await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+    setUsers(prev => prev.filter(u => u.id !== userId));
   };
 
   const deleteSelfAccount = async () => {
     if (!currentUserId) return;
-    const userId = currentUserId;
-
-    try {
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('freshlink_current_user_id');
-        localStorage.removeItem('freshlink_cached_user');
-      }
-      
-      if (isQuotaFallbackMode) {
-        const cachedUsersStr = localStorage.getItem('freshlink_loc_users');
-        if (cachedUsersStr) {
-          try {
-            const cachedUsers = JSON.parse(cachedUsersStr) as User[];
-            const updated = cachedUsers.filter(u => u.id !== userId);
-            localStorage.setItem('freshlink_loc_users', JSON.stringify(updated));
-          } catch(e) {}
-        }
-      } else {
-        await runWriteOperation(
-          async () => {
-            await deleteDoc(doc(db, 'users', userId));
-          },
-          () => {},
-          `users/${userId}`
-        );
-      }
-    } catch (err) {
-      console.error("Self account deletion Firestore error, logging out anyway:", err);
-    } finally {
-      setUsers(prev => prev.filter(u => u.id !== userId));
-      setCurrentUserId(null);
-      await signOut(auth);
-    }
+    await fetch(`/api/users/${currentUserId}`, { method: 'DELETE' });
+    setUsers(prev => prev.filter(u => u.id !== currentUserId));
+    await logout();
   };
 
   const setRoleByAdmin = async (userId: string, role: 'admin' | 'user') => {
-    await runWriteOperation(
-      async () => {
-        await updateDoc(doc(db, 'users', userId), { role, isAdmin: role === 'admin' });
-      },
-      () => {
-        setUsers(prev => prev.map(u => u.id === userId ? { ...u, role, isAdmin: role === 'admin' } : u));
-      },
-      `users/${userId}`
-    );
+    const updates = { role, isAdmin: role === 'admin' };
+    await fetch(`/api/users/${userId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updates } : u));
   };
 
   const verifyUserByAdmin = async (userId: string, approved: boolean, remarks?: string) => {
-    const updateData = approved ? { 
+    const updates = approved ? { 
       isApprovedByAdmin: true,
       clearanceRemarks: remarks || ""
     } : { 
@@ -2254,38 +1060,28 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       clearanceRemarks: remarks || ""
     };
 
-    await runWriteOperation(
-      async () => {
-        await updateDoc(doc(db, 'users', userId), updateData);
-        await addNotification(
-          userId,
-          'report_decision',
-          approved 
-            ? `Your identity document verification request has been APPROVED by the admin.${remarks ? ` Remarks: ${remarks}` : ''}`
-            : `Your identity document verification request was REJECTED by the admin.${remarks ? ` Reason: ${remarks}` : ''}`
-        );
-      },
-      () => {
-        setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updateData } : u));
-        if (isQuotaFallbackMode) {
-          addNotification(
-            userId,
-            'report_decision',
-            approved 
-              ? `Your identity document verification request has been APPROVED by the admin.${remarks ? ` Remarks: ${remarks}` : ''}`
-              : `Your identity document verification request was REJECTED by the admin.${remarks ? ` Reason: ${remarks}` : ''}`
-          );
-        }
-      },
-      `users/${userId}`
+    await fetch(`/api/users/${userId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updates } : u));
+
+    await addNotification(
+      userId,
+      'report_decision',
+      approved 
+        ? `Your identity document verification request has been APPROVED by the admin.${remarks ? ` Remarks: ${remarks}` : ''}`
+        : `Your identity document verification request was REJECTED by the admin.${remarks ? ` Reason: ${remarks}` : ''}`
     );
   };
 
+  // --- FINANCIALS & ADS ---
   const requestWithdrawal = async (amountNpr: number, paymentMethod: string, details: string) => {
-    if (!currentUserId) throw new Error("Authentication required to request withdrawals");
-    const id = `withdraw_${Date.now()}`;
+    if (!currentUserId) throw new Error("Auth required");
     const newRequest: WithdrawalRequest = {
-      id,
+      id: `withdraw_${Date.now()}`,
       userId: currentUserId,
       amountNpr,
       paymentMethod,
@@ -2293,49 +1089,86 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       status: 'pending',
       createdAt: new Date().toISOString()
     };
-    await runWriteOperation(
-      async () => {
-        await setDoc(doc(db, 'withdrawals', id), newRequest);
-      },
-      () => {
-        setWithdrawals(prev => [...prev, newRequest]);
-      },
-      `withdrawals/${id}`
-    );
+
+    await fetch('/api/withdrawals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newRequest)
+    });
+
+    setWithdrawals(prev => [...prev, newRequest]);
   };
 
   const updateWithdrawalStatusByAdmin = async (withdrawalId: string, status: 'approved' | 'rejected', remarks?: string) => {
-    await runWriteOperation(
-      async () => {
-        await updateDoc(doc(db, 'withdrawals', withdrawalId), { 
-          status,
-          remarks: remarks || ""
-        });
-        const withdrawal = withdrawals.find(w => w.id === withdrawalId);
-        if (withdrawal) {
-          await addNotification(
-            withdrawal.userId,
-            'withdrawal_decision',
-            `Your withdrawal request of NPR ${withdrawal.amountNpr} has been ${status === 'approved' ? 'APPROVED' : 'REJECTED'}.${remarks ? ` Remarks: ${remarks}` : ''}`
-          );
-        }
-      },
-      () => {
-        setWithdrawals(prev => prev.map(w => w.id === withdrawalId ? { ...w, status, remarks: remarks || "" } : w));
-        const withdrawal = withdrawals.find(w => w.id === withdrawalId);
-        if (withdrawal && isQuotaFallbackMode) {
-          addNotification(
-            withdrawal.userId,
-            'withdrawal_decision',
-            `Your withdrawal request of NPR ${withdrawal.amountNpr} has been ${status === 'approved' ? 'APPROVED' : 'REJECTED'}.${remarks ? ` Remarks: ${remarks}` : ''}`
-          );
-        }
-      },
-      `withdrawals/${withdrawalId}`
-    );
+    const updates = { status, remarks: remarks || "" };
+    
+    await fetch(`/api/withdrawals/${withdrawalId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+
+    setWithdrawals(prev => prev.map(w => w.id === withdrawalId ? { ...w, ...updates } : w));
+
+    const withdrawal = withdrawals.find(w => w.id === withdrawalId);
+    if (withdrawal) {
+      await addNotification(
+        withdrawal.userId,
+        'withdrawal_decision',
+        `Your withdrawal request of NPR ${withdrawal.amountNpr} has been ${status === 'approved' ? 'APPROVED' : 'REJECTED'}.${remarks ? ` Remarks: ${remarks}` : ''}`
+      );
+    }
   };
 
-  // --- New Methods Implementation ---
+  // --- AD BANNER CAMPAIGNS ---
+  const createOrUpdateAd = async (ad: any) => {
+    if (!ad.id) ad.id = `ad_${Date.now()}`;
+    await fetch('/api/ads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ad)
+    });
+
+    setAds(prev => {
+      const filtered = prev.filter(a => a.id !== ad.id);
+      return [...filtered, ad];
+    });
+  };
+
+  const deleteAd = async (adId: string) => {
+    // Update to inactive instead of deletion to maintain history, or standard deletion
+    await fetch(`/api/ads/${adId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: false })
+    });
+    setAds(prev => prev.filter(a => a.id !== adId));
+  };
+
+  const trackAdClick = async (adId: string) => {
+    const ad = ads.find(a => a.id === adId);
+    if (!ad) return;
+    const clicks = (ad.clickCount || 0) + 1;
+    await fetch(`/api/ads/${adId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clickCount: clicks })
+    });
+    setAds(prev => prev.map(a => a.id === adId ? { ...a, clickCount: clicks } : a));
+  };
+
+  const toggleAllAds = async (active: boolean) => {
+    await Promise.all(ads.map(ad => {
+      return fetch(`/api/ads/${ad.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active })
+      });
+    }));
+    setAds(prev => prev.map(ad => ({ ...ad, active })));
+  };
+
+  // --- NOTIFICATIONS ---
   const addNotification = async (
     userId: string,
     type: 'like' | 'comment' | 'follow' | 'report_decision' | 'withdrawal_decision' | 'ad_alert' | 'system',
@@ -2344,337 +1177,195 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     isPoll?: boolean,
     pollOptions?: string[]
   ) => {
-    if (!userId) return;
-    if (userId === currentUserId && type !== 'system' && type !== 'withdrawal_decision' && type !== 'report_decision') return;
-
-    const notifId = `notif_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const actor = currentUser;
     const newNotification: Notification = {
-      id: notifId,
+      id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
       userId,
       senderId: currentUserId || 'system',
-      senderName: currentUser?.name || 'System',
-      senderImage: currentUser?.profileImage || '',
+      senderName: actor?.name || 'Community Member',
+      senderImage: actor?.profileImage || '',
       type,
       message,
       postId,
       createdAt: new Date().toISOString(),
       read: false,
       isPoll,
-      pollAnswer: isPoll ? null : undefined,
-      pollOptions: isPoll ? pollOptions : undefined
+      pollOptions
     };
 
-    // Remove undefined values to avoid Firestore serialization errors
-    const cleanNotification = JSON.parse(JSON.stringify(newNotification));
+    await fetch('/api/notifications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newNotification)
+    });
 
-    try {
-      await setDoc(doc(db, 'notifications', notifId), cleanNotification);
-      // Also update notifications local state if not in quota fallback (since snapshot handles normal real-time notifications stream)
-      if (isQuotaFallbackMode) {
-        setNotifications(prev => [...prev, newNotification]);
-        // Trigger manual native push for fallback
-        triggerDeviceNotification(newNotification);
-      }
-    } catch (err) {
-      console.error("Error creating notification:", err);
-    }
-  };
-
-  const submitPollAnswer = async (notificationId: string, answer: string) => {
-    await runWriteOperation(
-      async () => {
-        await updateDoc(doc(db, 'notifications', notificationId), {
-          pollAnswer: answer,
-          read: true
-        });
-      },
-      () => {
-        setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, pollAnswer: answer, read: true } : n));
-      },
-      `notifications/${notificationId}`
-    );
+    setNotifications(prev => [...prev, newNotification]);
+    triggerDeviceNotification(newNotification);
   };
 
   const markNotificationAsRead = async (id: string) => {
-    await runWriteOperation(
-      async () => {
-        await updateDoc(doc(db, 'notifications', id), { read: true });
-      },
-      () => {
-        setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-      },
-      `notifications/${id}`
-    );
+    await fetch(`/api/notifications/${id}/read`, { method: 'PUT' });
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   };
 
   const markAllNotificationsAsRead = async () => {
-    const userNotifs = notifications.filter(n => n.userId === currentUserId && !n.read);
-    if (userNotifs.length === 0) return;
-    await runWriteOperation(
-      async () => {
-        const batch = writeBatch(db);
-        userNotifs.forEach(notif => {
-          batch.update(doc(db, 'notifications', notif.id), { read: true });
-        });
-        await batch.commit();
-      },
-      () => {
-        setNotifications(prev => prev.map(n => n.userId === currentUserId ? { ...n, read: true } : n));
-      },
-      'notifications/all'
-    );
+    if (!currentUserId) return;
+    await fetch('/api/notifications/read-all', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: currentUserId })
+    });
+    setNotifications(prev => prev.map(n => n.userId === currentUserId ? { ...n, read: true } : n));
   };
 
-  const reportPost = async (postId: string, reason: string, remarks: string) => {
-    if (!currentUserId) throw new Error("Authentication required to report posts");
-    const post = posts.find(p => p.id === postId);
-    if (!post) throw new Error("Post not found");
+  const submitPollAnswer = async (notificationId: string, answer: string) => {
+    await fetch(`/api/notifications/${notificationId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pollAnswer: answer, read: true })
+    });
+    setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, pollAnswer: answer, read: true } : n));
+  };
 
-    const id = `report_${Date.now()}`;
+  // --- POST REPORTS & MODERATION ---
+  const reportPost = async (postId: string, reason: string, remarks: string) => {
+    if (!currentUserId) return;
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+
     const newReport: PostReport = {
-      id,
+      id: `report_${Date.now()}`,
       postId,
       postTitle: post.title,
       postAuthorId: post.userId,
       reporterId: currentUserId,
-      reporterName: currentUser?.name || 'Anonymous User',
+      reporterName: currentUser?.name || 'Explorer',
       reason,
       remarks,
       status: 'pending',
       createdAt: new Date().toISOString()
     };
 
-    try {
-      await setDoc(doc(db, 'postReports', id), newReport);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `postReports/${id}`);
-    }
+    await fetch('/api/post-reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newReport)
+    });
+
+    setPostReports(prev => [...prev, newReport]);
   };
 
   const resolveReport = async (reportId: string, action: 'delete_post' | 'dismiss') => {
     const report = postReports.find(r => r.id === reportId);
-    if (!report) throw new Error("Report not found");
+    if (!report) return;
 
-    try {
-      if (action === 'delete_post') {
-        // Delete post
-        await deleteDoc(doc(db, 'posts', report.postId));
+    const status = action === 'delete_post' ? 'resolved' : 'dismissed';
+    await fetch(`/api/post-reports/${reportId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    });
 
-        // Notify author
-        await addNotification(
-          report.postAuthorId,
-          'report_decision',
-          `Your post "${report.postTitle}" was deleted by Admin following a content policy report. Reason: ${report.reason}.${report.remarks ? ` Remarks: ${report.remarks}` : ''}`
-        );
+    setPostReports(prev => prev.map(r => r.id === reportId ? { ...r, status } : r));
 
-        // Update report status
-        await updateDoc(doc(db, 'postReports', reportId), { status: 'resolved' });
-      } else {
-        // Dismiss report
-        await updateDoc(doc(db, 'postReports', reportId), { status: 'dismissed' });
-
-        // Notify reporter
-        await addNotification(
-          report.reporterId,
-          'report_decision',
-          `Your report regarding post "${report.postTitle}" was reviewed and dismissed by the admin.`
-        );
-      }
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `postReports/${reportId}`);
+    if (action === 'delete_post') {
+      await deletePost(report.postId);
+      await addNotification(
+        report.postAuthorId,
+        'report_decision',
+        `Your post "${report.postTitle}" was deleted due to community reports violation. Reason: ${report.reason}`
+      );
+    } else {
+      await addNotification(
+        report.postAuthorId,
+        'report_decision',
+        `A safety moderation report against your post "${report.postTitle}" has been reviewed and dismissed by the admin.`
+      );
     }
-  };
-
-  const createOrUpdateAd = async (adData: { 
-    id?: string; 
-    imageUrl: string; 
-    title?: string; 
-    description?: string; 
-    targetUrl?: string; 
-    active: boolean; 
-    clickCount?: number; 
-    createdAt?: string;
-    placement?: 'workspace' | 'bubble';
-    welcomeBadge?: string;
-    welcomeTitle?: string;
-    welcomeText?: string;
-    userId?: string;
-    paymentScreenshotUrl?: string;
-    status?: 'pending' | 'approved' | 'rejected' | 'published';
-    amountPaid?: number;
-    paymentStatus?: 'pending' | 'verified' | 'failed';
-    scheduledDate?: string;
-    name?: string;
-    purpose?: string;
-    contact?: string;
-    content?: string;
-    location?: string;
-    email?: string;
-  }) => {
-    const id = adData.id || `ad_${Date.now()}`;
-    const existingAd = ads.find(a => a.id === id);
-    const placement = adData.placement || 'workspace';
-    const newAd: AdBanner = {
-      id,
-      imageUrl: adData.imageUrl || "",
-      name: adData.name || existingAd?.name || adData.title || existingAd?.title || "",
-      purpose: adData.purpose || existingAd?.purpose || "",
-      contact: adData.contact || existingAd?.contact || "",
-      content: adData.content || existingAd?.content || adData.description || existingAd?.description || "",
-      location: adData.location || existingAd?.location || "",
-      email: adData.email || existingAd?.email || "",
-      active: adData.active,
-      createdAt: adData.createdAt || existingAd?.createdAt || new Date().toISOString(),
-      clickCount: adData.clickCount !== undefined ? adData.clickCount : (existingAd?.clickCount || 0),
-      status: adData.status || existingAd?.status || 'published',
-      scheduledDate: adData.scheduledDate || existingAd?.scheduledDate || "",
-      
-      // Keep backwards compatibility
-      title: adData.name || existingAd?.name || adData.title || existingAd?.title || "",
-      description: adData.content || existingAd?.content || adData.description || existingAd?.description || "",
-      targetUrl: adData.targetUrl || existingAd?.targetUrl || "",
-      placement,
-      welcomeBadge: adData.welcomeBadge || "",
-      welcomeTitle: adData.welcomeTitle || "",
-      welcomeText: adData.welcomeText || "",
-      userId: adData.userId || existingAd?.userId || currentUserId || "system",
-      paymentScreenshotUrl: adData.paymentScreenshotUrl || existingAd?.paymentScreenshotUrl || "",
-      amountPaid: adData.amountPaid || existingAd?.amountPaid || 0,
-      paymentStatus: adData.paymentStatus || existingAd?.paymentStatus || 'verified',
-    };
-
-    try {
-      await setDoc(doc(db, 'ads', id), newAd);
-      setAds(prev => {
-        const otherAds = prev.filter(a => a.id !== id);
-        return [...otherAds, newAd];
-      });
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `ads/${id}`);
-    }
-  };
-
-  const deleteAd = async (adId: string) => {
-    try {
-      await deleteDoc(doc(db, 'ads', adId));
-      setAds(prev => prev.filter(a => a.id !== adId));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `ads/${adId}`);
-    }
-  };
-
-  const trackAdClick = async (adId: string) => {
-    try {
-      if (adId.startsWith('ad_fallback_')) return;
-      const adDocRef = doc(db, 'ads', adId);
-      const adSnapshot = await getDoc(adDocRef);
-      if (adSnapshot.exists()) {
-        const currentCount = adSnapshot.data().clickCount || 0;
-        await updateDoc(adDocRef, { clickCount: currentCount + 1 });
-        setAds(prev => prev.map(a => a.id === adId ? { ...a, clickCount: currentCount + 1 } : a));
-      }
-    } catch (err) {
-      console.error("Failed to increment click count:", err);
-    }
-  };
-
-  const toggleAllAds = async (active: boolean) => {
-    try {
-      const batch = writeBatch(db);
-      ads.forEach(ad => {
-        batch.update(doc(db, 'ads', ad.id), { active });
-      });
-      await batch.commit();
-      setAds(prev => prev.map(ad => ({ ...ad, active })));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, 'ads');
-    }
-  };
-
-  const loadMorePosts = async () => {
-    if (!hasMorePosts || loading) return;
-    setPostLimit(prev => prev + 20);
   };
 
   return (
-    <SocialPlatformContext.Provider
-      value={{
-        users,
-        posts,
-        followers,
-        comments,
-        messages,
-        likes,
-        currentUser,
-        loading,
-        register,
-        login,
-        loginWithGoogle,
-        logout,
-        updateProfile,
-        createPost,
-        voteInPostPoll,
-        incrementPostViews,
-        deletePost,
-        updatePost,
-        toggleLikePost,
-        isPostLiked,
-        getPostLikesCount,
-        reactToPost,
-        getPostReactions,
-        getUserReaction,
-        addComment,
-        getPostComments,
-        editComment,
-        deleteComment,
-        toggleFollowUser,
-        isFollowing,
-        getUserFollowersCount,
-        sendMessage,
-        editMessage,
-        deleteMessage,
-        getChatRooms,
-        getMessagesWith,
-        markMessagesAsRead,
-        toggleSavePost,
-        getUserAchievements,
-        blockUser,
-        deleteUserByAdmin,
-        deleteSelfAccount,
-        setRoleByAdmin,
-        activeChatPartnerId,
-        setActiveChatPartnerId,
-        withdrawals,
-        verifyUserByAdmin,
-        requestWithdrawal,
-        updateWithdrawalStatusByAdmin,
-        notifications,
-        triggerDeviceNotification,
-        addNotification,
-        submitPollAnswer,
-        postReports,
-        ads,
-        markNotificationAsRead,
-        markAllNotificationsAsRead,
-        reportPost,
-        resolveReport,
-        createOrUpdateAd,
-        deleteAd,
-        trackAdClick,
-        toggleAllAds,
-        isQuotaFallbackMode,
-        isOnline,
-        userMap,
-        resetQuotaFallback,
-        securityBlock,
-        setSecurityBlock,
-        resolveSecurityChallenge,
-        refetchData,
-        hasMorePosts,
-        loadMorePosts,
-        reconnectWithBackoff
-      }}
-    >
+    <SocialPlatformContext.Provider value={{
+      users,
+      posts,
+      drafts,
+      saveDraft,
+      deleteDraft,
+      followers,
+      comments,
+      messages,
+      likes,
+      currentUser,
+      loading,
+      register,
+      login,
+      loginWithGoogle,
+      logout,
+      updateProfile,
+      createPost,
+      voteInPostPoll,
+      incrementPostViews,
+      deletePost,
+      updatePost,
+      toggleLikePost,
+      isPostLiked,
+      getPostLikesCount,
+      reactToPost,
+      getPostReactions,
+      getUserReaction,
+      addComment,
+      getPostComments,
+      editComment,
+      deleteComment,
+      toggleFollowUser,
+      isFollowing,
+      getUserFollowersCount,
+      sendMessage,
+      editMessage,
+      deleteMessage,
+      getChatRooms,
+      getMessagesWith,
+      markMessagesAsRead,
+      toggleSavePost,
+      getUserAchievements,
+      blockUser,
+      deleteUserByAdmin,
+      deleteSelfAccount,
+      setRoleByAdmin,
+      activeChatPartnerId,
+      setActiveChatPartnerId,
+      withdrawals,
+      verifyUserByAdmin,
+      requestWithdrawal,
+      updateWithdrawalStatusByAdmin,
+      notifications,
+      triggerDeviceNotification,
+      addNotification,
+      submitPollAnswer,
+      postReports,
+      ads,
+      markNotificationAsRead,
+      markAllNotificationsAsRead,
+      reportPost,
+      resolveReport,
+      createOrUpdateAd,
+      deleteAd,
+      trackAdClick,
+      toggleAllAds,
+      isQuotaFallbackMode,
+      isManualSandbox,
+      setManualSandbox,
+      isOnline,
+      userMap,
+      resetQuotaFallback,
+      securityBlock,
+      setSecurityBlock,
+      resolveSecurityChallenge,
+      refetchData,
+      hasMorePosts,
+      loadMorePosts,
+      reconnectWithBackoff
+    }}>
       {children}
     </SocialPlatformContext.Provider>
   );

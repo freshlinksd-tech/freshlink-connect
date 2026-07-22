@@ -54,7 +54,7 @@ interface CacheStats {
 }
 
 export const PWAMonitor: React.FC<PWAMonitorProps> = ({ isOpen, onClose }) => {
-  const { isOnline, syncPendingInteractions, refetchData, isQuotaFallbackMode } = useSocialPlatform();
+  const { isOnline, syncPendingInteractions, refetchData } = useSocialPlatform();
   const [cacheStats, setCacheStats] = useState<CacheStats>({
     posts: 0,
     users: 0,
@@ -343,23 +343,6 @@ export const PWAMonitor: React.FC<PWAMonitorProps> = ({ isOpen, onClose }) => {
                 </div>
               </div>
             </div>
-
-            {/* Offline Sandbox Fallback Alert */}
-            {isQuotaFallbackMode && (
-              <div className="p-4 bg-orange-50 border border-orange-100 rounded-2xl flex gap-3.5 items-start text-left">
-                <div className="bg-orange-100 p-2 rounded-xl text-orange-600 shrink-0 border border-orange-200/30">
-                  <ShieldAlert className="w-5 h-5 animate-pulse" />
-                </div>
-                <div className="space-y-1">
-                  <h4 className="text-xs font-black text-orange-850 uppercase tracking-wide">
-                    Quota-Limit Fallback Sandbox Engaged
-                  </h4>
-                  <p className="text-[10.5px] text-zinc-600 leading-normal font-semibold">
-                    The platform has automatically activated offline local sandbox operations to protect server resources and maintain high-fidelity usage. All operations write securely to high-speed client-side local cache structures.
-                  </p>
-                </div>
-              </div>
-            )}
 
             {/* Section 2: Cache Audit Analytics */}
             <div className="space-y-3">

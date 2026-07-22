@@ -39,6 +39,28 @@ export const LandingPage: React.FC = () => {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginError, setLoginError] = useState('');
 
+  // Google sign in states
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
+
+  const handleGoogleSignIn = async () => {
+    if (isGoogleLoading) return;
+    setIsGoogleLoading(true);
+    setGoogleError(null);
+    try {
+      await loginWithGoogle();
+    } catch (err: any) {
+      console.error("Google authentication error:", err);
+      if (err?.message === 'IFRAME_POPUP_BLOCKED') {
+        setGoogleError('IFRAME_POPUP_BLOCKED');
+      } else {
+        setGoogleError(err?.message || 'Google authentication failed.');
+      }
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
   // Sign up form state
   const [name, setName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
@@ -206,10 +228,9 @@ export const LandingPage: React.FC = () => {
           
           <div className="flex items-center gap-3">
             <button
-              onClick={async () => {
-                await loginWithGoogle();
-              }}
-              className="flex items-center gap-2 px-4 py-2 border border-stone-200 hover:border-orange-400 bg-white hover:bg-stone-50 rounded-xl text-[10px] font-sans uppercase tracking-widest font-bold text-zinc-800 transition-smooth cursor-pointer shadow-xs"
+              onClick={handleGoogleSignIn}
+              disabled={isGoogleLoading}
+              className={`flex items-center gap-2 px-4 py-2 border border-stone-200 hover:border-orange-400 bg-white hover:bg-stone-50 rounded-xl text-[10px] font-sans uppercase tracking-widest font-bold text-zinc-800 transition-smooth cursor-pointer shadow-xs ${isGoogleLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
               title="Sign in instantly with Google"
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -218,7 +239,7 @@ export const LandingPage: React.FC = () => {
                 <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
               </svg>
-              <span>Google Sign-In</span>
+              <span>{isGoogleLoading ? 'Signing in...' : 'Google Sign-In'}</span>
             </button>
 
             <button
@@ -284,10 +305,9 @@ export const LandingPage: React.FC = () => {
               <button
                 type="button"
                 id="land-google-signin-btn"
-                onClick={async () => {
-                  await loginWithGoogle();
-                }}
-                className="w-full flex items-center justify-center gap-3 py-3.5 border border-zinc-200/80 hover:border-zinc-400 hover:bg-stone-50 text-zinc-850 font-sans font-bold uppercase tracking-widest text-[10px] rounded-2xl transition-smooth cursor-pointer mb-4 shadow-xs"
+                onClick={handleGoogleSignIn}
+                disabled={isGoogleLoading}
+                className={`w-full flex items-center justify-center gap-3 py-3.5 border border-zinc-200/80 hover:border-zinc-400 hover:bg-stone-50 text-zinc-850 font-sans font-bold uppercase tracking-widest text-[10px] rounded-2xl transition-smooth cursor-pointer shadow-xs ${isGoogleLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -295,8 +315,45 @@ export const LandingPage: React.FC = () => {
                   <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
                   <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
                 </svg>
-                <span className="font-sans font-extrabold tracking-widest">Sign in with Google</span>
+                <span className="font-sans font-extrabold tracking-widest">{isGoogleLoading ? 'Signing in...' : 'Sign in with Google'}</span>
               </button>
+
+              {/* Helpful Browser Iframe Note */}
+              <div className="mb-4 text-[9.5px] text-zinc-400 font-sans leading-normal text-center select-none">
+                ℹ️ Running inside the AI Studio preview? Popups are restricted by browsers. Use <button type="button" onClick={() => window.open(window.location.href, '_blank')} className="text-orange-500 hover:underline font-bold">New Tab ↗</button> or click the instant demo shortcuts below.
+              </div>
+
+              {googleError && (
+                <div className="mb-4 animate-in fade-in duration-200">
+                  <div className="bg-amber-50 border border-amber-200/80 rounded-2xl p-4 text-xs text-amber-800 space-y-3 leading-relaxed text-left">
+                    <div className="flex gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="font-extrabold block text-[11px] text-amber-950 uppercase tracking-wider font-mono">Sign-In Iframe Issue</strong>
+                        <span className="text-[10.5px] block text-amber-850 mt-1 leading-normal font-sans font-medium">
+                          Google Popup authentication is blocked by default inside iframe containers due to browser cross-origin cookie security.
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 pt-2.5 border-t border-amber-200/50">
+                      <button
+                        type="button"
+                        onClick={() => window.open(window.location.href, '_blank')}
+                        className="px-3.5 py-2 bg-zinc-900 hover:bg-black text-white font-sans font-black uppercase tracking-widest text-[8.5px] rounded-lg transition-all shrink-0 cursor-pointer shadow-sm"
+                      >
+                        Open App in New Tab ↗
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setGoogleError(null)}
+                        className="px-3 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-sans font-black uppercase tracking-widest text-[8.5px] rounded-lg transition-all cursor-pointer border border-zinc-200"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="relative flex py-2 items-center mb-6">
                 <div className="flex-grow border-t border-stone-100"></div>
@@ -579,6 +636,8 @@ export const LandingPage: React.FC = () => {
                     </p>
                   </form>
                 )}
+
+
 
               </div>
 

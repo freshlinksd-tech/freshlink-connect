@@ -34,6 +34,19 @@
     <!-- Google Search Console Site Ownership Verification -->
     <meta name="google-site-verification" content="N4Et3vehYGVegLYnajpC-MH4fr_x7YRszOG6RY9sZKI" />
 
+    <script>
+      (function() {
+        try {
+          const theme = localStorage.getItem('theme');
+          if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
+
     <!-- Favicons, Website Icons & Manifest for Mobile Screens & Search Engines -->
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="apple-touch-icon" href="/apple-touch-icon-precomposed.png">

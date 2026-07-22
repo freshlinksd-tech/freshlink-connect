@@ -6,8 +6,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useSocialPlatform } from '../context/SocialPlatformContext';
 import { User, Message } from '../types';
-import { db } from '../lib/firebase';
-import { doc, setDoc, updateDoc } from 'firebase/firestore';
+
 import { 
   Send, 
   User as UserIcon, 
@@ -183,8 +182,11 @@ export const Chat: React.FC<ChatProps> = ({ onSelectUser, targetChatUserId, setT
         // 1. Simulate "delivered" after 1 second
         setTimeout(async () => {
           try {
-            const msgRef = doc(db, 'messages', id);
-            await updateDoc(msgRef, { status: 'delivered' });
+            await fetch(`/api/messages/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'delivered' })
+            });
           } catch (err) {
             console.error("Error setting delivered status:", err);
           }
@@ -193,8 +195,11 @@ export const Chat: React.FC<ChatProps> = ({ onSelectUser, targetChatUserId, setT
         // 2. Simulate "seen" after 2.5 seconds
         setTimeout(async () => {
           try {
-            const msgRef = doc(db, 'messages', id);
-            await updateDoc(msgRef, { status: 'seen', read: true });
+            await fetch(`/api/messages/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'seen', read: true })
+            });
           } catch (err) {
             console.error("Error setting seen status:", err);
           }
@@ -222,7 +227,11 @@ export const Chat: React.FC<ChatProps> = ({ onSelectUser, targetChatUserId, setT
               read: false,
               status: 'sent'
             };
-            await setDoc(doc(db, 'messages', msgId), replyMsg);
+            await fetch('/api/messages', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(replyMsg)
+            });
           } catch (err) {
             console.error("Failed to post automated response message:", err);
           } finally {

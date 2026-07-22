@@ -55,6 +55,17 @@ self.addEventListener('fetch', (event) => {
     url.hostname.includes('fonts.googleapis.com') ||
     url.hostname.includes('fonts.gstatic.com');
 
+  // Bypass Vite internal modules, source code files, and dev server paths
+  if (
+    url.pathname.includes('/@') || 
+    url.pathname.includes('/src/') || 
+    url.pathname.endsWith('.tsx') || 
+    url.pathname.endsWith('.ts') ||
+    url.pathname.includes('node_modules')
+  ) {
+    return;
+  }
+
   if (event.request.method !== 'GET' || !isAllowedOrigin) {
     return;
   }

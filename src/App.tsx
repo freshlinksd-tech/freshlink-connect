@@ -22,6 +22,7 @@ const AdminPanel = lazy(() => import('./components/AdminPanel').then(m => ({ def
 const VerificationSetup = lazy(() => import('./components/VerificationSetup').then(m => ({ default: m.VerificationSetup })));
 const MonetizationPanel = lazy(() => import('./components/MonetizationPanel').then(m => ({ default: m.MonetizationPanel })));
 const Notifications = lazy(() => import('./components/Notifications').then(m => ({ default: m.Notifications })));
+import { useTheme } from './hooks/useTheme';
 import { 
   Sparkles, 
   Menu, 
@@ -38,11 +39,14 @@ import {
   Coins,
   Bell,
   Smartphone,
-  Download
+  Download,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 function AppContent() {
-  const { currentUser, loading, logout, messages, notifications, isQuotaFallbackMode, resetQuotaFallback, isOnline } = useSocialPlatform();
+  const { currentUser, loading, logout, messages, notifications, isOnline } = useSocialPlatform();
+  const { isDark, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<string>('feed');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [targetChatUserId, setTargetChatUserId] = useState<string | null>(null);
@@ -59,30 +63,7 @@ function AppContent() {
     );
   }
 
-  if (isQuotaFallbackMode) {
-    return (
-      <div className="min-h-screen bg-[#F8F7F4] flex flex-col items-center justify-center p-6 text-center select-none font-sans" id="maintenance-fullscreen-screen">
-        <div className="bg-white p-8 max-w-md w-full rounded-[2rem] shadow-xl border border-amber-200/40 flex flex-col items-center">
-          <div className="w-16 h-16 bg-amber-500/[0.06] text-amber-600 rounded-2xl flex items-center justify-center mb-6 shadow-xs border border-amber-200/30">
-            <Cpu className="w-8 h-8 animate-pulse" />
-          </div>
-          <h2 className="text-xl font-extrabold text-zinc-900 uppercase tracking-tight">System Under Maintenance</h2>
-          <p className="text-zinc-500 text-xs mt-3 leading-relaxed font-semibold">
-            The platform is currently undergoing scheduled database maintenance or experiencing high volume. Some operations are temporarily offline while we optimize server performance.
-          </p>
-          <div className="bg-amber-50/60 text-amber-800 text-[9.5px] font-mono leading-relaxed p-4 rounded-xl mt-5 w-full text-center border border-amber-200/20 font-bold">
-            DATABASE CAPACITY LIMIT REACHED
-          </div>
-          <button
-            onClick={() => resetQuotaFallback()}
-            className="w-full mt-6 py-3 bg-zinc-950 hover:bg-zinc-900 text-white font-sans font-bold uppercase tracking-widest text-[10px] rounded-xl transition-all cursor-pointer shadow-sm active:scale-98"
-          >
-            Retry Connection
-          </button>
-        </div>
-      </div>
-    );
-  }
+
 
   if (!currentUser) {
     return (
@@ -160,7 +141,7 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-stone-50 text-zinc-900 flex flex-col md:flex-row font-sans antialiased">
+    <div className="min-h-screen bg-stone-50 dark:bg-stone-950 text-zinc-900 dark:text-stone-100 flex flex-col md:flex-row font-sans antialiased">
       
       {/* Real-time Setup Wizard Portal for First Login */}
       {currentUser.hasSetupAccount === false && (
@@ -170,15 +151,26 @@ function AppContent() {
       )}
       
       {/* Mobile Top Header */}
-      <header className="md:hidden bg-white/95 backdrop-blur-md border-b border-stone-200/50 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
+      <header className="md:hidden bg-white/95 dark:bg-stone-950/95 backdrop-blur-md border-b border-stone-200/50 dark:border-stone-850/50 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-2.5">
           <FreshLinkLogo className="w-8 h-8 text-orange-500 transform hover:scale-105 transition-smooth" />
-          <span className="font-display font-black text-lg tracking-tight text-zinc-950 uppercase">
+          <span className="font-display font-black text-lg tracking-tight text-zinc-950 dark:text-stone-50 uppercase">
             FRESHLINK <span className="text-orange-500">CONNECT</span>
           </span>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Mobile User-facing Theme Toggle Button */}
+          <button
+            type="button"
+            id="mobile-theme-toggle-btn"
+            onClick={toggleTheme}
+            className="p-1.5 px-2 text-zinc-700 dark:text-stone-200 bg-stone-100 dark:bg-stone-900 border border-stone-200/60 dark:border-stone-800 rounded-lg text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer outline-none"
+            title={isDark ? "Switch to Light mode" : "Switch to Dark mode"}
+          >
+            {isDark ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-indigo-500" />}
+          </button>
+
           <button
             type="button"
             onClick={() => {
@@ -189,7 +181,7 @@ function AppContent() {
                 window.dispatchEvent(new CustomEvent('trigger-pwa-install'));
               }
             }}
-            className="p-1.5 px-2.5 text-orange-650 hover:text-white hover:bg-orange-600 bg-orange-50 border border-orange-100 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all cursor-pointer outline-none"
+            className="p-1.5 px-2.5 text-orange-650 dark:text-orange-400 hover:text-white hover:bg-orange-600 bg-orange-50 dark:bg-orange-950/30 border border-orange-100 dark:border-orange-900/30 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all cursor-pointer outline-none"
             title="Install Mobile App"
           >
             <Download className="w-3.5 h-3.5" />
@@ -199,7 +191,7 @@ function AppContent() {
           <button
             id="mobile-hamburger-btn"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-1 px-2.5 text-zinc-500 hover:text-zinc-800 bg-zinc-50 rounded-lg hover:shadow-sm"
+            className="p-1 px-2.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 bg-zinc-50 dark:bg-stone-900 rounded-lg hover:shadow-sm"
           >
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -208,8 +200,8 @@ function AppContent() {
 
       {/* Mobile Navigation Drawer Overlay */}
       {mobileMenuOpen && (
-        <div id="mobile-navigation-drawer" className="md:hidden fixed inset-0 bg-zinc-900/40 backdrop-blur-sm z-30" onClick={() => setMobileMenuOpen(false)}>
-          <div className="w-64 bg-white h-full shadow-2xl flex flex-col pt-20" onClick={(e) => e.stopPropagation()}>
+        <div id="mobile-navigation-drawer" className="md:hidden fixed inset-0 bg-zinc-900/40 dark:bg-stone-950/60 backdrop-blur-sm z-30" onClick={() => setMobileMenuOpen(false)}>
+          <div className="w-64 bg-white dark:bg-stone-950 h-full shadow-2xl flex flex-col pt-20 border-r border-stone-100 dark:border-stone-850" onClick={(e) => e.stopPropagation()}>
             <div className="px-4 space-y-1">
                {(() => {
                 const isAdmin = currentUser?.email?.toLowerCase() === 'fresh.linksd@gmail.com' || currentUser?.isAdmin === true || currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
@@ -241,7 +233,7 @@ function AppContent() {
                         setMobileMenuOpen(false);
                       }}
                       className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-sans text-sm font-medium transition-all ${
-                        isActive ? 'bg-orange-50 text-orange-700' : 'text-zinc-500 hover:bg-zinc-50'
+                        isActive ? 'bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 font-bold' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-stone-900/40'
                       }`}
                     >
                       <div className="flex items-center gap-3">
@@ -272,24 +264,39 @@ function AppContent() {
                     setMobileMenuOpen(false);
                   }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-sans text-sm font-medium transition-all ${
-                    activeTab === 'profile' ? 'bg-emerald-50 text-emerald-700' : 'text-zinc-500 hover:bg-zinc-50'
+                    activeTab === 'profile' ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 font-bold' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-stone-900/40'
                   }`}
                 >
                   <User className="w-5 h-5" />
                   My Profile
                 </button>
               )}
+
+              {/* Theme Switcher inside Mobile Drawer */}
+              <button
+                id="mobile-drawer-theme-toggle"
+                onClick={toggleTheme}
+                className="w-full flex items-center justify-between px-4 py-3 rounded-xl font-sans text-sm font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-stone-900/40 transition-all cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  {isDark ? <Sun className="w-5 h-5 text-amber-500" /> : <Moon className="w-5 h-5 text-indigo-500" />}
+                  <span>Appearance</span>
+                </div>
+                <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300">
+                  {isDark ? 'Dark' : 'Light'}
+                </span>
+              </button>
             </div>
 
             {/* PWA Direct Installation Mobile Drawer prompter */}
-            <div className="mx-4 mt-4 p-3 bg-gradient-to-br from-orange-50/70 to-amber-50/50 border border-orange-100/50 rounded-xl" id="mobile-drawer-pwa-install-prompter">
+            <div className="mx-4 mt-4 p-3 bg-gradient-to-br from-orange-50/70 to-amber-50/50 dark:from-stone-900/40 dark:to-stone-950/20 border border-orange-100/50 dark:border-stone-850/50 rounded-xl" id="mobile-drawer-pwa-install-prompter">
               <div className="flex gap-2 items-start">
                 <div className="bg-orange-500/10 p-1.5 rounded-lg border border-orange-500/20 text-orange-600 shrink-0">
                   <Smartphone className="w-3.5 h-3.5" />
                 </div>
                 <div className="flex-1 min-w-0 space-y-0.5">
-                  <h4 className="font-sans font-black text-[9.5px] text-zinc-900 uppercase tracking-tighter">Use like App</h4>
-                  <p className="text-[8.5px] text-zinc-500 leading-normal font-semibold">Zero-delay loading & push notifications!</p>
+                  <h4 className="font-sans font-black text-[9.5px] text-zinc-900 dark:text-stone-200 uppercase tracking-tighter">Use like App</h4>
+                  <p className="text-[8.5px] text-zinc-500 dark:text-zinc-400 leading-normal font-semibold">Zero-delay loading & push notifications!</p>
                 </div>
               </div>
               <button
@@ -310,17 +317,17 @@ function AppContent() {
               </button>
             </div>
 
-            <div className="mt-auto p-4 border-t border-zinc-100 bg-zinc-50">
+            <div className="mt-auto p-4 border-t border-zinc-100 dark:border-stone-850 bg-zinc-50 dark:bg-stone-900/40">
               {currentUser ? (
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-zinc-700 truncate">{currentUser.name}</span>
-                    <span className="text-[9.5px] text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full font-bold">online</span>
+                    <span className="text-xs font-bold text-zinc-700 dark:text-stone-300 truncate">{currentUser.name}</span>
+                    <span className="text-[9.5px] text-orange-650 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30 px-2 py-0.5 rounded-full font-bold">online</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 mt-1">
                     <button
                       onClick={handleOpenAuth}
-                      className="py-1.5 px-2 bg-zinc-200 hover:bg-zinc-300 text-zinc-800 text-[10px] font-bold rounded-lg transition-all"
+                      className="py-1.5 px-2 bg-zinc-200 dark:bg-stone-800 text-zinc-850 dark:text-stone-200 text-[10px] font-bold rounded-lg transition-all"
                     >
                       Switch Profile
                     </button>
@@ -360,6 +367,8 @@ function AppContent() {
 
       {/* Main Screen Content Stage */}
       <main className="flex-1 min-w-0" id="main-canvas-stage">
+
+
         {/* Physical Offline Connection Banner */}
         {!isOnline && (
           <div 

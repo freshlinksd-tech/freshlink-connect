@@ -113,9 +113,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
     createOrUpdateAd,
     deleteAd,
     toggleAllAds,
+    addNotification,
     isQuotaFallbackMode,
-    resetQuotaFallback,
-    addNotification
+    resetQuotaFallback
   } = useSocialPlatform();
 
   const isSuperAdmin = currentUser?.role === 'super_admin' || currentUser?.email?.toLowerCase() === 'fresh.linksd@gmail.com';
@@ -182,6 +182,59 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
   const [adFilterState, setAdFilterState] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'published'>('pending');
   const [rejectAdId, setRejectAdId] = useState<string | null>(null);
   const [adRejectReason, setAdRejectReason] = useState('');
+
+  // Firestore Data Migration states
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [migrationResult, setMigrationResult] = useState<any | null>(null);
+  const [migrationError, setMigrationError] = useState<string | null>(null);
+
+  const [isMigratingToFirebase, setIsMigratingToFirebase] = useState(false);
+  const [migrationToResult, setMigrationToResult] = useState<any | null>(null);
+  const [migrationToError, setMigrationToError] = useState<string | null>(null);
+
+  const handleMigrateData = async () => {
+    setIsMigrating(true);
+    setMigrationResult(null);
+    setMigrationError(null);
+    try {
+      const res = await fetch('/api/migrate-from-firebase', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Migration failed');
+      }
+      setMigrationResult(data);
+      // Notify components to update state
+      window.dispatchEvent(new CustomEvent('nexus-data-changed'));
+    } catch (err: any) {
+      setMigrationError(err.message || 'An unexpected error occurred during migration.');
+    } finally {
+      setIsMigrating(false);
+    }
+  };
+
+  const handleMigrateToFirebase = async () => {
+    setIsMigratingToFirebase(true);
+    setMigrationToResult(null);
+    setMigrationToError(null);
+    try {
+      const res = await fetch('/api/migrate-to-firebase', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Upload failed');
+      }
+      setMigrationToResult(data);
+      // Notify components to update state
+      window.dispatchEvent(new CustomEvent('nexus-data-changed'));
+    } catch (err: any) {
+      setMigrationToError(err.message || 'An unexpected error occurred during upload.');
+    } finally {
+      setIsMigratingToFirebase(false);
+    }
+  };
 
   const filteredWithdrawals = useMemo(() => {
     return [...withdrawals]
@@ -460,7 +513,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                 Offline Local Sandbox Active
               </h4>
               <p className="text-zinc-650 text-xs mt-1.5 leading-relaxed max-w-2xl font-medium">
-                Google Cloud Firestore encountered a quota read limit in a previous session. The application has loaded in local sandbox mode. **User-submitted clearance claims will not be visible** until you exit fallback mode. Click below to reconnect live!
+                Google Cloud Firestore encountered a quota read limit in a previous session or connection is offline. The application has loaded in local sandbox mode. User-submitted clearance claims and live operations will sync locally. Click below to reconnect live!
               </p>
             </div>
           </div>
@@ -935,6 +988,99 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                   </button>
                 </div>
 
+              </div>
+
+              {/* Database Status Card */}
+              <div className="border-t border-zinc-100 pt-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <Sparkles className="w-4 h-4 text-orange-500" />
+                  <span className="text-xs font-black uppercase tracking-wider text-zinc-850 flex items-center justify-start gap-1">
+                    Database Status & Migration Engine
+                  </span>
+                </div>
+                <p className="text-zinc-500 text-[11px] leading-relaxed mb-4">
+                  FreshLink Connect prioritizes Google Cloud Firestore as its primary storage database, with a dynamic in-memory database engine for sandbox offline fallback capability. MongoDB dependencies have been completely removed. Use the tools below to migrate and backup your Firestore data.
+                </p>
+
+                <div className="bg-zinc-50 rounded-2xl p-4 border border-zinc-150 mb-4 space-y-2">
+                  <div className="flex justify-between items-center text-[10px] text-zinc-400 font-mono uppercase">
+                    <span>Database Mode:</span>
+                    {isQuotaFallbackMode ? (
+                      <span className="text-red-600 font-black flex items-center gap-1">
+                        <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />
+                        Fallback Engine Active (Offline)
+                      </span>
+                    ) : (
+                      <span className="text-emerald-600 font-black flex items-center gap-1">
+                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
+                        Firebase Firestore (Live Connected)
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex justify-between text-[10px] text-zinc-400 font-mono uppercase">
+                    <span>Config File Status:</span>
+                    <span className="text-zinc-700 font-bold font-mono">firebase-applet-config.json (LOADED)</span>
+                  </div>
+                  <div className="flex justify-between text-[10px] text-zinc-400 font-mono uppercase">
+                    <span>Relational Database:</span>
+                    <span className="text-zinc-500 font-mono">MongoDB (REMOVED)</span>
+                  </div>
+                </div>
+
+                {/* Migration Action Buttons */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <button
+                    type="button"
+                    disabled={isMigrating || isMigratingToFirebase}
+                    onClick={handleMigrateData}
+                    className="p-3 bg-zinc-900 hover:bg-black disabled:bg-zinc-400 text-white font-extrabold text-[10px] rounded-xl uppercase tracking-widest cursor-pointer text-center flex flex-col items-center justify-center gap-1.5 transition shadow-sm"
+                  >
+                    <Upload className="w-3.5 h-3.5 rotate-180" />
+                    <span>Download Firestore</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isMigrating || isMigratingToFirebase}
+                    onClick={handleMigrateToFirebase}
+                    className="p-3 bg-orange-600 hover:bg-orange-750 disabled:bg-zinc-400 text-white font-extrabold text-[10px] rounded-xl uppercase tracking-widest cursor-pointer text-center flex flex-col items-center justify-center gap-1.5 transition shadow-sm"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload to Cloud</span>
+                  </button>
+                </div>
+
+                {/* Loader / Alerts */}
+                {(isMigrating || isMigratingToFirebase) && (
+                  <div className="flex items-center justify-center gap-2 text-xs font-bold text-zinc-650 bg-zinc-50 p-3 rounded-2xl mb-4">
+                    <Loader2 className="w-4 h-4 animate-spin text-zinc-900" />
+                    <span>Synchronizing Database Engine...</span>
+                  </div>
+                )}
+
+                {migrationResult && (
+                  <div className="p-3 bg-emerald-50 text-emerald-800 text-[11px] font-medium rounded-2xl mb-4 border border-emerald-250 leading-relaxed">
+                    Successfully downloaded latest Firestore cloud documents to Fallback DB!
+                  </div>
+                )}
+
+                {migrationToResult && (
+                  <div className="p-3 bg-emerald-50 text-emerald-800 text-[11px] font-medium rounded-2xl mb-4 border border-emerald-250 leading-relaxed">
+                    Successfully uploaded all local sandbox & fallback data to live Firestore cloud!
+                  </div>
+                )}
+
+                {migrationError && (
+                  <div className="p-3 bg-red-50 text-red-800 text-[11px] font-medium rounded-2xl mb-4 border border-red-250 leading-relaxed">
+                    {migrationError}
+                  </div>
+                )}
+
+                {migrationToError && (
+                  <div className="p-3 bg-red-50 text-red-800 text-[11px] font-medium rounded-2xl mb-4 border border-red-250 leading-relaxed">
+                    {migrationToError}
+                  </div>
+                )}
               </div>
 
               <div className="bg-amber-50 p-4 rounded-2xl border-l-4 border-l-orange-500 overflow-hidden flex gap-3">

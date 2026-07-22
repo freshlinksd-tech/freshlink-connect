@@ -6,7 +6,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useSocialPlatform } from '../context/SocialPlatformContext';
 import { ProfileSkeleton } from './SkeletonLoader';
-import { compressImage } from '../lib/firebase';
+import { compressImage } from '../lib/imageUtils';
 import { optimizeImageUrl } from '../lib/cloudinary';
 import { INTEREST_OPTIONS } from '../data/seedData';
 import { User, Post } from '../types';

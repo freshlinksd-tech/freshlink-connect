@@ -13,8 +13,7 @@ import { BroadcastBanner } from './BroadcastBanner';
 import { FeedPostSkeleton } from './SkeletonLoader';
 import { VirtualPost } from './VirtualPost';
 import { ArrowDown } from 'lucide-react';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+
 import { uploadToCloudinary, optimizeImageUrl } from '../lib/cloudinary';
 import { getCache } from '../lib/dbCache';
 import { 
@@ -140,7 +139,6 @@ export const Feed: React.FC<FeedProps> = ({
     postReports,
     ads,
     trackAdClick,
-    isQuotaFallbackMode,
     securityBlock,
     resolveSecurityChallenge,
     loading,
@@ -410,6 +408,7 @@ export const Feed: React.FC<FeedProps> = ({
   const [dismissedPostIds, setDismissedPostIds] = useState<string[]>([]);
   const [lastDismissedPostId, setLastDismissedPostId] = useState<string | null>(null);
   const [activeFloatingReactionBarPostId, setActiveFloatingReactionBarPostId] = useState<string | null>(null);
+  const [isFollowingOnly, setIsFollowingOnly] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const matchingUsers = useMemo(() => {
@@ -456,8 +455,10 @@ export const Feed: React.FC<FeedProps> = ({
       const creator = userMap[creatorId];
       if (creator) {
         const creatorBalance = creator.walletBalance || 0;
-        await updateDoc(doc(db, 'users', creatorId), {
-          walletBalance: creatorBalance + price
+        await fetch(`/api/users/${creatorId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ walletBalance: creatorBalance + price })
         });
       }
 
@@ -491,8 +492,10 @@ export const Feed: React.FC<FeedProps> = ({
       const creator = userMap[creatorId];
       if (creator) {
         const creatorCredits = creator.walletCredits || 0;
-        await updateDoc(doc(db, 'users', creatorId), {
-          walletCredits: creatorCredits + creditsCost
+        await fetch(`/api/users/${creatorId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ walletCredits: creatorCredits + creditsCost })
         });
       }
 
@@ -673,6 +676,58 @@ export const Feed: React.FC<FeedProps> = ({
     return uniqueLocations.filter(loc => loc.toLowerCase().includes(query));
   }, [uniqueLocations, locationSearch]);
 
+  // Extract trending hashtags based on frequency in recent published posts
+  const trendingHashtags = useMemo(() => {
+    const tagCounts: Record<string, number> = {};
+    const sourcePosts = !isOnline && dbCachedPosts.length > 0 ? dbCachedPosts : posts;
+    const publishedPosts = sourcePosts
+      .filter(p => p.status === 'published')
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    // Look at the 50 most recent posts for tags frequency
+    const recentPosts = publishedPosts.slice(0, 50);
+    
+    recentPosts.forEach(post => {
+      // 1. Process post.tags
+      if (post.tags && Array.isArray(post.tags)) {
+        post.tags.forEach(t => {
+          if (!t) return;
+          const cleanTag = t.replace(/^#+/, '').trim().toLowerCase();
+          if (cleanTag) {
+            tagCounts[cleanTag] = (tagCounts[cleanTag] || 0) + 1;
+          }
+        });
+      }
+      
+      // 2. Scan content for words starting with #
+      if (post.content) {
+        const hashRegex = /#([a-zA-Z0-9_\u1f600-\u1f64f]+)/g;
+        let match;
+        while ((match = hashRegex.exec(post.content)) !== null) {
+          const cleanTag = match[1].toLowerCase();
+          if (cleanTag) {
+            tagCounts[cleanTag] = (tagCounts[cleanTag] || 0) + 1;
+          }
+        }
+      }
+    });
+    
+    const finalTags = Object.entries(tagCounts)
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count);
+      
+    if (finalTags.length < 5) {
+      const fallbacks = ['tech', 'lifestyle', 'travel', 'fitness', 'creators', 'inspiration'];
+      fallbacks.forEach(f => {
+        if (!finalTags.some(item => item.tag === f)) {
+          finalTags.push({ tag: f, count: 1 });
+        }
+      });
+    }
+    
+    return finalTags.slice(0, 6);
+  }, [posts, dbCachedPosts, isOnline]);
+
   // Compute recommendation scores and rank posts
   const rankedPosts = useMemo(() => {
     const sourcePosts = !isOnline && dbCachedPosts.length > 0 ? dbCachedPosts : posts;
@@ -690,6 +745,11 @@ export const Feed: React.FC<FeedProps> = ({
     // Filter by viewed history if toggled
     if (showViewedHistory) {
       list = list.filter(p => viewedBlogIds.includes(p.id));
+    }
+
+    // Filter by following only if toggled
+    if (isFollowingOnly && currentUser) {
+      list = list.filter(p => isFollowing(p.userId));
     }
 
     // Apply category filter
@@ -770,7 +830,7 @@ export const Feed: React.FC<FeedProps> = ({
     .sort((a, b) => b.score - a.score)
     .map(item => item.post);
 
-  }, [posts, dbCachedPosts, isOnline, showViewedHistory, viewedBlogIds, dismissedPostIds, userMap, isBookmarksOnly, activeCategoryFilter, selectedLocation, searchQuery, useAlgorithm, currentUser, followers, likes, comments, postReports]);
+  }, [posts, dbCachedPosts, isOnline, showViewedHistory, viewedBlogIds, dismissedPostIds, userMap, isBookmarksOnly, isFollowingOnly, activeCategoryFilter, selectedLocation, searchQuery, useAlgorithm, currentUser, followers, likes, comments, postReports]);
 
   // Intelligently prefetch neighboring posts' media in the service worker for zero-latency transitions
   useEffect(() => {
@@ -832,16 +892,41 @@ export const Feed: React.FC<FeedProps> = ({
     }
   }, [selectedPost?.id, rankedPosts, userMap]);
 
-  const handleShare = (postId: string) => {
-    setCopiedPostId(postId);
-    navigator.clipboard.writeText(`${window.location.origin}/posts/${postId}`);
-    setToastMessage('Link Copied! 🔗');
-    setTimeout(() => {
-      setCopiedPostId(null);
-    }, 2000);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 3000);
+  const handleShare = async (postId: string) => {
+    const postObj = posts.find(p => p.id === postId);
+    const title = postObj?.title || 'Check out this post on FreshLink';
+    const text = postObj?.content ? `${postObj.content.slice(0, 100)}...` : '';
+    const shareUrl = `${window.location.origin}/posts/${postId}`;
+
+    const copyToClipboard = () => {
+      setCopiedPostId(postId);
+      navigator.clipboard.writeText(shareUrl);
+      setToastMessage('Link Copied! 🔗');
+      setTimeout(() => {
+        setCopiedPostId(null);
+      }, 2000);
+      setTimeout(() => {
+        setToastMessage(null);
+      }, 3000);
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title,
+          text,
+          url: shareUrl,
+        });
+        setToastMessage('Shared successfully! 🚀');
+        setTimeout(() => setToastMessage(null), 3000);
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          copyToClipboard();
+        }
+      }
+    } else {
+      copyToClipboard();
+    }
   };
 
   const handleCreateComment = async (e: React.FormEvent, postId: string) => {
@@ -892,26 +977,6 @@ export const Feed: React.FC<FeedProps> = ({
           {/* Admin Broadcast Announcements and Polls Banner */}
           <BroadcastBanner />
       
-      {/* Dynamic Quota Fallback Mode Notice Badge */}
-      {isQuotaFallbackMode && (
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.96 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 flex gap-3 text-left shadow-sm"
-          id="quota-alert-badge"
-        >
-          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 shrink-0 select-none">
-            <ShieldAlert className="w-5 h-5 animate-pulse" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-700 bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 rounded-md leading-none">DEMO ACCELERATOR PASSIVE</span>
-            <p className="text-zinc-700 font-sans font-medium text-xs mt-1.5 leading-relaxed">
-              Google Cloud Firestore daily read/write limits exceeded. A high-resilience **local sandbox database** of curated campaign seeds has been fully synchronized so you can test comments, post creations, follows, and sponsor ad flows seamlessly on client session!
-            </p>
-          </div>
-        </motion.div>
-      )}
-
       {/* Birthday Celebration Greeting Card */}
       {isBirthdayToday && showBirthdayCard && (
         <motion.div
@@ -1017,6 +1082,46 @@ export const Feed: React.FC<FeedProps> = ({
           </h2>
         </div>
       </header>
+
+      {/* For You / Following Sliding Tab Switcher */}
+      {!isBookmarksOnly && currentUser && (
+        <div className="flex border-b border-zinc-200/60 mb-5 gap-6 select-none" id="feed-main-tabs">
+          <button
+            id="feed-tab-for-you"
+            onClick={() => setIsFollowingOnly(false)}
+            className={`pb-3.5 text-[11px] uppercase font-black tracking-[0.15em] relative transition-all cursor-pointer focus:outline-none ${
+              !isFollowingOnly 
+                ? 'text-zinc-950 font-black' 
+                : 'text-zinc-400 hover:text-zinc-650'
+            }`}
+          >
+            For You
+            {!isFollowingOnly && (
+              <motion.div 
+                layoutId="feedActiveTabUnderline" 
+                className="absolute bottom-0 left-0 right-0 h-[3px] bg-orange-500 rounded-full" 
+              />
+            )}
+          </button>
+          <button
+            id="feed-tab-following"
+            onClick={() => setIsFollowingOnly(true)}
+            className={`pb-3.5 text-[11px] uppercase font-black tracking-[0.15em] relative transition-all cursor-pointer focus:outline-none ${
+              isFollowingOnly 
+                ? 'text-zinc-950 font-black' 
+                : 'text-zinc-400 hover:text-zinc-650'
+            }`}
+          >
+            Following
+            {isFollowingOnly && (
+              <motion.div 
+                layoutId="feedActiveTabUnderline" 
+                className="absolute bottom-0 left-0 right-0 h-[3px] bg-orange-500 rounded-full" 
+              />
+            )}
+          </button>
+        </div>
+      )}
 
       {!isOnline && (
         <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-550/10 border border-amber-500/20 text-amber-800 text-[10.5px] font-bold rounded-xl mb-4 font-sans uppercase tracking-wide shadow-sm">
@@ -1192,6 +1297,36 @@ export const Feed: React.FC<FeedProps> = ({
             <Clock className="w-3.5 h-3.5 text-zinc-400" />
             Recent
           </button>
+        </div>
+      </div>
+
+      {/* Mobile-only Trending Topics horizontal bar */}
+      <div className="xl:hidden flex flex-col gap-2 bg-white/70 border border-zinc-200/50 p-4 rounded-2xl shadow-sm mb-1" id="mobile-trending-topics">
+        <div className="flex items-center gap-1.5 text-zinc-400">
+          <Sparkles className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+          <span className="text-[9.5px] font-black uppercase tracking-widest font-sans">Trending Topics</span>
+        </div>
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide select-none">
+          {trendingHashtags.map(({ tag, count }) => {
+            const isActive = searchQuery.toLowerCase() === `#${tag}`.toLowerCase();
+            return (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => setSearchQuery(isActive ? '' : `#${tag}`)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider transition-all shrink-0 cursor-pointer border ${
+                  isActive
+                    ? 'bg-orange-50/90 border-orange-200 text-orange-700'
+                    : 'bg-white border-zinc-200/70 hover:border-zinc-300 text-zinc-650'
+                }`}
+              >
+                <span>#{tag}</span>
+                <span className={`text-[8.5px] font-mono px-1 rounded-full ${isActive ? 'bg-orange-200 text-orange-800' : 'bg-zinc-100 text-zinc-500'}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -1791,15 +1926,18 @@ export const Feed: React.FC<FeedProps> = ({
                               className="absolute left-0 bottom-full mb-1 bg-white border border-zinc-200 shadow-xl rounded-full px-3 py-1.5 flex items-center gap-2.5 z-40 whitespace-nowrap"
                               id={`floating-reaction-bar-${post.id}`}
                             >
-                              {['👍', '❤️', '✨', '💡', '🔥'].map((emoji, index) => {
+                              {['👍', '❤️', '🔥', '🤯', '💡', '✨', '😂', '👏'].map((emoji, index) => {
                                 const count = getPostReactionsWithLocal(post.id)[emoji] || 0;
                                 const userHasReacted = getUserReactionWithLocal(post.id) === emoji;
                                 const labels: Record<string, string> = {
                                   '👍': 'Like',
                                   '❤️': 'Heart',
-                                  '✨': 'Spark',
+                                  '🔥': 'Fire',
+                                  '🤯': 'Mind-blown',
                                   '💡': 'Insightful',
-                                  '🔥': 'Fire'
+                                  '✨': 'Spark',
+                                  '😂': 'Laugh',
+                                  '👏': 'Applause'
                                 };
                                 return (
                                   <motion.button
@@ -1833,15 +1971,18 @@ export const Feed: React.FC<FeedProps> = ({
    
                       {/* Quick Emoji Reactions */}
                       <div className="flex items-center gap-0.5 bg-stone-100 p-0.5 rounded-full border border-stone-200/40 shrink-0">
-                        {['👍', '❤️', '✨', '💡', '🔥'].map((emoji) => {
+                        {['👍', '❤️', '🔥', '🤯', '💡', '✨', '😂', '👏'].map((emoji) => {
                           const count = getPostReactionsWithLocal(post.id)[emoji] || 0;
                           const userHasReacted = getUserReactionWithLocal(post.id) === emoji;
                           const labels: Record<string, string> = {
                             '👍': 'like',
                             '❤️': 'love',
-                            '✨': 'spark',
+                            '🔥': 'fire',
+                            '🤯': 'mind-blown',
                             '💡': 'insightful',
-                            '🔥': 'fire'
+                            '✨': 'spark',
+                            '😂': 'laugh',
+                            '👏': 'applause'
                           };
                           return (
                             <button
@@ -2475,14 +2616,18 @@ export const Feed: React.FC<FeedProps> = ({
 
                       {/* Quick Emoji Reactions */}
                       <div className="flex items-center gap-0.5 bg-stone-100 p-0.5 rounded-full border border-stone-200/40 shrink-0">
-                        {['👍', '❤️', '😂', '✨'].map((emoji) => {
+                        {['👍', '❤️', '🔥', '🤯', '💡', '✨', '😂', '👏'].map((emoji) => {
                           const count = getPostReactionsWithLocal(selectedPost.id)[emoji] || 0;
                           const userHasReacted = getUserReactionWithLocal(selectedPost.id) === emoji;
                           const labels: Record<string, string> = {
                             '👍': 'like',
                             '❤️': 'love',
+                            '🔥': 'fire',
+                            '🤯': 'mind-blown',
+                            '💡': 'insightful',
+                            '✨': 'spark',
                             '😂': 'laugh',
-                            '✨': 'spark'
+                            '👏': 'applause'
                           };
                           return (
                             <button
@@ -3300,6 +3445,52 @@ export const Feed: React.FC<FeedProps> = ({
                   {cat.name}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Trending Topics Widget */}
+          <div className="bg-white border border-stone-200/60 rounded-3xl p-6 shadow-sm space-y-4 text-left" id="trending-topics-widget">
+            <h3 className="text-[10px] font-black uppercase tracking-wider text-orange-600 font-sans flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-orange-500 shrink-0" />
+              <span>Trending Topics</span>
+            </h3>
+            
+            <div className="space-y-2.5">
+              {trendingHashtags.map(({ tag, count }) => {
+                const isActive = searchQuery.toLowerCase() === `#${tag}`.toLowerCase();
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => setSearchQuery(isActive ? '' : `#${tag}`)}
+                    className={`w-full flex items-center justify-between p-3 rounded-2xl border transition-all text-left group cursor-pointer ${
+                      isActive
+                        ? 'bg-orange-50/80 border-orange-200 text-orange-700 font-extrabold shadow-xs'
+                        : 'bg-zinc-50 border-zinc-150 hover:bg-zinc-100/60 hover:border-zinc-200 text-zinc-700'
+                    }`}
+                    title={isActive ? "Clear filter" : `Filter feed by #${tag}`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={`transition-colors font-mono font-bold ${isActive ? 'text-orange-600' : 'text-zinc-400 group-hover:text-orange-500'}`}>#</span>
+                      <span className="text-xs font-bold font-sans truncate">{tag}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className={`text-[9.5px] font-mono font-bold px-2.5 py-0.5 rounded-full transition-colors ${
+                        isActive 
+                          ? 'bg-orange-200 text-orange-800' 
+                          : 'bg-zinc-200/80 text-zinc-600 group-hover:bg-orange-100/80 group-hover:text-orange-750'
+                      }`}>
+                        {count} {count === 1 ? 'post' : 'posts'}
+                      </span>
+                      <ArrowUpRight className={`w-3.5 h-3.5 transition-all ${
+                        isActive 
+                          ? 'text-orange-500 rotate-45' 
+                          : 'text-zinc-400 group-hover:text-orange-500 group-hover:translate-x-0.5 group-hover:-translate-y-0.5'
+                      }`} />
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </aside>

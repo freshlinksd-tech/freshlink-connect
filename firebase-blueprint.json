@@ -98,6 +98,112 @@
         "read": { "type": "boolean" }
       },
       "required": ["id", "senderId", "receiverId", "message", "createdAt", "read"]
+    },
+    "WithdrawalRequest": {
+      "title": "WithdrawalRequest",
+      "description": "Withdrawal requests submitted by monetized users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "amountNpr": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "details": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "remarks": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "amountNpr", "paymentMethod", "details", "status", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Activity feeds notifications for users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderImage": { "type": "string" },
+        "type": { "type": "string", "enum": ["like", "comment", "follow", "report_decision", "withdrawal_decision", "ad_alert", "system"] },
+        "message": { "type": "string" },
+        "postId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "read": { "type": "boolean" },
+        "isPoll": { "type": "boolean" },
+        "pollAnswer": { "type": "string" },
+        "pollOptions": { "type": "array" }
+      },
+      "required": ["id", "userId", "senderId", "senderName", "type", "message", "createdAt", "read"]
+    },
+    "PostReport": {
+      "title": "PostReport",
+      "description": "Moderation reports submitted against published articles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "postId": { "type": "string" },
+        "postTitle": { "type": "string" },
+        "postAuthorId": { "type": "string" },
+        "reporterId": { "type": "string" },
+        "reporterName": { "type": "string" },
+        "reason": { "type": "string" },
+        "remarks": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "resolved", "dismissed"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "postId", "postTitle", "postAuthorId", "reporterId", "reporterName", "reason", "remarks", "status", "createdAt"]
+    },
+    "Ad": {
+      "title": "Ad",
+      "description": "Ad banners and campaign slots",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "purpose": { "type": "string" },
+        "contact": { "type": "string" },
+        "content": { "type": "string" },
+        "location": { "type": "string" },
+        "email": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected", "published"] },
+        "scheduledDate": { "type": "string" },
+        "clickCount": { "type": "number" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "targetUrl": { "type": "string" },
+        "placement": { "type": "string" },
+        "paymentScreenshotUrl": { "type": "string" },
+        "amountPaid": { "type": "number" },
+        "paymentStatus": { "type": "string" }
+      },
+      "required": ["id", "userId", "name", "purpose", "contact", "content", "imageUrl", "active", "createdAt", "status"]
+    },
+    "Draft": {
+      "title": "Draft",
+      "description": "An unpublished saved draft of a blog post",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string" },
+        "tagsString": { "type": "string" },
+        "multiplePhotos": { "type": "array" },
+        "videoUrl": { "type": "string" },
+        "isPremium": { "type": "boolean" },
+        "imageRatio": { "type": "string" },
+        "hasPoll": { "type": "boolean" },
+        "pollQuestion": { "type": "string" },
+        "pollOptions": { "type": "array" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "updatedAt"]
     }
   },
   "firestore": {
@@ -124,6 +230,26 @@
     "/messages/{messageId}": {
       "schema": "Message",
       "description": "Direct chat message items"
+    },
+    "/withdrawals/{withdrawalId}": {
+      "schema": "WithdrawalRequest",
+      "description": "Finances withdrawal requests"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Activity feeds and survey/poll notifications"
+    },
+    "/postReports/{reportId}": {
+      "schema": "PostReport",
+      "description": "Moderation reports against posts"
+    },
+    "/ads/{adId}": {
+      "schema": "Ad",
+      "description": "Campaign ads banners and placements"
+    },
+    "/drafts/{draftId}": {
+      "schema": "Draft",
+      "description": "Saved unpublished post drafts for content creators"
     }
   }
 }

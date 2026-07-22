@@ -84,7 +84,7 @@ interface CreatePostProps {
 }
 
 export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
-  const { createPost, currentUser } = useSocialPlatform();
+  const { createPost, currentUser, drafts = [], saveDraft, deleteDraft } = useSocialPlatform();
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -111,6 +111,127 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
   const [hasPoll, setHasPoll] = useState(false);
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
+
+  // Auto-save & Local Draft states
+  const [showDraftRestored, setShowDraftRestored] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+
+  const [activeFirestoreDraftId, setActiveFirestoreDraftId] = useState<string | null>(null);
+
+  const loadSavedDraft = (draft: any) => {
+    setActiveFirestoreDraftId(draft.id);
+    setTitle(draft.title || '');
+    setContent(draft.content || '');
+    setCategory(draft.category || 'technology');
+    setTagsString(draft.tagsString || '');
+    setMultiplePhotos(draft.multiplePhotos || []);
+    setVideoUrl(draft.videoUrl || '');
+    setIsPremium(draft.isPremium || false);
+    setImageRatio(draft.imageRatio || 'auto');
+    setHasPoll(draft.hasPoll || false);
+    setPollQuestion(draft.pollQuestion || '');
+    setPollOptions(draft.pollOptions || ['', '']);
+  };
+
+  const handleSaveToFirestoreDrafts = async () => {
+    if (!currentUser) return;
+    if (!title.trim() && !content.trim()) {
+      alert("Please add a title or some content first to save a draft!");
+      return;
+    }
+    const draftId = activeFirestoreDraftId || `draft_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const newDraft = {
+      id: draftId,
+      userId: currentUser.id,
+      title: title.trim(),
+      content: content.trim(),
+      category,
+      tagsString,
+      multiplePhotos,
+      videoUrl: videoUrl.trim(),
+      isPremium,
+      imageRatio,
+      hasPoll,
+      pollQuestion,
+      pollOptions,
+      updatedAt: new Date().toISOString()
+    };
+    try {
+      await saveDraft(newDraft);
+      setActiveFirestoreDraftId(draftId);
+      alert("Draft successfully saved to Firestore! 📁");
+    } catch (err) {
+      console.error("Failed to save draft to Firestore:", err);
+      alert("Failed to save draft.");
+    }
+  };
+
+  // Load draft on mount
+  useEffect(() => {
+    if (!currentUser) return;
+    const savedDraft = localStorage.getItem(`freshlink_draft_${currentUser.id}`);
+    if (savedDraft) {
+      try {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed.title) setTitle(parsed.title);
+        if (parsed.content) setContent(parsed.content);
+        if (parsed.category) setCategory(parsed.category);
+        if (parsed.tagsString) setTagsString(parsed.tagsString);
+        if (parsed.multiplePhotos) setMultiplePhotos(parsed.multiplePhotos);
+        if (parsed.videoUrl) setVideoUrl(parsed.videoUrl);
+        if (parsed.isPremium !== undefined) setIsPremium(parsed.isPremium);
+        if (parsed.imageRatio) setImageRatio(parsed.imageRatio);
+        if (parsed.hasPoll !== undefined) setHasPoll(parsed.hasPoll);
+        if (parsed.pollQuestion) setPollQuestion(parsed.pollQuestion);
+        if (parsed.pollOptions) setPollOptions(parsed.pollOptions);
+        
+        if (parsed.title || parsed.content || parsed.videoUrl || (parsed.multiplePhotos && parsed.multiplePhotos.length > 0)) {
+          setShowDraftRestored(true);
+        }
+      } catch (err) {
+        console.error("Failed to parse saved draft:", err);
+      }
+    }
+  }, [currentUser]);
+
+  // Save draft whenever important fields change
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    // If everything is completely empty, remove draft
+    if (title.trim() === '' && content.trim() === '' && multiplePhotos.length === 0 && !videoUrl && !hasPoll) {
+      localStorage.removeItem(`freshlink_draft_${currentUser.id}`);
+      return;
+    }
+
+    setIsSavingDraft(true);
+    const timer = setTimeout(() => {
+      const draftData = {
+        title,
+        content,
+        category,
+        tagsString,
+        multiplePhotos,
+        videoUrl,
+        isPremium,
+        imageRatio,
+        hasPoll,
+        pollQuestion,
+        pollOptions
+      };
+
+      localStorage.setItem(`freshlink_draft_${currentUser.id}`, JSON.stringify(draftData));
+      setIsSavingDraft(false);
+    }, 400); // short debounce to minimize direct writing latency
+
+    return () => clearTimeout(timer);
+  }, [title, content, category, tagsString, multiplePhotos, videoUrl, isPremium, imageRatio, hasPoll, pollQuestion, pollOptions, currentUser]);
+
+  const clearDraftLocalStorage = () => {
+    if (currentUser) {
+      localStorage.removeItem(`freshlink_draft_${currentUser.id}`);
+    }
+  };
 
   // Cloudinary uploading progress states
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
@@ -314,6 +435,7 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
       setPollQuestion('');
       setPollOptions(['', '']);
       setImageRatio('auto');
+      clearDraftLocalStorage();
 
       onSuccess(); // Redirects to Home Feed tab
     } catch (err) {
@@ -377,7 +499,7 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
             className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed ${
               isPreview
                 ? 'bg-white text-zinc-900 shadow-sm'
-                : 'text-zinc-500 hover:text-zinc-805'
+                : 'text-zinc-500 hover:text-zinc-855'
             }`}
             title={(!title.trim() || !content.trim()) ? "Add title & content first to preview!" : "Live feed representation"}
           >
@@ -386,6 +508,47 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
           </button>
         </div>
       </div>
+
+      {showDraftRestored && (
+        <div className="mb-6 bg-amber-50 border border-amber-200/60 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-800 text-xs animate-in fade-in duration-200 shadow-xs" id="draft-restored-banner">
+          <div className="flex items-start gap-2.5">
+            <span className="p-1.5 bg-amber-100 rounded-lg text-amber-700 text-sm leading-none shrink-0">💾</span>
+            <div>
+              <p className="font-extrabold text-amber-950 font-sans">Draft Restored from Auto-Save!</p>
+              <p className="text-[10px] text-amber-850 mt-0.5 leading-normal font-medium font-sans">We found unsaved changes in your browser's local storage and restored them automatically.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setTitle('');
+                setContent('');
+                setTagsString('');
+                setMultiplePhotos([]);
+                setVideoUrl('');
+                setHasPoll(false);
+                setPollQuestion('');
+                setPollOptions(['', '']);
+                setImageRatio('auto');
+                setShowDraftRestored(false);
+                clearDraftLocalStorage();
+              }}
+              className="px-3.5 py-2 bg-amber-200/60 hover:bg-amber-250 text-amber-950 font-sans font-black uppercase tracking-widest text-[8.5px] rounded-lg transition-all cursor-pointer border border-amber-300/40"
+            >
+              Clear & Start Fresh
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowDraftRestored(false)}
+              className="text-amber-500 hover:text-amber-700 p-1 rounded-lg hover:bg-amber-100/50 transition-colors"
+              title="Keep draft"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {submitError && (
         <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-2xl flex items-start gap-3 text-red-800 text-xs animate-fadeIn transition-all shadow-sm" id="create-post-submit-error">
@@ -523,8 +686,10 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
           </div>
         </div>
       ) : (
-        /* Regular Edit Form with Bold Typography Style */
-        <form onSubmit={(e) => handleSubmit(e, 'published')} className="space-y-6" id="edit-editor-form">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
+          <div className="lg:col-span-3">
+            {/* Regular Edit Form with Bold Typography Style */}
+            <form onSubmit={(e) => handleSubmit(e, 'published')} className="space-y-6" id="edit-editor-form">
           <div className="space-y-3">
             <label className="text-xs font-semibold text-zinc-600 block">
               Choose Topic Category <span className="text-orange-600 font-bold">*</span>
@@ -1070,8 +1235,20 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
 
           {/* Form Actions: Publish to feed vs save draft */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-zinc-150">
-            <span className="text-xs text-zinc-400 font-medium">
-              Saved drafts list inside user "Profile" sections.
+            <span className="text-xs text-zinc-400 font-medium flex items-center gap-1.5">
+              {isSavingDraft ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 text-orange-500 animate-spin shrink-0" />
+                  <span className="text-orange-600 font-bold">Auto-saving draft...</span>
+                </>
+              ) : (title.trim() || content.trim() || multiplePhotos.length > 0 || videoUrl) ? (
+                <>
+                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping shrink-0" />
+                  <span className="text-zinc-500">Draft auto-saved</span>
+                </>
+              ) : (
+                <span>Saved drafts list inside user "Profile" sections.</span>
+              )}
             </span>
 
             <div className="flex gap-2 w-full sm:w-auto font-sans">
@@ -1079,10 +1256,10 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
                 type="button"
                 id="save-draft-btn"
                 disabled={isSubmitting}
-                onClick={(e) => handleSubmit(e, 'draft')}
-                className="flex-1 sm:flex-none px-5 py-2.5 bg-zinc-50 hover:bg-zinc-100 border border-zinc-205 rounded-xl text-zinc-700 font-bold text-xs transition disabled:opacity-50"
+                onClick={handleSaveToFirestoreDrafts}
+                className="flex-1 sm:flex-none px-5 py-2.5 bg-zinc-50 hover:bg-zinc-100 border border-zinc-205 rounded-xl text-zinc-700 font-bold text-xs transition disabled:opacity-50 cursor-pointer focus:outline-none"
               >
-                {isSubmitting ? 'Saving...' : 'Save as Draft'}
+                {isSubmitting ? 'Saving...' : 'Save to Cloud Drafts'}
               </button>
               <button
                 type="submit"
@@ -1105,6 +1282,81 @@ export const CreatePost: React.FC<CreatePostProps> = ({ onSuccess }) => {
             </div>
           </div>
         </form>
+          </div>
+
+          {/* Firestore Saved Drafts list sidebar */}
+          <div className="space-y-6" id="saved-drafts-side-panel">
+            <div className="bg-white border border-stone-200/60 rounded-3xl p-6 shadow-sm space-y-4 text-left">
+              <h3 className="text-[10px] font-black uppercase tracking-wider text-orange-600 font-sans flex items-center gap-2">
+                <Bookmark className="w-4 h-4 text-orange-500 shrink-0" />
+                <span>Cloud Saved Drafts</span>
+              </h3>
+              <p className="text-[10px] text-zinc-550 font-medium font-sans leading-normal">
+                Save your progress to Firestore to retrieve your content across multiple devices or pick up work later.
+              </p>
+
+              <button
+                type="button"
+                id="save-current-firestore-draft-btn"
+                onClick={handleSaveToFirestoreDrafts}
+                className="w-full py-2.5 px-4 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border border-zinc-205 font-bold text-[11px] uppercase tracking-wider rounded-xl transition shadow-xs focus:outline-none cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                💾 Save Current Draft
+              </button>
+
+              <div className="border-t border-zinc-100 pt-4 mt-2 space-y-3">
+                <h4 className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Your Cloud Drafts ({drafts.filter((d: any) => d.userId === currentUser.id).length})</h4>
+                {drafts.filter((d: any) => d.userId === currentUser.id).length === 0 ? (
+                  <p className="text-[10px] text-zinc-400 italic">No drafts saved in cloud yet.</p>
+                ) : (
+                  <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1 scrollbar-thin">
+                    {drafts.filter((d: any) => d.userId === currentUser.id).map((d: any) => (
+                      <div 
+                        key={d.id} 
+                        className={`p-3 rounded-2xl border transition-all text-left space-y-2 group relative ${
+                          activeFirestoreDraftId === d.id
+                            ? 'bg-orange-50/50 border-orange-200'
+                            : 'bg-zinc-50 border-zinc-150 hover:bg-zinc-100/50 hover:border-zinc-250'
+                        }`}
+                      >
+                        <div className="pr-1 font-sans">
+                          <p className="text-xs font-extrabold text-zinc-800 line-clamp-1">{d.title || "(Untitled Draft)"}</p>
+                          <p className="text-[9px] text-zinc-400 font-semibold mt-0.5">{new Date(d.updatedAt).toLocaleDateString()} at {new Date(d.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                        </div>
+                        <p className="text-[10px] text-zinc-550 line-clamp-2 leading-relaxed font-sans">{d.content || "(No content)"}</p>
+                        
+                        <div className="flex gap-2 pt-1 font-sans">
+                          <button
+                            type="button"
+                            onClick={() => loadSavedDraft(d)}
+                            className="px-2.5 py-1 bg-white hover:bg-zinc-100 text-zinc-700 border border-zinc-200 rounded-lg text-[9px] font-bold transition-all cursor-pointer focus:outline-none"
+                          >
+                            Load
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (confirm("Are you sure you want to delete this draft?")) {
+                                await deleteDraft(d.id);
+                                if (activeFirestoreDraftId === d.id) {
+                                  setActiveFirestoreDraftId(null);
+                                }
+                              }
+                            }}
+                            className="px-2.5 py-1 hover:bg-red-50 text-red-550 hover:text-red-600 rounded-lg text-[9px] font-bold transition-all cursor-pointer flex items-center gap-0.5 ml-auto focus:outline-none"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
