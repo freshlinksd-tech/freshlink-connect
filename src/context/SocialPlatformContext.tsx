@@ -198,7 +198,44 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         safeJsonFetch('/api/db-status', { engine: 'In-Memory Fallback DB Engine' })
       ]);
 
-      setUsers(Array.isArray(uRes) ? uRes : []);
+      setUsers(prevUsers => {
+        const fetched = Array.isArray(uRes) ? uRes : [];
+        const userMap = new Map<string, User>();
+        
+        // 1. Add fetched users from database
+        fetched.forEach((u: User) => {
+          if (u && u.id) userMap.set(u.id, u);
+        });
+        
+        // 2. Preserve any existing active users from previous state
+        prevUsers.forEach((u: User) => {
+          if (u && u.id && !userMap.has(u.id)) {
+            userMap.set(u.id, u);
+          }
+        });
+        
+        // 3. Preserve cached active session user from localStorage
+        const cachedUserStr = typeof window !== 'undefined' ? localStorage.getItem('freshlink_cached_user') : null;
+        if (cachedUserStr) {
+          try {
+            const cachedUser = JSON.parse(cachedUserStr);
+            if (cachedUser && cachedUser.id) {
+              if (!userMap.has(cachedUser.id)) {
+                userMap.set(cachedUser.id, cachedUser);
+              } else {
+                const existing = userMap.get(cachedUser.id)!;
+                if (!existing.hasSetupAccount && cachedUser.hasSetupAccount) {
+                  userMap.set(cachedUser.id, { ...existing, ...cachedUser });
+                }
+              }
+            }
+          } catch (e) {
+            // Ignore JSON parse error
+          }
+        }
+        
+        return Array.from(userMap.values());
+      });
       setPosts(Array.isArray(pRes) ? pRes : []);
       setDrafts(Array.isArray(dRes) ? dRes : []);
       setFollowers(Array.isArray(fRes) ? fRes : []);
