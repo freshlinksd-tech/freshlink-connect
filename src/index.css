@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
-@variant dark (&:where(.dark, .dark *));
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --font-sans: "Space Grotesk", -apple-system, system-ui, sans-serif;
@@ -9,46 +9,61 @@
 }
 
 /* Override body styles for a clean, technical layout */
+html {
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+
 body {
-  background-color: #FFFFFF;
-  color: #171717;
+  background-color: #fafaf9;
+  color: #1c1917;
   font-family: var(--font-sans);
   letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
 }
 
 /* Dark mode body override */
-.dark body {
+.dark body, html.dark {
   background-color: #0c0a09;
   color: #f5f5f4;
 }
 
+/* Dark mode input & textarea defaults */
+.dark input,
+.dark textarea,
+.dark select {
+  color-scheme: dark;
+}
+
 /* Premium Typography Accents */
 .hero-text {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: clamp(2.5rem, 6vw, 5.5rem);
-  line-height: 0.9;
-  letter-spacing: -0.05em;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
   font-weight: 900;
 }
 
-.serif-italic {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-weight: 700;
-}
-
 .sidebar-border {
-  border-right: 1px solid rgba(28, 25, 23, 0.05);
+  border-right: 1px solid rgba(28, 25, 23, 0.08);
+}
+.dark .sidebar-border {
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* Luxury shadows inspired by Apple and Pinterest */
+/* Luxury shadows inspired by modern app interfaces */
 .card-shadow {
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.02), 0 1px 3px rgba(0, 0, 0, 0.01);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03), 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+.dark .card-shadow {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .card-shadow-hover:hover {
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.015);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.02);
+  transform: translateY(-2px);
+}
+.dark .card-shadow-hover:hover {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.4);
   transform: translateY(-2px);
 }
 

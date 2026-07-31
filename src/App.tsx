@@ -3,55 +3,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, Suspense, lazy, Component } from 'react';
+import React, { useState, useEffect, Suspense, Component } from 'react';
 import { SocialPlatformProvider, useSocialPlatform } from './context/SocialPlatformContext';
 import { Navigation } from './components/Navigation';
 import { FreshLinkLogo } from './components/FreshLinkLogo';
 import { motion } from 'motion/react';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { FeedPostSkeleton, ProfileSkeleton } from './components/SkeletonLoader';
+import { SEOManager } from './components/SEOManager';
 
-function lazyWithRetry<T extends React.ComponentType<any>>(
-  componentImport: () => Promise<any>,
-  exportName?: string
-) {
-  return lazy(async () => {
-    const pageHasBeenReloaded = typeof window !== 'undefined' && JSON.parse(
-      sessionStorage.getItem('freshlink_chunk_reload_attempt') || 'false'
-    );
-
-    try {
-      const module = await componentImport();
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('freshlink_chunk_reload_attempt', 'false');
-      }
-      if (exportName) {
-        return { default: module[exportName] };
-      }
-      return module.default ? module : { default: module };
-    } catch (error) {
-      console.error('Failed to dynamically load module chunk:', error);
-      if (typeof window !== 'undefined' && !pageHasBeenReloaded) {
-        sessionStorage.setItem('freshlink_chunk_reload_attempt', 'true');
-        window.location.reload();
-        return new Promise<{ default: T }>(() => {});
-      }
-      throw error;
-    }
-  });
-}
-
-const Auth = lazyWithRetry(() => import('./components/Auth'), 'Auth');
-const Feed = lazyWithRetry(() => import('./components/Feed'), 'Feed');
-const CreatePost = lazyWithRetry(() => import('./components/CreatePost'), 'CreatePost');
-const Chat = lazyWithRetry(() => import('./components/Chat'), 'Chat');
-const Profiles = lazyWithRetry(() => import('./components/Profiles'), 'Profiles');
-const LandingPage = lazyWithRetry(() => import('./components/LandingPage'), 'LandingPage');
-const OnboardingSetup = lazyWithRetry(() => import('./components/OnboardingSetup'), 'OnboardingSetup');
-const AdminPanel = lazyWithRetry(() => import('./components/AdminPanel'), 'AdminPanel');
-const VerificationSetup = lazyWithRetry(() => import('./components/VerificationSetup'), 'VerificationSetup');
-const MonetizationPanel = lazyWithRetry(() => import('./components/MonetizationPanel'), 'MonetizationPanel');
-const Notifications = lazyWithRetry(() => import('./components/Notifications'), 'Notifications');
+import { Auth } from './components/Auth';
+import { Feed } from './components/Feed';
+import { CreatePost } from './components/CreatePost';
+import { Chat } from './components/Chat';
+import { Profiles } from './components/Profiles';
+import { LandingPage } from './components/LandingPage';
+import { OnboardingSetup } from './components/OnboardingSetup';
+import { AdminPanel } from './components/AdminPanel';
+import { VerificationSetup } from './components/VerificationSetup';
+import { MonetizationPanel } from './components/MonetizationPanel';
+import { Notifications } from './components/Notifications';
 import { useTheme } from './hooks/useTheme';
 import { 
   Sparkles, 
@@ -172,6 +143,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-stone-950 text-zinc-900 dark:text-stone-100 flex flex-col md:flex-row font-sans antialiased">
+      <SEOManager activeTab={activeTab} selectedUserId={selectedUser} activeCategoryFilter={activeCategoryFilter} />
       
       {/* Real-time Setup Wizard Portal for First Login */}
       {currentUser.hasSetupAccount === false && (

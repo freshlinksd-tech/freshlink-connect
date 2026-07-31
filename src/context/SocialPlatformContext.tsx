@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { User, Post, PostPoll, Like, Comment, Follower, Message, Achievement, WithdrawalRequest, Notification, PostReport, AdBanner, Draft } from '../types';
+import { SEED_USERS, SEED_POSTS } from '../data/seedData';
 import { censorText } from '../lib/security';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
@@ -202,19 +203,24 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         const fetched = Array.isArray(uRes) ? uRes : [];
         const userMap = new Map<string, User>();
         
-        // 1. Add fetched users from database
+        // 1. Add default seed users first
+        SEED_USERS.forEach((u: User) => {
+          if (u && u.id) userMap.set(u.id, u);
+        });
+
+        // 2. Add fetched users from database (overwriting with DB updates)
         fetched.forEach((u: User) => {
           if (u && u.id) userMap.set(u.id, u);
         });
         
-        // 2. Preserve any existing active users from previous state
+        // 3. Preserve any existing active users from previous state
         prevUsers.forEach((u: User) => {
           if (u && u.id && !userMap.has(u.id)) {
             userMap.set(u.id, u);
           }
         });
         
-        // 3. Preserve cached active session user from localStorage
+        // 4. Preserve cached active session user from localStorage
         const cachedUserStr = typeof window !== 'undefined' ? localStorage.getItem('freshlink_cached_user') : null;
         if (cachedUserStr) {
           try {
@@ -236,7 +242,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         
         return Array.from(userMap.values());
       });
-      setPosts(Array.isArray(pRes) ? pRes : []);
+      setPosts(Array.isArray(pRes) && pRes.length > 0 ? pRes : SEED_POSTS);
       setDrafts(Array.isArray(dRes) ? dRes : []);
       setFollowers(Array.isArray(fRes) ? fRes : []);
       setComments(Array.isArray(cRes) ? cRes : []);
@@ -263,66 +269,73 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     }
 
     const initUser = async () => {
-      let cachedId = localStorage.getItem('freshlink_current_user_id');
-      const cachedUserStr = localStorage.getItem('freshlink_cached_user');
-      if (cachedUserStr) {
+      try {
+        let cachedId = typeof window !== 'undefined' ? localStorage.getItem('freshlink_current_user_id') : null;
+        const cachedUserStr = typeof window !== 'undefined' ? localStorage.getItem('freshlink_cached_user') : null;
+        if (cachedUserStr) {
+          try {
+            const cachedUser = JSON.parse(cachedUserStr);
+            if (cachedUser && cachedUser.id) {
+              setUsers(prev => {
+                const filtered = prev.filter(u => u.id !== cachedUser.id);
+                return [...filtered, cachedUser];
+              });
+            }
+          } catch (e) {
+            // ignore cache parse error
+          }
+        }
+
+        if (!cachedId) {
+          cachedId = `anon_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('freshlink_current_user_id', cachedId);
+          }
+        }
+        setCurrentUserId(cachedId);
+
+        // Check or register this profile on backend
         try {
-          const cachedUser = JSON.parse(cachedUserStr);
-          if (cachedUser && cachedUser.id) {
-            setUsers(prev => {
-              const filtered = prev.filter(u => u.id !== cachedUser.id);
-              return [...filtered, cachedUser];
+          const checkRes = await fetch(`/api/users/${cachedId}`);
+          if (!checkRes.ok) {
+            const defaultUser: User = {
+              id: cachedId,
+              name: `Explorer ${cachedId.slice(-5)}`,
+              email: `${cachedId}@freshlinkconnect.info`,
+              bio: 'A creator exploring the FreshLink connection platform.',
+              profileImage: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&h=250&q=80',
+              coverImage: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=1200&q=80',
+              location: 'Earth',
+              interests: ['technology'],
+              socialLinks: {},
+              savedPosts: [],
+              createdAt: new Date().toISOString(),
+              hasSetupAccount: false,
+              isBlocked: false,
+              role: 'user',
+              isAdmin: false,
+              walletBalance: 25.00,
+              walletCredits: 500,
+              isMonetizationEnabled: false,
+              monthlySubscriptionPrice: 4.99,
+              subscribedCreators: []
+            };
+            await fetch('/api/users', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(defaultUser)
             });
           }
-        } catch (e) {
-          // ignore cache parse error
+        } catch (err) {
+          console.error("Failed to secure current user profile in Database:", err);
         }
-      }
 
-      if (!cachedId) {
-        cachedId = `anon_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
-        localStorage.setItem('freshlink_current_user_id', cachedId);
-      }
-      setCurrentUserId(cachedId);
-
-      // Check or register this profile on backend
-      try {
-        const checkRes = await fetch(`/api/users/${cachedId}`);
-        if (!checkRes.ok) {
-          const isRootAdmin = cachedId === 'user_root_admin' || cachedId.toLowerCase().includes('admin');
-          const defaultUser: User = {
-            id: cachedId,
-            name: `Explorer ${cachedId.slice(-5)}`,
-            email: `${cachedId}@freshlinkconnect.info`,
-            bio: 'A creator exploring the FreshLink connection platform.',
-            profileImage: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&h=250&q=80',
-            coverImage: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=1200&q=80',
-            location: 'Earth',
-            interests: ['technology'],
-            socialLinks: {},
-            savedPosts: [],
-            createdAt: new Date().toISOString(),
-            hasSetupAccount: false,
-            isBlocked: false,
-            role: 'user',
-            isAdmin: false,
-            walletBalance: 25.00,
-            walletCredits: 500,
-            isMonetizationEnabled: false,
-            monthlySubscriptionPrice: 4.99,
-            subscribedCreators: []
-          };
-          await fetch('/api/users', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(defaultUser)
-          });
-        }
+        await refetchData();
       } catch (err) {
-        console.error("Failed to secure current user profile in Database:", err);
+        console.error("Initialization error:", err);
+      } finally {
+        setLoading(false);
       }
-
-      await refetchData();
     };
 
     initUser();

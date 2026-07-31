@@ -5,6 +5,7 @@
 
 import React, { useState, useRef } from 'react';
 import { useSocialPlatform } from '../context/SocialPlatformContext';
+import { useTheme } from '../hooks/useTheme';
 import { INTEREST_OPTIONS } from '../data/seedData';
 import { FreshLinkLogo } from './FreshLinkLogo';
 import { motion } from 'motion/react';
@@ -28,11 +29,14 @@ import {
   Laptop,
   Plane,
   Dumbbell,
-  Utensils
+  Utensils,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 export const LandingPage: React.FC = () => {
   const { register, login, loginWithGoogle, users } = useSocialPlatform();
+  const { isDark, toggleTheme } = useTheme();
   const [isSignUp, setIsSignUp] = useState(false);
   
   // Login form state
@@ -201,13 +205,13 @@ export const LandingPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-stone-50 text-zinc-900 relative select-none font-sans overflow-y-auto" id="nexus-landing-page">
+    <div className="min-h-screen bg-stone-50 dark:bg-stone-950 text-zinc-900 dark:text-stone-100 relative select-none font-sans overflow-y-auto transition-colors duration-200" id="nexus-landing-page">
       
       {/* Absolute Low-Opacity Background Typography Watermarks */}
-      <div className="absolute top-[18%] left-10 text-[11rem] md:text-[14rem] font-black tracking-tighter text-stone-200/20 pointer-events-none select-none font-display uppercase leading-none hidden lg:block">
+      <div className="absolute top-[18%] left-10 text-[11rem] md:text-[14rem] font-black tracking-tighter text-stone-200/20 dark:text-stone-800/10 pointer-events-none select-none font-display uppercase leading-none hidden lg:block">
         CONNECT
       </div>
-      <div className="absolute top-[55%] right-10 text-[11rem] md:text-[14rem] font-black tracking-tighter text-stone-200/20 pointer-events-none select-none font-display uppercase leading-none hidden lg:block">
+      <div className="absolute top-[55%] right-10 text-[11rem] md:text-[14rem] font-black tracking-tighter text-stone-200/20 dark:text-stone-800/10 pointer-events-none select-none font-display uppercase leading-none hidden lg:block">
         CREATORS
       </div>
 
@@ -215,22 +219,41 @@ export const LandingPage: React.FC = () => {
       <div className="w-full max-w-7xl mx-auto p-6 md:p-10 lg:p-12 flex flex-col gap-y-12 relative z-10">
         
         {/* Transparent Premium Top Header */}
-        <header className="flex flex-col sm:flex-row gap-4 sm:items-center justify-between pb-6 border-b border-stone-200/30">
+        <header className="flex flex-col sm:flex-row gap-4 sm:items-center justify-between pb-6 border-b border-stone-200/40 dark:border-stone-800/40">
           <div className="flex items-center gap-4">
             <FreshLinkLogo className="w-12 h-12 text-orange-500 transform hover:scale-105 transition-smooth" />
             <div>
-              <span className="font-display font-black text-2xl tracking-tighter text-zinc-950 uppercase block">
+              <span className="font-display font-black text-2xl tracking-tighter text-zinc-950 dark:text-stone-50 uppercase block">
                 FRESHLINK <span className="text-orange-500">CONNECT</span>
               </span>
-              <p className="text-[9px] font-mono uppercase tracking-widest text-zinc-500 font-extrabold">Interest-Driven Connection Network</p>
+              <p className="text-[9px] font-mono uppercase tracking-widest text-zinc-500 dark:text-zinc-400 font-extrabold">Interest-Driven Connection Network</p>
             </div>
           </div>
           
           <div className="flex items-center gap-3">
             <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-2 px-3 text-zinc-700 dark:text-stone-200 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+              title={isDark ? "Switch to Light mode" : "Switch to Dark mode"}
+            >
+              {isDark ? (
+                <>
+                  <Sun className="w-4 h-4 text-amber-500" />
+                  <span className="hidden sm:inline">Light Mode</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-4 h-4 text-indigo-500" />
+                  <span className="hidden sm:inline">Dark Mode</span>
+                </>
+              )}
+            </button>
+
+            <button
               onClick={handleGoogleSignIn}
               disabled={isGoogleLoading}
-              className={`flex items-center gap-2 px-4 py-2 border border-stone-200 hover:border-orange-400 bg-white hover:bg-stone-50 rounded-xl text-[10px] font-sans uppercase tracking-widest font-bold text-zinc-800 transition-smooth cursor-pointer shadow-xs ${isGoogleLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`flex items-center gap-2 px-4 py-2 border border-stone-200 dark:border-stone-800 hover:border-orange-400 bg-white dark:bg-stone-900 hover:bg-stone-50 dark:hover:bg-stone-800 rounded-xl text-[10px] font-sans uppercase tracking-widest font-bold text-zinc-800 dark:text-stone-100 transition-smooth cursor-pointer shadow-xs ${isGoogleLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
               title="Sign in instantly with Google"
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -262,36 +285,36 @@ export const LandingPage: React.FC = () => {
           {/* Left Column: Hero Content & Notice */}
           <div className="lg:col-span-7 flex flex-col gap-y-8">
             {/* Top Banner Notice - Clean & Modern */}
-            <div className="p-3.5 bg-orange-500/5 rounded-2xl border border-orange-500/10 flex items-center justify-between text-[11px] font-sans font-semibold text-zinc-800 relative">
+            <div className="p-3.5 bg-orange-500/5 dark:bg-orange-500/10 rounded-2xl border border-orange-500/10 dark:border-orange-500/20 flex items-center justify-between text-[11px] font-sans font-semibold text-zinc-800 dark:text-stone-200 relative">
               <div className="flex items-center gap-2">
                 <span className="flex h-2 w-2 rounded-full bg-orange-500 animate-pulse shrink-0" />
                 <span>Discover Nepal's premier interest-driven digital creator hub.</span>
               </div>
-              <span className="font-mono text-[9px] uppercase tracking-wider bg-orange-500/10 text-orange-600 px-2 py-0.5 rounded-md font-bold">LIVE HUB</span>
+              <span className="font-mono text-[9px] uppercase tracking-wider bg-orange-500/10 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 px-2 py-0.5 rounded-md font-bold">LIVE HUB</span>
             </div>
 
             {/* 1. Large Visual Dominant Hero Section with Extra White Space */}
             <div className="space-y-6 text-left">
-              <h1 className="font-display font-black text-4xl md:text-5xl lg:text-6xl xl:text-7xl text-zinc-950 uppercase tracking-tighter leading-[1.0] transition-smooth">
+              <h1 className="font-display font-black text-4xl md:text-5xl lg:text-6xl xl:text-7xl text-zinc-950 dark:text-stone-50 uppercase tracking-tighter leading-[1.0] transition-smooth">
                 Where great <span className="text-orange-500 font-display lowercase font-black tracking-tighter">minds</span> find their <span className="underline decoration-orange-500/40 decoration-wavy underline-offset-10">audience</span>
               </h1>
 
-              <p className="text-zinc-500 font-sans text-xs md:text-sm leading-relaxed font-medium max-w-2xl">
+              <p className="text-zinc-500 dark:text-zinc-400 font-sans text-xs md:text-sm leading-relaxed font-medium max-w-2xl">
                 FreshLink Connect coordinates content recommendations by analyzing tag categorization, chosen categories, and your personal interests. Build followers, chat seamlessly, and earn dynamic badges for platform milestone achievements.
               </p>
 
-              <div className="pt-6 border-t border-stone-200/60 grid grid-cols-3 gap-6 max-w-xl">
+              <div className="pt-6 border-t border-stone-200/60 dark:border-stone-800/60 grid grid-cols-3 gap-6 max-w-xl">
                 <div>
                   <span className="block font-display font-black text-2xl text-orange-500 leading-none">100%</span>
-                  <span className="text-[10px] text-zinc-400 font-mono uppercase tracking-wider block mt-1.5 font-bold">Privacy Secured</span>
+                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono uppercase tracking-wider block mt-1.5 font-bold">Privacy Secured</span>
                 </div>
                 <div>
-                  <span className="block font-display font-black text-2xl text-zinc-900 leading-none">Nepal</span>
-                  <span className="text-[10px] text-zinc-400 font-mono uppercase tracking-wider block mt-1.5 font-bold">Creator Network</span>
+                  <span className="block font-display font-black text-2xl text-zinc-900 dark:text-stone-100 leading-none">Nepal</span>
+                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono uppercase tracking-wider block mt-1.5 font-bold">Creator Network</span>
                 </div>
                 <div>
-                  <span className="block font-display font-black text-2xl text-zinc-900 leading-none">Zero</span>
-                  <span className="text-[10px] text-zinc-400 font-mono uppercase tracking-wider block mt-1.5 font-bold">Database Lag</span>
+                  <span className="block font-display font-black text-2xl text-zinc-900 dark:text-stone-100 leading-none">Zero</span>
+                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono uppercase tracking-wider block mt-1.5 font-bold">Database Lag</span>
                 </div>
               </div>
             </div>
@@ -299,7 +322,7 @@ export const LandingPage: React.FC = () => {
 
           {/* Right Column: Dynamic Login and Signup directly on the first fold */}
           <div className="lg:col-span-5 w-full max-w-md mx-auto lg:mx-0">
-            <div className="bg-white border border-stone-200/45 rounded-[2.5rem] p-8 md:p-10 shadow-md hover:shadow-lg transition-smooth">
+            <div className="bg-white dark:bg-stone-900 border border-stone-200/45 dark:border-stone-800/60 rounded-[2.5rem] p-8 md:p-10 shadow-md hover:shadow-lg transition-smooth">
               
               {/* Real Auth via Google Sign-In */}
               <button
@@ -307,7 +330,7 @@ export const LandingPage: React.FC = () => {
                 id="land-google-signin-btn"
                 onClick={handleGoogleSignIn}
                 disabled={isGoogleLoading}
-                className={`w-full flex items-center justify-center gap-3 py-3.5 border border-zinc-200/80 hover:border-zinc-400 hover:bg-stone-50 text-zinc-850 font-sans font-bold uppercase tracking-widest text-[10px] rounded-2xl transition-smooth cursor-pointer shadow-xs ${isGoogleLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`w-full flex items-center justify-center gap-3 py-3.5 border border-zinc-200/80 dark:border-stone-700 hover:border-zinc-400 hover:bg-stone-50 dark:hover:bg-stone-800 text-zinc-850 dark:text-stone-100 font-sans font-bold uppercase tracking-widest text-[10px] rounded-2xl transition-smooth cursor-pointer shadow-xs ${isGoogleLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>

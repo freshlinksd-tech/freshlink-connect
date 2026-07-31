@@ -53,36 +53,67 @@ async function initDatabases() {
 async function seedFirebaseIfEmpty() {
   if (!firebaseDb) return;
   try {
-    const postsRef = collection(firebaseDb, 'posts');
-    const q = query(postsRef, limit(1));
-    const snap = await getDocs(q);
-    if (snap.empty) {
-      console.log('🌱 Seeding Firebase Firestore with initial seed data...');
-      // Seed users
+    console.log('🌱 Checking Firebase Firestore collection state...');
+
+    // 1. Seed & ensure users exist
+    const usersRef = collection(firebaseDb, 'users');
+    const usersSnap = await getDocs(query(usersRef, limit(1)));
+    if (usersSnap.empty) {
+      console.log('🌱 Seeding users to Firebase Firestore...');
       for (const u of SEED_USERS) {
-        await setDoc(doc(firebaseDb, 'users', u.id), u);
+        await setDoc(doc(firebaseDb, 'users', u.id), u, { merge: true });
       }
-      // Seed posts
+    } else {
+      for (const u of SEED_USERS) {
+        const uDoc = await getDoc(doc(firebaseDb, 'users', u.id));
+        if (!uDoc.exists()) {
+          await setDoc(doc(firebaseDb, 'users', u.id), u, { merge: true });
+        }
+      }
+    }
+
+    // 2. Seed posts
+    const postsRef = collection(firebaseDb, 'posts');
+    const postsSnap = await getDocs(query(postsRef, limit(1)));
+    if (postsSnap.empty) {
+      console.log('🌱 Seeding posts to Firebase Firestore...');
       for (const p of SEED_POSTS) {
-        await setDoc(doc(firebaseDb, 'posts', p.id), p);
+        await setDoc(doc(firebaseDb, 'posts', p.id), p, { merge: true });
       }
-      // Seed comments
+    }
+
+    // 3. Seed comments
+    const commentsRef = collection(firebaseDb, 'comments');
+    const commentsSnap = await getDocs(query(commentsRef, limit(1)));
+    if (commentsSnap.empty) {
+      console.log('🌱 Seeding comments to Firebase Firestore...');
       for (const c of SEED_COMMENTS) {
-        await setDoc(doc(firebaseDb, 'comments', c.id), c);
+        await setDoc(doc(firebaseDb, 'comments', c.id), c, { merge: true });
       }
-      // Seed followers
+    }
+
+    // 4. Seed followers
+    const followersRef = collection(firebaseDb, 'followers');
+    const followersSnap = await getDocs(query(followersRef, limit(1)));
+    if (followersSnap.empty) {
+      console.log('🌱 Seeding followers to Firebase Firestore...');
       for (const f of SEED_FOLLOWERS) {
         const docId = `${f.followerId}_${f.followingId}`;
-        await setDoc(doc(firebaseDb, 'followers', docId), f);
+        await setDoc(doc(firebaseDb, 'followers', docId), f, { merge: true });
       }
-      // Seed messages
-      for (const m of SEED_MESSAGES) {
-        await setDoc(doc(firebaseDb, 'messages', m.id), m);
-      }
-      console.log('✅ Firebase database seeding completed successfully!');
-    } else {
-      console.log('✅ Firebase Firestore has existing data, skipping seeding.');
     }
+
+    // 5. Seed messages
+    const messagesRef = collection(firebaseDb, 'messages');
+    const messagesSnap = await getDocs(query(messagesRef, limit(1)));
+    if (messagesSnap.empty) {
+      console.log('🌱 Seeding messages to Firebase Firestore...');
+      for (const m of SEED_MESSAGES) {
+        await setDoc(doc(firebaseDb, 'messages', m.id), m, { merge: true });
+      }
+    }
+
+    console.log('✅ Firebase Firestore collection check and seeding completed successfully!');
   } catch (err) {
     console.error('❌ Error seeding Firebase Firestore:', err);
   }
@@ -800,6 +831,78 @@ async function startServer() {
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --- SEO & SITEMAP / ROBOTS ROUTES ---
+  app.get('/robots.txt', (req, res) => {
+    res.type('text/plain');
+    res.send(
+`User-agent: *
+Allow: /
+Allow: /sitemap.xml
+Disallow: /api/admin
+Disallow: /api/withdrawals
+Disallow: /admin
+
+Sitemap: https://freshlinkconnect.info/sitemap.xml`
+    );
+  });
+
+  app.get('/sitemap.xml', async (req, res) => {
+    try {
+      const posts = await dbFindAll('posts');
+      const users = await dbFindAll('users');
+
+      const baseUrl = 'https://freshlinkconnect.info';
+      const nowISO = new Date().toISOString();
+
+      const staticRoutes = [
+        { url: `${baseUrl}/`, priority: '1.0', changefreq: 'daily' },
+        { url: `${baseUrl}/?tab=feed`, priority: '0.9', changefreq: 'always' },
+        { url: `${baseUrl}/?tab=explore`, priority: '0.8', changefreq: 'daily' },
+        { url: `${baseUrl}/?tab=monetization`, priority: '0.6', changefreq: 'weekly' }
+      ];
+
+      const categories = ['technology', 'programming', 'design', 'lifestyle', 'business', 'sports', 'travel', 'food'];
+      const categoryRoutes = categories.map(cat => ({
+        url: `${baseUrl}/?tab=feed&category=${cat}`,
+        priority: '0.7',
+        changefreq: 'daily'
+      }));
+
+      const userUrls = users.map((u: any) => ({
+        url: `${baseUrl}/?tab=profile&user=${u.id}`,
+        priority: '0.7',
+        changefreq: 'weekly'
+      }));
+
+      const postUrls = posts.map((p: any) => ({
+        url: `${baseUrl}/?post=${p.id}`,
+        priority: '0.8',
+        changefreq: 'weekly'
+      }));
+
+      const allUrls = [...staticRoutes, ...categoryRoutes, ...userUrls, ...postUrls];
+
+      let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+      xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+
+      for (const item of allUrls) {
+        xml += `  <url>\n`;
+        xml += `    <loc>${item.url}</loc>\n`;
+        xml += `    <lastmod>${nowISO}</lastmod>\n`;
+        xml += `    <changefreq>${item.changefreq}</changefreq>\n`;
+        xml += `    <priority>${item.priority}</priority>\n`;
+        xml += `  </url>\n`;
+      }
+
+      xml += `</urlset>`;
+
+      res.type('application/xml');
+      res.send(xml);
+    } catch (err: any) {
+      res.status(500).send('<error>Failed to generate sitemap</error>');
     }
   });
 

@@ -202,15 +202,15 @@ export const Auth: React.FC<AuthProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-zinc-950/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 select-none">
+    <div className="fixed inset-0 bg-zinc-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 select-none">
       <div 
         id="auth-modal-card"
-        className="bg-white rounded-3xl shadow-2xl border border-zinc-100 max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh] relative animate-in fade-in zoom-in duration-200"
+        className="bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-zinc-100 dark:border-stone-800 max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh] relative animate-in fade-in zoom-in duration-200 text-zinc-900 dark:text-stone-100"
       >
         {/* Quick Close Button */}
         <button 
           onClick={onClose}
-          className="absolute top-5 right-5 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white z-10 transition-all cursor-pointer"
+          className="absolute top-5 right-5 p-2 rounded-full bg-white/20 dark:bg-stone-800/40 hover:bg-white/40 dark:hover:bg-stone-800 text-white z-10 transition-all cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>
@@ -240,7 +240,7 @@ export const Auth: React.FC<AuthProps> = ({ onClose }) => {
             id="google-signin-btn"
             onClick={handleGoogleSignIn}
             disabled={isGoogleLoading}
-            className={`w-full flex items-center justify-center gap-2.5 py-3 border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 text-zinc-800 font-sans font-black uppercase tracking-widest text-[10px] rounded-xl transition-all cursor-pointer shadow-sm hover:shadow ${isGoogleLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`w-full flex items-center justify-center gap-2.5 py-3 border border-zinc-200 dark:border-stone-700 hover:border-zinc-300 dark:hover:border-stone-600 hover:bg-zinc-50 dark:hover:bg-stone-800 text-zinc-800 dark:text-stone-100 font-sans font-black uppercase tracking-widest text-[10px] rounded-xl transition-all cursor-pointer shadow-sm hover:shadow ${isGoogleLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             {isGoogleLoading ? (
               <span>Signing in...</span>
