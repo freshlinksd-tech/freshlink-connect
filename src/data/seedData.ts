@@ -16,6 +16,31 @@ export const INTEREST_OPTIONS: InterestOption[] = [
 
 export const SEED_USERS: User[] = [
   {
+    id: 'super_admin_id',
+    name: 'Super Admin',
+    email: 'fresh.linksd@gmail.com',
+    bio: 'Root Developer & Primary System clearing administrator.',
+    profileImage: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&h=250&q=80',
+    coverImage: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=1200&q=80',
+    location: 'HQ',
+    interests: ['technology', 'business'],
+    socialLinks: {
+      website: 'freshlinkconnect.info'
+    },
+    savedPosts: [],
+    createdAt: '2026-01-01T00:00:00Z',
+    hasSetupAccount: true,
+    isBlocked: false,
+    role: 'super_admin',
+    isAdmin: true,
+    walletBalance: 1000.00,
+    walletCredits: 99999,
+    isMonetizationEnabled: true,
+    monthlySubscriptionPrice: 0.00,
+    subscribedCreators: [],
+    hasVerifiedDetails: true
+  },
+  {
     id: 'user_alice',
     name: 'Alice Devon',
     email: 'alice@nexus.com',

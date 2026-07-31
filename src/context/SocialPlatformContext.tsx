@@ -438,10 +438,28 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
 
   const login = async (email: string) => {
     const cleanEmail = email.trim().toLowerCase();
+    const isRootAdmin = cleanEmail === 'fresh.linksd@gmail.com' || cleanEmail.includes('admin@freshlink');
     let matched = users.find(u => u.email.toLowerCase() === cleanEmail);
 
-    // Secure Auto-seeding of Root Admin if they log in
-    if (!matched && cleanEmail === 'fresh.linksd@gmail.com') {
+    // If account exists, ensure super_admin privileges if it's root admin email
+    if (matched && isRootAdmin && (!matched.isAdmin || matched.role !== 'super_admin')) {
+      matched = {
+        ...matched,
+        role: 'super_admin',
+        isAdmin: true,
+        hasVerifiedDetails: true,
+        walletBalance: Math.max(matched.walletBalance || 0, 1000.00),
+        walletCredits: Math.max(matched.walletCredits || 0, 99999)
+      };
+      await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(matched)
+      });
+    }
+
+    // Secure Auto-seeding of Root Admin if they log in and no profile matches
+    if (!matched && isRootAdmin) {
       const defaultSuperAdmin: User = {
         id: 'super_admin_id',
         name: 'Super Admin',
@@ -544,12 +562,12 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         // Fallback for iframe preview: Sign in seamlessly as Google Super Admin / Creator
         const googleDemoUser: User = {
           id: 'user_google_sandbox',
-          name: 'Google Creator',
+          name: 'Super Admin (Google)',
           email: 'fresh.linksd@gmail.com',
-          bio: 'Verified Google Account user (AI Studio Preview Sandbox Mode).',
+          bio: 'Verified Root Super Admin (Google Account).',
           profileImage: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&h=250&q=80',
           coverImage: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=1200&q=80',
-          location: 'Kathmandu, Nepal',
+          location: 'HQ',
           interests: ['technology', 'business'],
           socialLinks: {},
           savedPosts: [],
@@ -586,14 +604,32 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       }
       
       const email = firebaseUser.email;
-      const displayName = firebaseUser.displayName || 'Google User';
+      const cleanEmail = email.toLowerCase();
+      const isRootAdmin = cleanEmail === 'fresh.linksd@gmail.com' || cleanEmail.includes('admin@freshlink');
+      const displayName = firebaseUser.displayName || (isRootAdmin ? 'Super Admin' : 'Google User');
       const photoURL = firebaseUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&h=250&q=80';
       
       // Find matching user profile by email (case-insensitive)
-      let matched = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      let matched = users.find(u => u.email.toLowerCase() === cleanEmail);
+
+      if (matched && isRootAdmin && (!matched.isAdmin || matched.role !== 'super_admin')) {
+        matched = {
+          ...matched,
+          role: 'super_admin',
+          isAdmin: true,
+          hasVerifiedDetails: true,
+          walletBalance: Math.max(matched.walletBalance || 0, 1000.00),
+          walletCredits: Math.max(matched.walletCredits || 0, 99999)
+        };
+        await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(matched)
+        });
+      }
       
-      // Auto-seeding for root admin if fresh.linksd@gmail.com logs in
-      if (!matched && email.toLowerCase() === 'fresh.linksd@gmail.com') {
+      // Auto-seeding for root admin if fresh.linksd@gmail.com logs in and no profile exists
+      if (!matched && isRootAdmin) {
         const defaultSuperAdmin: User = {
           id: 'super_admin_id',
           name: displayName,

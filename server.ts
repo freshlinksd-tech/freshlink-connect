@@ -269,6 +269,57 @@ async function startServer() {
 
   // --- API Routes ---
 
+  // --- SEO DYNAMIC ROUTES ---
+  app.get('/sitemap.xml', async (req, res) => {
+    try {
+      const posts = await dbFindAll('posts');
+      const baseUrl = 'https://freshlinkconnect.info';
+      
+      let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+      xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+      
+      // Main Landing Page
+      xml += `  <url>\n`;
+      xml += `    <loc>${baseUrl}/</loc>\n`;
+      xml += `    <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>\n`;
+      xml += `    <changefreq>daily</changefreq>\n`;
+      xml += `    <priority>1.0</priority>\n`;
+      xml += `  </url>\n`;
+
+      // Every blog post dynamic URL
+      for (const p of posts) {
+        if (p.id) {
+          const lastMod = p.createdAt ? new Date(p.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+          xml += `  <url>\n`;
+          xml += `    <loc>${baseUrl}/?post=${encodeURIComponent(p.id)}</loc>\n`;
+          xml += `    <lastmod>${lastMod}</lastmod>\n`;
+          xml += `    <changefreq>weekly</changefreq>\n`;
+          xml += `    <priority>0.8</priority>\n`;
+          xml += `  </url>\n`;
+        }
+      }
+
+      xml += `</urlset>`;
+      res.header('Content-Type', 'application/xml');
+      res.send(xml);
+    } catch (err) {
+      res.status(500).send('Error generating sitemap');
+    }
+  });
+
+  app.get('/robots.txt', (req, res) => {
+    const robots = `# robots.txt for FreshLink Connect
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+
+Sitemap: https://freshlinkconnect.info/sitemap.xml
+`;
+    res.header('Content-Type', 'text/plain');
+    res.send(robots);
+  });
+
   // DB Engine Status Endpoint
   app.get('/api/db-status', (req, res) => {
     let engine = 'In-Memory Fallback DB Engine';
