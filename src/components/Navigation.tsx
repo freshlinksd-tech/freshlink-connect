@@ -42,7 +42,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   onOpenAuth,
   setSelectedUser
 }) => {
-  const { currentUser, logout, messages, updateProfile, notifications, isOnline } = useSocialPlatform();
+  const { currentUser, logout, messages, updateProfile, notifications, isOnline, dbStatus } = useSocialPlatform();
   const { isDark, toggleTheme } = useTheme();
   const [isStandalone, setIsStandalone] = React.useState<boolean>(false);
 
@@ -220,7 +220,16 @@ export const Navigation: React.FC<NavigationProps> = ({
       </div>
 
       {/* User Footer Profile */}
-      <div className="p-4 border-t border-zinc-100 dark:border-stone-850 bg-zinc-50/50 dark:bg-stone-900/10">
+      <div className="p-4 border-t border-zinc-100 dark:border-stone-850 bg-zinc-50/50 dark:bg-stone-900/10 space-y-2">
+        {/* Database Live Status Indicator */}
+        <div className="flex items-center justify-between px-2.5 py-1.5 bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/20 rounded-xl text-[9.5px] font-mono">
+          <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-bold truncate">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <span className="truncate">{dbStatus?.engine || 'Firebase Firestore'}</span>
+          </div>
+          <span className="text-[8px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300 bg-emerald-200/80 dark:bg-emerald-950/80 px-1.5 py-0.5 rounded-md shrink-0">ONLINE</span>
+        </div>
+
         {currentUser && (currentUser.email?.toLowerCase() === 'fresh.linksd@gmail.com' || currentUser.role === 'super_admin') && (
           <div className="mb-2.5 flex items-center justify-between p-2 bg-amber-500/[0.04] border border-amber-200/40 dark:border-amber-500/20 rounded-xl text-[9px] font-sans">
             <span className="font-mono text-amber-800 dark:text-amber-500 font-bold uppercase tracking-wider">DEV PRIVILEGES</span>

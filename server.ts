@@ -53,32 +53,45 @@ async function initDatabases() {
 async function seedFirebaseIfEmpty() {
   if (!firebaseDb) return;
   try {
-    console.log('🌱 Ensuring default users, posts, comments, followers, and messages exist in Firebase Firestore...');
-
-    for (const u of SEED_USERS) {
-      await setDoc(doc(firebaseDb, 'users', u.id), u, { merge: true });
+    // 1. Ensure Super Admin account exists in Firestore
+    const rootAdminRef = doc(firebaseDb, 'users', 'super_admin_id');
+    const rootAdminSnap = await getDoc(rootAdminRef);
+    if (!rootAdminSnap.exists()) {
+      await setDoc(rootAdminRef, SEED_USERS[0], { merge: true });
     }
 
-    for (const p of SEED_POSTS) {
-      await setDoc(doc(firebaseDb, 'posts', p.id), p, { merge: true });
-    }
+    // 2. Check if users collection is empty before seeding full dataset
+    const usersRef = collection(firebaseDb, 'users');
+    const usersSnap = await getDocs(query(usersRef, limit(1)));
+    
+    if (usersSnap.empty) {
+      console.log('🌱 Seeding initial documents to Firebase Firestore...');
+      for (const u of SEED_USERS) {
+        await setDoc(doc(firebaseDb, 'users', u.id), u, { merge: true });
+      }
 
-    for (const c of SEED_COMMENTS) {
-      await setDoc(doc(firebaseDb, 'comments', c.id), c, { merge: true });
-    }
+      for (const p of SEED_POSTS) {
+        await setDoc(doc(firebaseDb, 'posts', p.id), p, { merge: true });
+      }
 
-    for (const f of SEED_FOLLOWERS) {
-      const docId = `${f.followerId}_${f.followingId}`;
-      await setDoc(doc(firebaseDb, 'followers', docId), f, { merge: true });
-    }
+      for (const c of SEED_COMMENTS) {
+        await setDoc(doc(firebaseDb, 'comments', c.id), c, { merge: true });
+      }
 
-    for (const m of SEED_MESSAGES) {
-      await setDoc(doc(firebaseDb, 'messages', m.id), m, { merge: true });
-    }
+      for (const f of SEED_FOLLOWERS) {
+        const docId = `${f.followerId}_${f.followingId}`;
+        await setDoc(doc(firebaseDb, 'followers', docId), f, { merge: true });
+      }
 
-    console.log('✅ Firebase Firestore collection verification and seeding completed successfully!');
+      for (const m of SEED_MESSAGES) {
+        await setDoc(doc(firebaseDb, 'messages', m.id), m, { merge: true });
+      }
+      console.log('✅ Firebase Firestore collection seeding completed successfully!');
+    } else {
+      console.log('✅ Firebase Firestore is live and already populated with data!');
+    }
   } catch (err) {
-    console.error('❌ Error seeding Firebase Firestore:', err);
+    console.error('❌ Error verifying Firebase Firestore collections:', err);
   }
 }
 
@@ -265,7 +278,7 @@ async function startServer() {
   app.use(express.json({ limit: '15mb' }));
 
   // Initialize database connection (prioritizing Firebase Firestore)
-  initDatabases();
+  await initDatabases();
 
   // --- API Routes ---
 

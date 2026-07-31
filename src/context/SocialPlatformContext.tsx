@@ -108,6 +108,7 @@ interface SocialPlatformContextType {
   setManualSandbox: (active: boolean) => void;
   isOnline: boolean;
   userMap: Record<string, User>;
+  dbStatus: { engine: string; connected: boolean; isUsingFirebase: boolean };
   resetQuotaFallback: () => void;
   securityBlock: { actionType: string; remainingMs: number } | null;
   setSecurityBlock: (block: { actionType: string; remainingMs: number } | null) => void;
@@ -158,6 +159,11 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   }, [users]);
 
   // Dynamic states
+  const [dbStatus, setDbStatus] = useState<{ engine: string; connected: boolean; isUsingFirebase: boolean }>({
+    engine: 'Firebase Firestore',
+    connected: true,
+    isUsingFirebase: true
+  });
   const [isQuotaFallbackMode, setIsQuotaFallbackMode] = useState(false);
   const isManualSandbox = false;
   const isOnline = true;
@@ -196,8 +202,18 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         safeJsonFetch('/api/notifications'),
         safeJsonFetch('/api/post-reports'),
         safeJsonFetch('/api/ads'),
-        safeJsonFetch('/api/db-status', { engine: 'In-Memory Fallback DB Engine' })
+        safeJsonFetch('/api/db-status', { engine: 'Firebase Firestore', connected: true, isUsingFirebase: true })
       ]);
+
+      if (statusRes && typeof statusRes === 'object') {
+        const isConnected = statusRes.isUsingFirebase ?? true;
+        setDbStatus({
+          engine: isConnected ? 'Firebase Firestore' : 'In-Memory Fallback DB Engine',
+          connected: Boolean(statusRes.connected),
+          isUsingFirebase: isConnected
+        });
+        setIsQuotaFallbackMode(!isConnected);
+      }
 
       setUsers(prevUsers => {
         const fetched = Array.isArray(uRes) ? uRes : [];
@@ -285,7 +301,6 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       setNotifications(Array.isArray(nRes) ? nRes : []);
       setPostReports(Array.isArray(rRes) ? rRes : []);
       setAds(Array.isArray(aRes) ? aRes : []);
-      setIsQuotaFallbackMode(statusRes?.engine === 'In-Memory Fallback DB Engine');
     } catch (err) {
       console.error("Error synchronizing database state:", err);
     } finally {
@@ -1593,6 +1608,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       setManualSandbox,
       isOnline,
       userMap,
+      dbStatus,
       resetQuotaFallback,
       securityBlock,
       setSecurityBlock,
