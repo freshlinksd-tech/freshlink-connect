@@ -165,13 +165,29 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     isUsingFirebase: true
   });
   const [isQuotaFallbackMode, setIsQuotaFallbackMode] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const isManualSandbox = false;
-  const isOnline = true;
   const hasMorePosts = false;
 
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      }
+    };
+  }, []);
+
   const setManualSandbox = () => {};
-  const resetQuotaFallback = () => {
+  const resetQuotaFallback = async () => {
     setIsQuotaFallbackMode(false);
+    await refetchData();
   };
   const resolveSecurityChallenge = () => {};
   const loadMorePosts = async () => {};
