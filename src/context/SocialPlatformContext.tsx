@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { User, Post, PostPoll, Like, Comment, Follower, Message, Achievement, WithdrawalRequest, Notification, PostReport, AdBanner, Draft } from '../types';
-import { SEED_USERS, SEED_POSTS } from '../data/seedData';
+import { SEED_USERS, SEED_POSTS, SEED_COMMENTS, SEED_FOLLOWERS, SEED_MESSAGES } from '../data/seedData';
 import { censorText } from '../lib/security';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
@@ -242,11 +242,44 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         
         return Array.from(userMap.values());
       });
-      setPosts(Array.isArray(pRes) && pRes.length > 0 ? pRes : SEED_POSTS);
+
+      setPosts(prevPosts => {
+        const fetched = Array.isArray(pRes) ? pRes : [];
+        const postMap = new Map<string, Post>();
+        SEED_POSTS.forEach((p: Post) => { if (p && p.id) postMap.set(p.id, p); });
+        fetched.forEach((p: Post) => { if (p && p.id) postMap.set(p.id, p); });
+        prevPosts.forEach((p: Post) => { if (p && p.id && !postMap.has(p.id)) postMap.set(p.id, p); });
+        return Array.from(postMap.values());
+      });
+
+      setFollowers(prevFollowers => {
+        const fetched = Array.isArray(fRes) ? fRes : [];
+        const fMap = new Map<string, Follower>();
+        SEED_FOLLOWERS.forEach((f: Follower) => { if (f) fMap.set(`${f.followerId}_${f.followingId}`, f); });
+        fetched.forEach((f: Follower) => { if (f) fMap.set(`${f.followerId}_${f.followingId}`, f); });
+        prevFollowers.forEach((f: Follower) => { if (f && !fMap.has(`${f.followerId}_${f.followingId}`)) fMap.set(`${f.followerId}_${f.followingId}`, f); });
+        return Array.from(fMap.values());
+      });
+
+      setComments(prevComments => {
+        const fetched = Array.isArray(cRes) ? cRes : [];
+        const cMap = new Map<string, Comment>();
+        SEED_COMMENTS.forEach((c: Comment) => { if (c && c.id) cMap.set(c.id, c); });
+        fetched.forEach((c: Comment) => { if (c && c.id) cMap.set(c.id, c); });
+        prevComments.forEach((c: Comment) => { if (c && c.id && !cMap.has(c.id)) cMap.set(c.id, c); });
+        return Array.from(cMap.values());
+      });
+
+      setMessages(prevMessages => {
+        const fetched = Array.isArray(mRes) ? mRes : [];
+        const mMap = new Map<string, Message>();
+        SEED_MESSAGES.forEach((m: Message) => { if (m && m.id) mMap.set(m.id, m); });
+        fetched.forEach((m: Message) => { if (m && m.id) mMap.set(m.id, m); });
+        prevMessages.forEach((m: Message) => { if (m && m.id && !mMap.has(m.id)) mMap.set(m.id, m); });
+        return Array.from(mMap.values());
+      });
+
       setDrafts(Array.isArray(dRes) ? dRes : []);
-      setFollowers(Array.isArray(fRes) ? fRes : []);
-      setComments(Array.isArray(cRes) ? cRes : []);
-      setMessages(Array.isArray(mRes) ? mRes : []);
       setLikes(Array.isArray(lRes) ? lRes : []);
       setWithdrawals(Array.isArray(wRes) ? wRes : []);
       setNotifications(Array.isArray(nRes) ? nRes : []);

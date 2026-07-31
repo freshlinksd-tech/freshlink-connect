@@ -53,67 +53,30 @@ async function initDatabases() {
 async function seedFirebaseIfEmpty() {
   if (!firebaseDb) return;
   try {
-    console.log('🌱 Checking Firebase Firestore collection state...');
+    console.log('🌱 Ensuring default users, posts, comments, followers, and messages exist in Firebase Firestore...');
 
-    // 1. Seed & ensure users exist
-    const usersRef = collection(firebaseDb, 'users');
-    const usersSnap = await getDocs(query(usersRef, limit(1)));
-    if (usersSnap.empty) {
-      console.log('🌱 Seeding users to Firebase Firestore...');
-      for (const u of SEED_USERS) {
-        await setDoc(doc(firebaseDb, 'users', u.id), u, { merge: true });
-      }
-    } else {
-      for (const u of SEED_USERS) {
-        const uDoc = await getDoc(doc(firebaseDb, 'users', u.id));
-        if (!uDoc.exists()) {
-          await setDoc(doc(firebaseDb, 'users', u.id), u, { merge: true });
-        }
-      }
+    for (const u of SEED_USERS) {
+      await setDoc(doc(firebaseDb, 'users', u.id), u, { merge: true });
     }
 
-    // 2. Seed posts
-    const postsRef = collection(firebaseDb, 'posts');
-    const postsSnap = await getDocs(query(postsRef, limit(1)));
-    if (postsSnap.empty) {
-      console.log('🌱 Seeding posts to Firebase Firestore...');
-      for (const p of SEED_POSTS) {
-        await setDoc(doc(firebaseDb, 'posts', p.id), p, { merge: true });
-      }
+    for (const p of SEED_POSTS) {
+      await setDoc(doc(firebaseDb, 'posts', p.id), p, { merge: true });
     }
 
-    // 3. Seed comments
-    const commentsRef = collection(firebaseDb, 'comments');
-    const commentsSnap = await getDocs(query(commentsRef, limit(1)));
-    if (commentsSnap.empty) {
-      console.log('🌱 Seeding comments to Firebase Firestore...');
-      for (const c of SEED_COMMENTS) {
-        await setDoc(doc(firebaseDb, 'comments', c.id), c, { merge: true });
-      }
+    for (const c of SEED_COMMENTS) {
+      await setDoc(doc(firebaseDb, 'comments', c.id), c, { merge: true });
     }
 
-    // 4. Seed followers
-    const followersRef = collection(firebaseDb, 'followers');
-    const followersSnap = await getDocs(query(followersRef, limit(1)));
-    if (followersSnap.empty) {
-      console.log('🌱 Seeding followers to Firebase Firestore...');
-      for (const f of SEED_FOLLOWERS) {
-        const docId = `${f.followerId}_${f.followingId}`;
-        await setDoc(doc(firebaseDb, 'followers', docId), f, { merge: true });
-      }
+    for (const f of SEED_FOLLOWERS) {
+      const docId = `${f.followerId}_${f.followingId}`;
+      await setDoc(doc(firebaseDb, 'followers', docId), f, { merge: true });
     }
 
-    // 5. Seed messages
-    const messagesRef = collection(firebaseDb, 'messages');
-    const messagesSnap = await getDocs(query(messagesRef, limit(1)));
-    if (messagesSnap.empty) {
-      console.log('🌱 Seeding messages to Firebase Firestore...');
-      for (const m of SEED_MESSAGES) {
-        await setDoc(doc(firebaseDb, 'messages', m.id), m, { merge: true });
-      }
+    for (const m of SEED_MESSAGES) {
+      await setDoc(doc(firebaseDb, 'messages', m.id), m, { merge: true });
     }
 
-    console.log('✅ Firebase Firestore collection check and seeding completed successfully!');
+    console.log('✅ Firebase Firestore collection verification and seeding completed successfully!');
   } catch (err) {
     console.error('❌ Error seeding Firebase Firestore:', err);
   }
@@ -122,24 +85,59 @@ async function seedFirebaseIfEmpty() {
 // --- Database Utility Adapters ---
 
 async function dbFindAll(collectionName: string): Promise<any[]> {
+  let fetched: any[] = [];
   if (isUsingFirebase && firebaseDb) {
     try {
       const colRef = collection(firebaseDb, collectionName);
       const snapshot = await getDocs(colRef);
-      return snapshot.docs.map(d => d.data());
+      fetched = snapshot.docs.map(d => d.data());
     } catch (err) {
       console.error(`⚠️ Firestore read error, falling back to Memory DB for ${collectionName}:`, err);
       if (collectionName === 'likes') {
         return (global as any).memoryLikes || [];
       }
-      return (memoryDb as any)[collectionName] || [];
+      fetched = (memoryDb as any)[collectionName] || [];
     }
   } else {
     if (collectionName === 'likes') {
       return (global as any).memoryLikes || [];
     }
-    return (memoryDb as any)[collectionName] || [];
+    fetched = (memoryDb as any)[collectionName] || [];
   }
+
+  // Guarantee seed items are always present and merged with user items
+  if (collectionName === 'users') {
+    const map = new Map<string, any>();
+    SEED_USERS.forEach(u => map.set(u.id, u));
+    fetched.forEach(u => map.set(u.id, u));
+    return Array.from(map.values());
+  }
+  if (collectionName === 'posts') {
+    const map = new Map<string, any>();
+    SEED_POSTS.forEach(p => map.set(p.id, p));
+    fetched.forEach(p => map.set(p.id, p));
+    return Array.from(map.values());
+  }
+  if (collectionName === 'comments') {
+    const map = new Map<string, any>();
+    SEED_COMMENTS.forEach(c => map.set(c.id, c));
+    fetched.forEach(c => map.set(c.id, c));
+    return Array.from(map.values());
+  }
+  if (collectionName === 'followers') {
+    const map = new Map<string, any>();
+    SEED_FOLLOWERS.forEach(f => map.set(`${f.followerId}_${f.followingId}`, f));
+    fetched.forEach(f => map.set(`${f.followerId}_${f.followingId}`, f));
+    return Array.from(map.values());
+  }
+  if (collectionName === 'messages') {
+    const map = new Map<string, any>();
+    SEED_MESSAGES.forEach(m => map.set(m.id, m));
+    fetched.forEach(m => map.set(m.id, m));
+    return Array.from(map.values());
+  }
+
+  return fetched;
 }
 
 async function dbFindOne(collectionName: string, id: string): Promise<any | null> {
