@@ -3395,7 +3395,7 @@ export const Feed: React.FC<FeedProps> = ({
                 <div>
                   <span className="block text-zinc-400 font-mono text-[8.5px] uppercase tracking-wider">Posts</span>
                   <span className="text-xs font-black text-zinc-900 font-sans mt-0.5 block">
-                    {posts.filter(p => p.authorId === currentUser.id).length}
+                    {posts.filter(p => p.userId === currentUser.id).length}
                   </span>
                 </div>
                 <div>

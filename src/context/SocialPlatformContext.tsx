@@ -4,7 +4,7 @@ import { SEED_USERS, SEED_POSTS, SEED_COMMENTS, SEED_FOLLOWERS, SEED_MESSAGES } 
 import { censorText } from '../lib/security';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore, clearIndexedDbPersistence } from 'firebase/firestore';
+import { getFirestore, clearIndexedDbPersistence, terminate, setLogLevel } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 interface SocialPlatformContextType {
@@ -209,9 +209,20 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         });
       }
 
+      try {
+        setLogLevel('error');
+      } catch {
+        // ignore log level error
+      }
+
       const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
       if (app) {
         const db = getFirestore(app);
+        try {
+          await terminate(db);
+        } catch (termErr) {
+          console.warn('Firestore stream termination notice:', termErr);
+        }
         try {
           await clearIndexedDbPersistence(db);
         } catch (err) {
@@ -436,8 +447,8 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
 
     initUser();
 
-    // Setup periodic polling to get real-time-like sync for comments/messages/likes
-    const interval = setInterval(refetchData, 6000);
+    // Setup periodic polling to get real-time-like sync for posts/comments/messages/likes
+    const interval = setInterval(refetchData, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -856,6 +867,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     });
 
     setPosts(prev => [...prev, newPost]);
+    await refetchData();
     return newPost;
   };
 
@@ -878,11 +890,13 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       body: JSON.stringify(updates)
     });
     setPosts(prev => prev.map(p => p.id === postId ? { ...p, ...updates } : p));
+    await refetchData();
   };
 
   const deletePost = async (postId: string) => {
     await fetch(`/api/posts/${postId}`, { method: 'DELETE' });
     setPosts(prev => prev.filter(p => p.id !== postId));
+    await refetchData();
   };
 
   const saveDraft = async (draft: Draft) => {

@@ -144,56 +144,56 @@ async function dbFindAll(collectionName: string): Promise<any[]> {
     fetched = (memoryDb as any)[collectionName] || [];
   }
 
-  // Merge in-memory cache with fetched items to preserve any items created in memory
-  const localItems = (memoryDb as any)[collectionName] || [];
+  // Special handling for likes which use composite keys (userId_postId)
+  if (collectionName === 'likes') {
+    const memoryLikes = (global as any).memoryLikes || [];
+    const likeMap = new Map<string, any>();
+    memoryLikes.forEach((l: any) => {
+      if (l && l.userId && l.postId) likeMap.set(`${l.userId}_${l.postId}`, l);
+    });
+    fetched.forEach((l: any) => {
+      if (l && l.userId && l.postId) likeMap.set(`${l.userId}_${l.postId}`, l);
+    });
+    const mergedLikes = Array.from(likeMap.values());
+    (global as any).memoryLikes = mergedLikes;
+    return mergedLikes;
+  }
 
-  if (collectionName === 'users') {
-    const map = new Map<string, any>();
-    SEED_USERS.forEach(u => map.set(u.id, u));
-    localItems.forEach((u: any) => { if (u && u.id) map.set(u.id, u); });
-    fetched.forEach(u => { if (u && u.id) map.set(u.id, u); });
-    const merged = Array.from(map.values());
-    (memoryDb as any).users = merged;
-    return merged;
-  }
-  if (collectionName === 'posts') {
-    const map = new Map<string, any>();
-    SEED_POSTS.forEach(p => map.set(p.id, p));
-    localItems.forEach((p: any) => { if (p && p.id) map.set(p.id, p); });
-    fetched.forEach(p => { if (p && p.id) map.set(p.id, p); });
-    const merged = Array.from(map.values());
-    (memoryDb as any).posts = merged;
-    return merged;
-  }
-  if (collectionName === 'comments') {
-    const map = new Map<string, any>();
-    SEED_COMMENTS.forEach(c => map.set(c.id, c));
-    localItems.forEach((c: any) => { if (c && c.id) map.set(c.id, c); });
-    fetched.forEach(c => { if (c && c.id) map.set(c.id, c); });
-    const merged = Array.from(map.values());
-    (memoryDb as any).comments = merged;
-    return merged;
-  }
+  // Special handling for followers which use composite keys (followerId_followingId)
   if (collectionName === 'followers') {
-    const map = new Map<string, any>();
-    SEED_FOLLOWERS.forEach(f => map.set(`${f.followerId}_${f.followingId}`, f));
-    localItems.forEach((f: any) => { if (f) map.set(`${f.followerId}_${f.followingId}`, f); });
-    fetched.forEach(f => { if (f) map.set(`${f.followerId}_${f.followingId}`, f); });
-    const merged = Array.from(map.values());
-    (memoryDb as any).followers = merged;
-    return merged;
-  }
-  if (collectionName === 'messages') {
-    const map = new Map<string, any>();
-    SEED_MESSAGES.forEach(m => map.set(m.id, m));
-    localItems.forEach((m: any) => { if (m && m.id) map.set(m.id, m); });
-    fetched.forEach(m => { if (m && m.id) map.set(m.id, m); });
-    const merged = Array.from(map.values());
-    (memoryDb as any).messages = merged;
-    return merged;
+    const memoryFollowers = memoryDb.followers || [];
+    const fMap = new Map<string, any>();
+    SEED_FOLLOWERS.forEach(f => fMap.set(`${f.followerId}_${f.followingId}`, f));
+    memoryFollowers.forEach((f: any) => {
+      if (f && f.followerId && f.followingId) fMap.set(`${f.followerId}_${f.followingId}`, f);
+    });
+    fetched.forEach((f: any) => {
+      if (f && f.followerId && f.followingId) fMap.set(`${f.followerId}_${f.followingId}`, f);
+    });
+    const mergedFollowers = Array.from(fMap.values());
+    memoryDb.followers = mergedFollowers;
+    return mergedFollowers;
   }
 
-  return fetched.length > 0 ? fetched : localItems;
+  // Standard merge by id for all other collections
+  const localItems = (memoryDb as any)[collectionName] || [];
+  const map = new Map<string, any>();
+
+  if (collectionName === 'users') SEED_USERS.forEach(u => map.set(u.id, u));
+  if (collectionName === 'posts') SEED_POSTS.forEach(p => map.set(p.id, p));
+  if (collectionName === 'comments') SEED_COMMENTS.forEach(c => map.set(c.id, c));
+  if (collectionName === 'messages') SEED_MESSAGES.forEach(m => map.set(m.id, m));
+
+  localItems.forEach((item: any) => {
+    if (item && item.id) map.set(item.id, item);
+  });
+  fetched.forEach((item: any) => {
+    if (item && item.id) map.set(item.id, item);
+  });
+
+  const merged = Array.from(map.values());
+  (memoryDb as any)[collectionName] = merged;
+  return merged;
 }
 
 async function dbFindOne(collectionName: string, id: string): Promise<any | null> {
@@ -222,11 +222,16 @@ async function dbUpsert(collectionName: string, id: string, data: any): Promise<
     } else {
       arr.push(data);
     }
+  } else {
+    (memoryDb as any)[collectionName] = [data];
   }
 
   if (isUsingFirebase && firebaseDb) {
-    withTimeout(setDoc(doc(firebaseDb, collectionName, id), data, { merge: true }), 5000)
-      .catch(err => console.error(`⚠️ Firestore background write error for ${collectionName}/${id}:`, err?.message));
+    try {
+      await withTimeout(setDoc(doc(firebaseDb, collectionName, id), data, { merge: true }), 5000);
+    } catch (err) {
+      console.error(`⚠️ Firestore background write error for ${collectionName}/${id}:`, (err as any)?.message);
+    }
   }
 }
 
@@ -274,9 +279,9 @@ async function dbToggleLike(userId: string, postId: string, reactionType: string
       const docId = `${userId}_${postId}`;
       const docRef = doc(firebaseDb, 'likes', docId);
       if (isDelete) {
-        await deleteDoc(docRef);
+        await withTimeout(deleteDoc(docRef), 5000);
       } else {
-        await setDoc(docRef, { userId, postId, reactionType }, { merge: true });
+        await withTimeout(setDoc(docRef, { userId, postId, reactionType }, { merge: true }), 5000);
       }
     } catch (err) {
       console.error('⚠️ Firestore like error:', err);
@@ -301,9 +306,9 @@ async function dbToggleFollow(followerId: string, followingId: string, isDelete:
       const docId = `${followerId}_${followingId}`;
       const docRef = doc(firebaseDb, 'followers', docId);
       if (isDelete) {
-        await deleteDoc(docRef);
+        await withTimeout(deleteDoc(docRef), 5000);
       } else {
-        await setDoc(docRef, { followerId, followingId }, { merge: true });
+        await withTimeout(setDoc(docRef, { followerId, followingId }, { merge: true }), 5000);
       }
     } catch (err) {
       console.error('⚠️ Firestore follow error:', err);
