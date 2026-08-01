@@ -11,7 +11,7 @@ async function safeJsonFetch<T>(url: string, fallback: T = [] as unknown as T): 
 export interface AuditLogEntry {
   id: string;
   timestamp: string;
-  type: 'create' | 'update' | 'delete' | 'clearance' | 'security' | 'sync' | 'ad';
+  type: 'create' | 'update' | 'delete' | 'clearance' | 'security' | 'sync' | 'ad' | 'reconciliation';
   entity: 'users' | 'posts' | 'comments' | 'messages' | 'clearance' | 'ads' | 'withdrawals' | 'system';
   entityId: string;
   actorEmail: string;
@@ -112,11 +112,17 @@ class DataAuditService {
 
   public async fetchAuditLogs(): Promise<AuditLogEntry[]> {
     try {
-      const remoteLogs = await safeJsonFetch<AuditLogEntry[]>('/api/audit-logs');
-      if (Array.isArray(remoteLogs) && remoteLogs.length > 0) {
+      const [sysLogs, auditLogs] = await Promise.all([
+        safeJsonFetch<AuditLogEntry[]>('/api/system-logs'),
+        safeJsonFetch<AuditLogEntry[]>('/api/audit-logs')
+      ]);
+      const remoteLogs = [...(Array.isArray(sysLogs) ? sysLogs : []), ...(Array.isArray(auditLogs) ? auditLogs : [])];
+      if (remoteLogs.length > 0) {
         const map = new Map<string, AuditLogEntry>();
         this.inMemoryLogs.forEach(log => map.set(log.id, log));
-        remoteLogs.forEach(log => map.set(log.id, log));
+        remoteLogs.forEach(log => {
+          if (log && log.id) map.set(log.id, log);
+        });
         const merged = Array.from(map.values()).sort(
           (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
         );
@@ -125,7 +131,7 @@ class DataAuditService {
         return merged;
       }
     } catch (err) {
-      console.warn('Remote audit logs fetch failed, utilizing cached logs:', err);
+      console.warn('Remote audit/system logs fetch failed, utilizing cached logs:', err);
     }
 
     return [...this.inMemoryLogs].sort(

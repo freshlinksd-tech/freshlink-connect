@@ -21,7 +21,8 @@ const memoryDb = {
   notifications: [] as Notification[],
   postReports: [] as PostReport[],
   drafts: [] as Draft[],
-  audit_logs: [] as any[]
+  audit_logs: [] as any[],
+  system_logs: [] as any[]
 };
 
 async function withTimeout<T>(promise: Promise<T>, ms = 3500): Promise<T> {
@@ -61,7 +62,7 @@ async function initDatabases() {
 
 async function warmupMemoryDbFromFirestore() {
   if (!firebaseDb) return;
-  const collections = ['users', 'posts', 'comments', 'followers', 'messages', 'ads', 'withdrawals', 'notifications', 'postReports', 'drafts', 'audit_logs'];
+  const collections = ['users', 'posts', 'comments', 'followers', 'messages', 'ads', 'withdrawals', 'notifications', 'postReports', 'drafts', 'audit_logs', 'system_logs'];
   for (const col of collections) {
     try {
       const colRef = collection(firebaseDb, col);
@@ -936,34 +937,46 @@ Sitemap: https://freshlinkconnect.info/sitemap.xml
     }
   });
 
-  // --- DATA AUDIT LOGS ---
-  app.get('/api/audit-logs', async (req, res) => {
+  // --- DATA AUDIT LOGS & SYSTEM LOGS ---
+  app.get(['/api/audit-logs', '/api/system-logs'], async (req, res) => {
     try {
-      const logs = await dbFindAll('audit_logs');
-      res.json(logs);
+      const logs = await dbFindAll('system_logs');
+      const auditLogs = await dbFindAll('audit_logs');
+      const combinedMap = new Map();
+      [...logs, ...auditLogs].forEach(item => {
+        if (item && item.id) combinedMap.set(item.id, item);
+      });
+      res.json(Array.from(combinedMap.values()));
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  app.post('/api/audit-logs', async (req, res) => {
+  app.post(['/api/audit-logs', '/api/system-logs'], async (req, res) => {
     const entry = req.body;
     try {
-      if (!entry.id) entry.id = `audit_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      await dbUpsert('audit_logs', entry.id, entry);
+      if (!entry.id) entry.id = `sys_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      await Promise.allSettled([
+        dbUpsert('system_logs', entry.id, entry),
+        dbUpsert('audit_logs', entry.id, entry)
+      ]);
       res.json(entry);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  app.delete('/api/audit-logs', async (req, res) => {
+  app.delete(['/api/audit-logs', '/api/system-logs'], async (req, res) => {
     try {
-      const logs = await dbFindAll('audit_logs');
-      for (const log of logs) {
-        if (log && log.id) await dbDeleteOne('audit_logs', log.id);
+      const logs = await dbFindAll('system_logs');
+      const auditLogs = await dbFindAll('audit_logs');
+      for (const log of [...logs, ...auditLogs]) {
+        if (log && log.id) {
+          await dbDeleteOne('system_logs', log.id);
+          await dbDeleteOne('audit_logs', log.id);
+        }
       }
-      res.json({ success: true, count: logs.length });
+      res.json({ success: true, count: logs.length + auditLogs.length });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

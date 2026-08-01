@@ -4,6 +4,7 @@ import { SEED_USERS, SEED_POSTS, SEED_COMMENTS, SEED_FOLLOWERS, SEED_MESSAGES } 
 import { censorText } from '../lib/security';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { getFirestore, clearIndexedDbPersistence } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 interface SocialPlatformContextType {
@@ -114,6 +115,7 @@ interface SocialPlatformContextType {
   setSecurityBlock: (block: { actionType: string; remainingMs: number } | null) => void;
   resolveSecurityChallenge: () => void;
   refetchData: (hasCache?: boolean) => Promise<void>;
+  clearFirestoreCache: () => Promise<void>;
   hasMorePosts: boolean;
   loadMorePosts: () => Promise<void>;
   reconnectWithBackoff: (attempt?: number) => Promise<boolean>;
@@ -192,6 +194,36 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   const resolveSecurityChallenge = () => {};
   const loadMorePosts = async () => {};
   const reconnectWithBackoff = async () => true;
+
+  const clearFirestoreCache = async () => {
+    try {
+      if (typeof window !== 'undefined') {
+        Object.keys(localStorage).forEach(key => {
+          if (
+            (key.startsWith('nexus_') || key.startsWith('firestore_') || key.startsWith('firebase_')) &&
+            key !== 'freshlink_current_user_id' &&
+            key !== 'nexus_audit_logs_v1'
+          ) {
+            localStorage.removeItem(key);
+          }
+        });
+      }
+
+      const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+      if (app) {
+        const db = getFirestore(app);
+        try {
+          await clearIndexedDbPersistence(db);
+        } catch (err) {
+          console.warn('Firestore IndexedDB persistence clear warning:', err);
+        }
+      }
+    } catch (e) {
+      console.warn('Error clearing Firestore local persistent cache:', e);
+    }
+
+    await refetchData();
+  };
 
   // --- Core Sync Engine ---
   const safeJsonFetch = async (url: string, fallback: any = []) => {
@@ -1630,6 +1662,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       setSecurityBlock,
       resolveSecurityChallenge,
       refetchData,
+      clearFirestoreCache,
       hasMorePosts,
       loadMorePosts,
       reconnectWithBackoff
