@@ -31,7 +31,15 @@ import {
   Megaphone,
   ExternalLink,
   Sparkles,
-  Upload
+  Upload,
+  RefreshCw,
+  Terminal,
+  CheckCircle2,
+  Database,
+  Server,
+  Clock,
+  Copy,
+  RotateCcw
 } from 'lucide-react';
 import { AdminBroadcastCreator } from './AdminBroadcastCreator';
 import { PollAnalyticsDashboard } from './PollAnalyticsDashboard';
@@ -115,12 +123,82 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
     toggleAllAds,
     addNotification,
     isQuotaFallbackMode,
-    resetQuotaFallback
+    resetQuotaFallback,
+    refetchData,
+    dbStatus
   } = useSocialPlatform();
 
   const isSuperAdmin = currentUser?.role === 'super_admin' || currentUser?.email?.toLowerCase() === 'fresh.linksd@gmail.com';
 
   const [activeTab, setActiveTab ] = useState<'users' | 'posts' | 'clearance' | 'controls' | 'ads' | 'broadcasts'>('users');
+
+  // Diagnostics & Re-fetch State
+  const [isRefreshingData, setIsRefreshingData] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(() => new Date());
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [diagnosticLogs, setDiagnosticLogs] = useState<Array<{ id: string; timestamp: string; type: 'info' | 'success' | 'warn' | 'error'; message: string }>>(() => [
+    {
+      id: 'log_init',
+      timestamp: new Date().toLocaleTimeString(),
+      type: 'info',
+      message: 'Admin Panel initialized. Firestore connection active.'
+    }
+  ]);
+  const [diagnosticMetrics, setDiagnosticMetrics] = useState<{ latencyMs: number | null; testStatus: 'idle' | 'testing' | 'success' | 'failed' }>({
+    latencyMs: null,
+    testStatus: 'idle'
+  });
+
+  const addDiagnosticLog = (type: 'info' | 'success' | 'warn' | 'error', message: string) => {
+    setDiagnosticLogs(prev => [
+      {
+        id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        timestamp: new Date().toLocaleTimeString(),
+        type,
+        message
+      },
+      ...prev.slice(0, 49)
+    ]);
+  };
+
+  const handleManualRefresh = async () => {
+    setIsRefreshingData(true);
+    const startMs = Date.now();
+    try {
+      addDiagnosticLog('info', 'Manual refresh triggered: Fetching latest user profiles and collections from Firestore...');
+      await refetchData(false);
+      const duration = Date.now() - startMs;
+      const now = new Date();
+      setLastRefreshedAt(now);
+      addDiagnosticLog(
+        'success',
+        `Firestore sync complete (${duration}ms). Total users loaded: ${users.length}, posts: ${posts.length}, messages: ${messages.length}.`
+      );
+    } catch (err: any) {
+      addDiagnosticLog('error', `Firestore sync failed: ${err?.message || 'Network error'}`);
+    } finally {
+      setIsRefreshingData(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setDiagnosticMetrics(prev => ({ ...prev, testStatus: 'testing' }));
+    const startMs = Date.now();
+    try {
+      addDiagnosticLog('info', 'Pinging Firestore backend health check endpoint (/api/db-status)...');
+      const res = await fetch('/api/db-status');
+      const data = await res.json();
+      const latency = Date.now() - startMs;
+      setDiagnosticMetrics({ latencyMs: latency, testStatus: 'success' });
+      addDiagnosticLog(
+        'success',
+        `Health Check OK! Engine: "${data.engine}" | Connected: ${data.connected} | Latency: ${latency}ms.`
+      );
+    } catch (err: any) {
+      setDiagnosticMetrics({ latencyMs: null, testStatus: 'failed' });
+      addDiagnosticLog('error', `Firestore ping health check failed: ${err?.message || 'Timeout'}`);
+    }
+  };
   
   // Search & Filters state
   const [userSearch, setUserSearch] = useState('');
@@ -296,8 +374,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
   // 2. User filters
   const filteredUsers = useMemo(() => {
     return users.filter(u => {
-      const matchSearch = u.name.toLowerCase().includes(userSearch.toLowerCase()) || 
-                          u.email.toLowerCase().includes(userSearch.toLowerCase());
+      const uName = (u.name || '').toLowerCase();
+      const uEmail = (u.email || '').toLowerCase();
+      const term = (userSearch || '').toLowerCase();
+      const matchSearch = uName.includes(term) || uEmail.includes(term);
       
       const matchFilter = userFilter === 'all' || 
                           (userFilter === 'blocked' && u.isBlocked) || 
@@ -311,10 +391,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
   const filteredPosts = useMemo(() => {
     return posts.filter(p => {
       const author = users.find(u => u.id === p.userId);
-      const authorName = author ? author.name : 'Unknown';
-      const matchSearch = p.title.toLowerCase().includes(postSearch.toLowerCase()) || 
-                          p.category.toLowerCase().includes(postSearch.toLowerCase()) ||
-                          authorName.toLowerCase().includes(postSearch.toLowerCase());
+      const authorName = author ? (author.name || 'Unknown') : 'Unknown';
+      const pTitle = (p.title || '').toLowerCase();
+      const pCat = (p.category || '').toLowerCase();
+      const aName = authorName.toLowerCase();
+      const term = (postSearch || '').toLowerCase();
+      const matchSearch = pTitle.includes(term) || pCat.includes(term) || aName.includes(term);
 
       const matchFilter = postFilter === 'all' || p.status === postFilter;
 
@@ -324,19 +406,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
 
   // 4. Clearance filters
   const filteredPendingClearanceUsers = useMemo(() => {
-    console.log("AdminPanel: All Users", users);
     const filtered = users.filter(u => u.hasVerifiedDetails === true && u.isApprovedByAdmin !== true);
-    console.log("AdminPanel: Pending Clearance Users", filtered);
     return filtered.filter(u => {
       if (!clearanceSearch) return true;
       const term = clearanceSearch.toLowerCase();
-      return (
-        u.name.toLowerCase().includes(term) ||
-        u.email.toLowerCase().includes(term) ||
-        (u.phoneNumber && u.phoneNumber.toLowerCase().includes(term)) ||
-        (u.panNumber && u.panNumber.toLowerCase().includes(term)) ||
-        (u.officialDocId && u.officialDocId.toLowerCase().includes(term))
-      );
+      const uName = (u.name || '').toLowerCase();
+      const uEmail = (u.email || '').toLowerCase();
+      const uPhone = (u.phoneNumber || '').toLowerCase();
+      const uPan = (u.panNumber || '').toLowerCase();
+      const uDoc = (u.officialDocId || '').toLowerCase();
+      return uName.includes(term) || uEmail.includes(term) || uPhone.includes(term) || uPan.includes(term) || uDoc.includes(term);
     });
   }, [users, clearanceSearch]);
 
@@ -344,13 +423,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
     return users.filter(u => u.hasVerifiedDetails === true && u.isApprovedByAdmin === true).filter(u => {
       if (!clearanceSearch) return true;
       const term = clearanceSearch.toLowerCase();
-      return (
-        u.name.toLowerCase().includes(term) ||
-        u.email.toLowerCase().includes(term) ||
-        (u.phoneNumber && u.phoneNumber.toLowerCase().includes(term)) ||
-        (u.panNumber && u.panNumber.toLowerCase().includes(term)) ||
-        (u.officialDocId && u.officialDocId.toLowerCase().includes(term))
-      );
+      const uName = (u.name || '').toLowerCase();
+      const uEmail = (u.email || '').toLowerCase();
+      const uPhone = (u.phoneNumber || '').toLowerCase();
+      const uPan = (u.panNumber || '').toLowerCase();
+      const uDoc = (u.officialDocId || '').toLowerCase();
+      return uName.includes(term) || uEmail.includes(term) || uPhone.includes(term) || uPan.includes(term) || uDoc.includes(term);
     });
   }, [users, clearanceSearch]);
 
@@ -483,7 +561,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
         </div>
 
         {/* Live system state switches */}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={handleManualRefresh}
+            disabled={isRefreshingData}
+            id="admin-refresh-data-btn"
+            className="bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-xs font-bold px-4 py-2.5 rounded-2xl flex items-center gap-2 cursor-pointer transition shadow-sm shadow-orange-500/20"
+            title="Force re-fetch all user profiles and collections from Firestore"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshingData ? 'animate-spin' : ''}`} />
+            <span>{isRefreshingData ? 'Syncing...' : 'Refresh Data'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowDiagnostics(prev => !prev)}
+            id="admin-diagnostics-toggle-btn"
+            className={`text-xs font-bold px-4 py-2.5 rounded-2xl flex items-center gap-2 cursor-pointer transition border ${
+              showDiagnostics 
+                ? 'bg-zinc-900 text-white border-zinc-900' 
+                : 'bg-white hover:bg-zinc-50 text-zinc-700 border-zinc-200 shadow-sm'
+            }`}
+          >
+            <Terminal className="w-4 h-4 text-orange-500" />
+            <span>{showDiagnostics ? 'Hide Diagnostics' : 'System Diagnostics'}</span>
+          </button>
+
           {isQuotaFallbackMode ? (
             <button
               onClick={resetQuotaFallback}
@@ -501,6 +605,144 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
           )}
         </div>
       </div>
+
+      {/* Firestore Diagnostics Console Drawer */}
+      {showDiagnostics && (
+        <div className="mb-8 bg-zinc-900 border border-zinc-800 p-6 rounded-3xl text-zinc-100 shadow-xl animate-in fade-in slide-in-from-top-4 duration-200">
+          <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-zinc-800">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-orange-500/10 border border-orange-500/20 text-orange-400 rounded-xl flex items-center justify-center">
+                <Terminal className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-white flex items-center gap-2">
+                  Firestore Database Diagnostics Console
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    Live Inspector
+                  </span>
+                </h3>
+                <p className="text-xs text-zinc-400 font-mono mt-0.5">
+                  Real-time query verification & collection state tracker
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleTestConnection}
+                disabled={diagnosticMetrics.testStatus === 'testing'}
+                className="px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-xs font-bold text-zinc-200 rounded-xl transition flex items-center gap-1.5 cursor-pointer border border-zinc-700"
+              >
+                <Activity className={`w-3.5 h-3.5 text-orange-400 ${diagnosticMetrics.testStatus === 'testing' ? 'animate-spin' : ''}`} />
+                <span>{diagnosticMetrics.testStatus === 'testing' ? 'Testing Ping...' : 'Test Connection'}</span>
+              </button>
+              <button
+                onClick={handleManualRefresh}
+                disabled={isRefreshingData}
+                className="px-3.5 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-400 text-xs font-bold text-white rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingData ? 'animate-spin' : ''}`} />
+                <span>Re-Fetch All Data</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Metric Status Badges */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-4">
+            <div className="bg-zinc-950 p-3.5 rounded-2xl border border-zinc-800/80">
+              <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider font-semibold">Primary Storage Engine</p>
+              <p className="text-sm font-bold text-emerald-400 mt-1 flex items-center gap-1.5">
+                <Database className="w-4 h-4" />
+                {dbStatus?.engine || 'Firebase Firestore'}
+              </p>
+            </div>
+            <div className="bg-zinc-950 p-3.5 rounded-2xl border border-zinc-800/80">
+              <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider font-semibold">User Profiles Loaded</p>
+              <p className="text-sm font-bold text-white mt-1 flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-orange-400" />
+                {users.length} Registered Users
+              </p>
+            </div>
+            <div className="bg-zinc-950 p-3.5 rounded-2xl border border-zinc-800/80">
+              <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider font-semibold">Ping Latency</p>
+              <p className="text-sm font-bold text-amber-400 mt-1 flex items-center gap-1.5 font-mono">
+                <Clock className="w-4 h-4" />
+                {diagnosticMetrics.latencyMs !== null ? `${diagnosticMetrics.latencyMs}ms` : 'Not tested'}
+              </p>
+            </div>
+            <div className="bg-zinc-950 p-3.5 rounded-2xl border border-zinc-800/80">
+              <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider font-semibold">Last Firestore Sync</p>
+              <p className="text-sm font-bold text-zinc-300 mt-1 font-mono">
+                {lastRefreshedAt ? lastRefreshedAt.toLocaleTimeString() : 'Initial load'}
+              </p>
+            </div>
+          </div>
+
+          {/* Collection Inspection breakdown */}
+          <div className="mb-4 bg-zinc-950/70 p-4 rounded-2xl border border-zinc-800/80">
+            <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-mono mb-2 flex items-center gap-2">
+              <Server className="w-3.5 h-3.5 text-orange-400" />
+              Live Firestore Collection Document Counts
+            </h4>
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs font-mono">
+              <div className="bg-zinc-900/80 p-2 rounded-xl text-center border border-zinc-800">
+                <span className="text-zinc-500 block text-[9px] uppercase">users</span>
+                <span className="font-bold text-emerald-400">{users.length}</span>
+              </div>
+              <div className="bg-zinc-900/80 p-2 rounded-xl text-center border border-zinc-800">
+                <span className="text-zinc-500 block text-[9px] uppercase">posts</span>
+                <span className="font-bold text-white">{posts.length}</span>
+              </div>
+              <div className="bg-zinc-900/80 p-2 rounded-xl text-center border border-zinc-800">
+                <span className="text-zinc-500 block text-[9px] uppercase">comments</span>
+                <span className="font-bold text-white">{comments.length}</span>
+              </div>
+              <div className="bg-zinc-900/80 p-2 rounded-xl text-center border border-zinc-800">
+                <span className="text-zinc-500 block text-[9px] uppercase">messages</span>
+                <span className="font-bold text-white">{messages.length}</span>
+              </div>
+              <div className="bg-zinc-900/80 p-2 rounded-xl text-center border border-zinc-800">
+                <span className="text-zinc-500 block text-[9px] uppercase">withdrawals</span>
+                <span className="font-bold text-white">{withdrawals.length}</span>
+              </div>
+              <div className="bg-zinc-900/80 p-2 rounded-xl text-center border border-zinc-800">
+                <span className="text-zinc-500 block text-[9px] uppercase">ads</span>
+                <span className="font-bold text-white">{ads.length}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Live Log Terminal Output */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-mono flex items-center gap-2">
+                <Terminal className="w-3.5 h-3.5 text-emerald-400" />
+                Event Log Stream ({diagnosticLogs.length} events)
+              </h4>
+              <button
+                onClick={() => setDiagnosticLogs([])}
+                className="text-[10px] text-zinc-500 hover:text-zinc-300 font-mono underline cursor-pointer"
+              >
+                Clear Logs
+              </button>
+            </div>
+            <div className="bg-zinc-950 p-3 rounded-2xl border border-zinc-800 font-mono text-[11px] leading-relaxed max-h-40 overflow-y-auto space-y-1.5 custom-scrollbar">
+              {diagnosticLogs.map(log => (
+                <div key={log.id} className="flex items-start gap-2">
+                  <span className="text-zinc-500 shrink-0">[{log.timestamp}]</span>
+                  <span className={`shrink-0 font-bold ${
+                    log.type === 'success' ? 'text-emerald-400' :
+                    log.type === 'error' ? 'text-red-400 font-black' :
+                    log.type === 'warn' ? 'text-amber-400' : 'text-cyan-400'
+                  }`}>
+                    [{log.type.toUpperCase()}]
+                  </span>
+                  <span className="text-zinc-300 break-all">{log.message}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {isQuotaFallbackMode && (
         <div className="mb-8 bg-amber-50 border border-amber-200/80 p-6 rounded-3xl flex flex-col md:flex-row md:items-center justify-between gap-4 text-left animate-in fade-in">

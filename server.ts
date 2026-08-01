@@ -23,6 +23,13 @@ const memoryDb = {
   drafts: [] as Draft[]
 };
 
+async function withTimeout<T>(promise: Promise<T>, ms = 3500): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`Firestore query timeout after ${ms}ms`)), ms))
+  ]);
+}
+
 async function initFirebase() {
   try {
     const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
@@ -34,8 +41,9 @@ async function initFirebase() {
       isUsingFirebase = true;
       console.log('🔥 Connected successfully to Firebase Firestore!');
       
-      // Seed Firebase Firestore if empty
-      await seedFirebaseIfEmpty();
+      // Seed & pre-warm Firestore in background non-blocking
+      seedFirebaseIfEmpty().catch(err => console.error("Background seed error:", err));
+      warmupMemoryDbFromFirestore().catch(err => console.error("Background warmup error:", err));
     } else {
       throw new Error('firebase-applet-config.json not found. Firestore is required as the primary database.');
     }
@@ -50,33 +58,62 @@ async function initDatabases() {
   await initFirebase();
 }
 
+async function warmupMemoryDbFromFirestore() {
+  if (!firebaseDb) return;
+  const collections = ['users', 'posts', 'comments', 'followers', 'messages', 'ads', 'withdrawals', 'notifications', 'postReports', 'drafts'];
+  for (const col of collections) {
+    try {
+      const colRef = collection(firebaseDb, col);
+      const snapshot = await withTimeout(getDocs(colRef), 4000);
+      const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (docs.length > 0) {
+        if (col === 'likes') {
+          (global as any).memoryLikes = docs;
+        } else {
+          const existing = (memoryDb as any)[col] || [];
+          const map = new Map<string, any>();
+          existing.forEach((item: any) => { if (item && item.id) map.set(item.id, item); });
+          docs.forEach((item: any) => { if (item && item.id) map.set(item.id, item); });
+          (memoryDb as any)[col] = Array.from(map.values());
+        }
+      }
+    } catch (e) {
+      // Quiet fail during background warmup
+    }
+  }
+  console.log('⚡ Warmup of in-memory cache from Firestore completed!');
+}
+
 async function seedFirebaseIfEmpty() {
   if (!firebaseDb) return;
   try {
-    console.log('🌱 Syncing default users, posts, comments, followers, and messages into Firebase Firestore...');
+    console.log('🌱 Syncing default seed documents into Firebase Firestore...');
+
+    const tasks: Promise<any>[] = [];
 
     for (const u of SEED_USERS) {
-      await setDoc(doc(firebaseDb, 'users', u.id), u, { merge: true });
+      tasks.push(withTimeout(setDoc(doc(firebaseDb, 'users', u.id), u, { merge: true }), 4000));
     }
 
     for (const p of SEED_POSTS) {
-      await setDoc(doc(firebaseDb, 'posts', p.id), p, { merge: true });
+      tasks.push(withTimeout(setDoc(doc(firebaseDb, 'posts', p.id), p, { merge: true }), 4000));
     }
 
     for (const c of SEED_COMMENTS) {
-      await setDoc(doc(firebaseDb, 'comments', c.id), c, { merge: true });
+      tasks.push(withTimeout(setDoc(doc(firebaseDb, 'comments', c.id), c, { merge: true }), 4000));
     }
 
     for (const f of SEED_FOLLOWERS) {
       const docId = `${f.followerId}_${f.followingId}`;
-      await setDoc(doc(firebaseDb, 'followers', docId), f, { merge: true });
+      tasks.push(withTimeout(setDoc(doc(firebaseDb, 'followers', docId), f, { merge: true }), 4000));
     }
 
     for (const m of SEED_MESSAGES) {
-      await setDoc(doc(firebaseDb, 'messages', m.id), m, { merge: true });
+      tasks.push(withTimeout(setDoc(doc(firebaseDb, 'messages', m.id), m, { merge: true }), 4000));
     }
 
-    console.log('✅ Firebase Firestore collection verification and seeding completed successfully!');
+    await Promise.allSettled(tasks);
+    console.log('✅ Firebase Firestore collection seed sync finished!');
   } catch (err) {
     console.error('❌ Error verifying Firebase Firestore collections:', err);
   }
@@ -89,10 +126,10 @@ async function dbFindAll(collectionName: string): Promise<any[]> {
   if (isUsingFirebase && firebaseDb) {
     try {
       const colRef = collection(firebaseDb, collectionName);
-      const snapshot = await getDocs(colRef);
-      fetched = snapshot.docs.map(d => d.data());
+      const snapshot = await withTimeout(getDocs(colRef), 3500);
+      fetched = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     } catch (err) {
-      console.error(`⚠️ Firestore read error, falling back to Memory DB for ${collectionName}:`, err);
+      console.warn(`⚠️ Firestore read timeout/error, using Memory DB cache for ${collectionName}:`, (err as any)?.message);
       if (collectionName === 'likes') {
         return (global as any).memoryLikes || [];
       }
@@ -105,58 +142,76 @@ async function dbFindAll(collectionName: string): Promise<any[]> {
     fetched = (memoryDb as any)[collectionName] || [];
   }
 
-  // Guarantee seed items are always present and merged with user items
+  // Merge in-memory cache with fetched items to preserve any items created in memory
+  const localItems = (memoryDb as any)[collectionName] || [];
+
   if (collectionName === 'users') {
     const map = new Map<string, any>();
     SEED_USERS.forEach(u => map.set(u.id, u));
-    fetched.forEach(u => map.set(u.id, u));
-    return Array.from(map.values());
+    localItems.forEach((u: any) => { if (u && u.id) map.set(u.id, u); });
+    fetched.forEach(u => { if (u && u.id) map.set(u.id, u); });
+    const merged = Array.from(map.values());
+    (memoryDb as any).users = merged;
+    return merged;
   }
   if (collectionName === 'posts') {
     const map = new Map<string, any>();
     SEED_POSTS.forEach(p => map.set(p.id, p));
-    fetched.forEach(p => map.set(p.id, p));
-    return Array.from(map.values());
+    localItems.forEach((p: any) => { if (p && p.id) map.set(p.id, p); });
+    fetched.forEach(p => { if (p && p.id) map.set(p.id, p); });
+    const merged = Array.from(map.values());
+    (memoryDb as any).posts = merged;
+    return merged;
   }
   if (collectionName === 'comments') {
     const map = new Map<string, any>();
     SEED_COMMENTS.forEach(c => map.set(c.id, c));
-    fetched.forEach(c => map.set(c.id, c));
-    return Array.from(map.values());
+    localItems.forEach((c: any) => { if (c && c.id) map.set(c.id, c); });
+    fetched.forEach(c => { if (c && c.id) map.set(c.id, c); });
+    const merged = Array.from(map.values());
+    (memoryDb as any).comments = merged;
+    return merged;
   }
   if (collectionName === 'followers') {
     const map = new Map<string, any>();
     SEED_FOLLOWERS.forEach(f => map.set(`${f.followerId}_${f.followingId}`, f));
-    fetched.forEach(f => map.set(`${f.followerId}_${f.followingId}`, f));
-    return Array.from(map.values());
+    localItems.forEach((f: any) => { if (f) map.set(`${f.followerId}_${f.followingId}`, f); });
+    fetched.forEach(f => { if (f) map.set(`${f.followerId}_${f.followingId}`, f); });
+    const merged = Array.from(map.values());
+    (memoryDb as any).followers = merged;
+    return merged;
   }
   if (collectionName === 'messages') {
     const map = new Map<string, any>();
     SEED_MESSAGES.forEach(m => map.set(m.id, m));
-    fetched.forEach(m => map.set(m.id, m));
-    return Array.from(map.values());
+    localItems.forEach((m: any) => { if (m && m.id) map.set(m.id, m); });
+    fetched.forEach(m => { if (m && m.id) map.set(m.id, m); });
+    const merged = Array.from(map.values());
+    (memoryDb as any).messages = merged;
+    return merged;
   }
 
-  return fetched;
+  return fetched.length > 0 ? fetched : localItems;
 }
 
 async function dbFindOne(collectionName: string, id: string): Promise<any | null> {
+  const localItem = (memoryDb as any)[collectionName]?.find((item: any) => item.id === id);
+  if (localItem) return localItem;
+
   if (isUsingFirebase && firebaseDb) {
     try {
       const docRef = doc(firebaseDb, collectionName, id);
-      const snap = await getDoc(docRef);
-      return snap.exists() ? snap.data() : null;
+      const snap = await withTimeout(getDoc(docRef), 3000);
+      return snap.exists() ? { id: snap.id, ...snap.data() } : null;
     } catch (err) {
-      console.error(`⚠️ Firestore read error, falling back to Memory DB for ${collectionName}/${id}:`, err);
-      return (memoryDb as any)[collectionName]?.find((item: any) => item.id === id) || null;
+      return null;
     }
-  } else {
-    return (memoryDb as any)[collectionName]?.find((item: any) => item.id === id) || null;
   }
+  return null;
 }
 
 async function dbUpsert(collectionName: string, id: string, data: any): Promise<void> {
-  // Sync in-memory db as fallback
+  // Sync in-memory db immediately
   const arr = (memoryDb as any)[collectionName];
   if (Array.isArray(arr)) {
     const idx = arr.findIndex((item: any) => item.id === id);
@@ -168,11 +223,8 @@ async function dbUpsert(collectionName: string, id: string, data: any): Promise<
   }
 
   if (isUsingFirebase && firebaseDb) {
-    try {
-      await setDoc(doc(firebaseDb, collectionName, id), data, { merge: true });
-    } catch (err) {
-      console.error(`⚠️ Firestore write error for ${collectionName}/${id}:`, err);
-    }
+    withTimeout(setDoc(doc(firebaseDb, collectionName, id), data, { merge: true }), 5000)
+      .catch(err => console.error(`⚠️ Firestore background write error for ${collectionName}/${id}:`, err?.message));
   }
 }
 
