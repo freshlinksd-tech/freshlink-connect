@@ -6,6 +6,12 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { useSocialPlatform } from '../context/SocialPlatformContext';
+import { 
+  generateAdminDataReconciliationReport, 
+  SystemSnapshot, 
+  ReconciliationReportResult, 
+  createSystemSnapshot 
+} from '../utils/AdminDataReconciliationReport';
 import { uploadToCloudinary } from '../lib/cloudinary';
 import { User, Post } from '../types';
 import { 
@@ -261,6 +267,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
   const [reconciliationMsg, setReconciliationMsg] = useState<string | null>(null);
   const [reconciliationDiscrepancies, setReconciliationDiscrepancies] = useState<DiscrepancyRecord[]>([]);
   const [serverCounts, setServerCounts] = useState<{ users?: number; posts?: number; comments?: number }>({});
+  const [systemSnapshot, setSystemSnapshot] = useState<SystemSnapshot | null>(null);
+
+  const reconciliationReport: ReconciliationReportResult = useMemo(() => {
+    return generateAdminDataReconciliationReport(posts, users, systemSnapshot);
+  }, [posts, users, systemSnapshot]);
+
+  const handleForceRefresh = async () => {
+    setIsDeepSyncing(true);
+    setReconciliationStatus('syncing');
+    setReconciliationMsg('Force refreshing collection data fetching hooks and generating fresh SystemSnapshot timestamp...');
+    addDiagnosticLog('info', 'Force Refresh triggered: Re-triggering data fetching hooks and creating new SystemSnapshot baseline...');
+    try {
+      await refetchData();
+      const freshSnap = createSystemSnapshot(posts.length, users.length);
+      setSystemSnapshot(freshSnap);
+      await runReconciliationScan();
+      addDiagnosticLog('success', `Force Refresh completed: SystemSnapshot ${freshSnap.snapshotId} updated at ${freshSnap.timestamp}.`);
+    } catch (err: any) {
+      console.error('Error during Force Refresh:', err);
+      setReconciliationMsg(`Force Refresh notice: ${err?.message || 'Data fetched with partial fallback'}`);
+    } finally {
+      setIsDeepSyncing(false);
+    }
+  };
 
   const runReconciliationScan = React.useCallback(async () => {
     setIsDeepSyncing(true);
@@ -1014,43 +1044,78 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
               </p>
             )}
 
-            {/* Identified Document Discrepancy Breakdown */}
-            <div className="bg-zinc-900/90 rounded-xl p-3 border border-zinc-800 space-y-2">
+            {/* Identified Document Discrepancy Breakdown & Reconciliation Report */}
+            <div className="bg-zinc-900/90 rounded-xl p-3 border border-zinc-800 space-y-3">
               <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-semibold">
-                <span>Discrepancy Inspector ({reconciliationDiscrepancies.length} identified)</span>
-                {reconciliationDiscrepancies.length > 0 && (
-                  <span className="text-amber-400">Action Required: Run Deep Sync to purge stale cache</span>
-                )}
+                <span className="flex items-center gap-1.5">
+                  <Clock className="w-3 h-3 text-orange-400" />
+                  SystemSnapshot Report ({reconciliationReport.snapshot.snapshotId})
+                </span>
+                <span className="text-zinc-500">
+                  Snapshot Timestamp: {new Date(reconciliationReport.snapshot.timestamp).toLocaleTimeString()}
+                </span>
               </div>
 
-              {reconciliationDiscrepancies.length > 0 ? (
-                <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-                  {reconciliationDiscrepancies.map(disc => (
-                    <div key={disc.id} className="bg-zinc-950 p-2.5 rounded-lg border border-zinc-800 flex items-start justify-between gap-3 text-xs font-mono">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
-                            disc.type === 'orphan_user' ? 'bg-red-950 text-red-400 border border-red-800' :
-                            disc.type === 'orphan_post' ? 'bg-amber-950 text-amber-400 border border-amber-800' :
-                            disc.type === 'hidden_private' ? 'bg-purple-950 text-purple-400 border border-purple-800' :
-                            'bg-cyan-950 text-cyan-400 border border-cyan-800'
-                          }`}>
-                            {disc.type.replace('_', ' ')}
-                          </span>
-                          <span className="text-zinc-300 font-bold truncate">{disc.title}</span>
+              {/* SystemSnapshot Baseline vs Actual Comparison */}
+              <div className="bg-zinc-950 p-2.5 rounded-lg border border-zinc-800/80 text-xs font-mono grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div>
+                  <span className="text-[9.5px] text-zinc-500 uppercase block">Expected Posts vs Actual</span>
+                  <span className={`font-bold ${reconciliationReport.postsDiscrepancy === 0 ? 'text-zinc-200' : 'text-amber-400'}`}>
+                    {reconciliationReport.snapshot.expectedPostsCount} → {reconciliationReport.actualPostsCount} ({reconciliationReport.postsDiscrepancy >= 0 ? `+${reconciliationReport.postsDiscrepancy}` : reconciliationReport.postsDiscrepancy})
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[9.5px] text-zinc-500 uppercase block">Expected Users vs Actual</span>
+                  <span className={`font-bold ${reconciliationReport.usersDiscrepancy === 0 ? 'text-zinc-200' : 'text-amber-400'}`}>
+                    {reconciliationReport.snapshot.expectedUsersCount} → {reconciliationReport.actualUsersCount} ({reconciliationReport.usersDiscrepancy >= 0 ? `+${reconciliationReport.usersDiscrepancy}` : reconciliationReport.usersDiscrepancy})
+                  </span>
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <span className="text-[9.5px] text-zinc-500 uppercase block">Report Status</span>
+                  <span className={`font-bold ${!reconciliationReport.hasDiscrepancy ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {!reconciliationReport.hasDiscrepancy ? '0 Baseline Discrepancies' : 'Baseline Delta Detected'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Identified Document Discrepancies List */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-semibold">
+                  <span>Discrepancy Inspector ({reconciliationDiscrepancies.length} identified)</span>
+                  {reconciliationDiscrepancies.length > 0 && (
+                    <span className="text-amber-400">Action Required: Run Deep Sync to purge stale cache</span>
+                  )}
+                </div>
+
+                {reconciliationDiscrepancies.length > 0 ? (
+                  <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                    {reconciliationDiscrepancies.map(disc => (
+                      <div key={disc.id} className="bg-zinc-950 p-2.5 rounded-lg border border-zinc-800 flex items-start justify-between gap-3 text-xs font-mono">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                              disc.type === 'orphan_user' ? 'bg-red-950 text-red-400 border border-red-800' :
+                              disc.type === 'orphan_post' ? 'bg-amber-950 text-amber-400 border border-amber-800' :
+                              disc.type === 'hidden_private' ? 'bg-purple-950 text-purple-400 border border-purple-800' :
+                              'bg-cyan-950 text-cyan-400 border border-cyan-800'
+                            }`}>
+                              {disc.type.replace('_', ' ')}
+                            </span>
+                            <span className="text-zinc-300 font-bold truncate">{disc.title}</span>
+                          </div>
+                          <p className="text-[10.5px] text-zinc-400 mt-1 leading-normal">{disc.reason}</p>
+                          <p className="text-[9px] text-zinc-500 mt-0.5">Doc ID: <code className="text-orange-400">{disc.documentId}</code> | Collection: <code className="text-zinc-300">{disc.collection}</code></p>
                         </div>
-                        <p className="text-[10.5px] text-zinc-400 mt-1 leading-normal">{disc.reason}</p>
-                        <p className="text-[9px] text-zinc-500 mt-0.5">Doc ID: <code className="text-orange-400">{disc.documentId}</code> | Collection: <code className="text-zinc-300">{disc.collection}</code></p>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-2 text-xs font-mono text-emerald-400 flex items-center justify-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>0 Orphan or Hidden Document IDs Detected in Cache</span>
-                </div>
-              )}
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-2 text-xs font-mono text-emerald-400 flex items-center justify-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>0 Orphan or Hidden Document IDs Detected in Cache</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
@@ -1059,12 +1124,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
               </p>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={runReconciliationScan}
+                  onClick={handleForceRefresh}
                   disabled={isDeepSyncing}
-                  className="px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-xs font-bold text-zinc-200 rounded-xl transition flex items-center gap-1.5 cursor-pointer border border-zinc-700 font-mono"
+                  className="px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-xs font-bold text-orange-400 border border-orange-500/40 hover:border-orange-500 rounded-xl transition flex items-center gap-1.5 cursor-pointer font-mono"
+                  title="Re-triggers specific data fetching hooks (refetchData) and updates SystemSnapshot"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isDeepSyncing ? 'animate-spin' : ''}`} />
-                  <span>Re-Scan Discrepancies</span>
+                  <span>Force Refresh Hooks</span>
+                </button>
+                <button
+                  onClick={runReconciliationScan}
+                  disabled={isDeepSyncing}
+                  className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-xs font-bold text-zinc-200 rounded-xl transition flex items-center gap-1.5 cursor-pointer border border-zinc-700 font-mono"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isDeepSyncing ? 'animate-spin' : ''}`} />
+                  <span>Re-Scan</span>
                 </button>
                 <button
                   onClick={handleDeepSync}
