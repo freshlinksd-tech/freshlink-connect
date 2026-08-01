@@ -43,6 +43,8 @@ import {
 } from 'lucide-react';
 import { AdminBroadcastCreator } from './AdminBroadcastCreator';
 import { PollAnalyticsDashboard } from './PollAnalyticsDashboard';
+import { AdminAuditLogs } from './AdminAuditLogs';
+import { dataAuditService } from '../services/DataAuditService';
 
 interface AdminPanelProps {
   onSelectUser: (userId: string) => void;
@@ -130,7 +132,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
 
   const isSuperAdmin = currentUser?.role === 'super_admin' || currentUser?.email?.toLowerCase() === 'fresh.linksd@gmail.com';
 
-  const [activeTab, setActiveTab ] = useState<'users' | 'posts' | 'clearance' | 'controls' | 'ads' | 'broadcasts'>('users');
+  const [activeTab, setActiveTab ] = useState<'users' | 'posts' | 'clearance' | 'controls' | 'ads' | 'broadcasts' | 'audit'>('users');
 
   // Diagnostics & Re-fetch State
   const [isRefreshingData, setIsRefreshingData] = useState(false);
@@ -452,6 +454,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
       return;
     }
     await blockUser(userId, !currentBlockedState);
+    await dataAuditService.logAction({
+      type: 'security',
+      entity: 'users',
+      entityId: userId,
+      actorEmail: currentUser?.email || 'admin',
+      actorName: currentUser?.name || 'Admin',
+      description: `${!currentBlockedState ? 'Blocked' : 'Unblocked'} account: ${targetUser.name} (${targetUser.email})`,
+      details: { targetUserId: userId, newBlockedState: !currentBlockedState }
+    });
   };
 
   const handleToggleRole = async (userId: string, currentRole?: string) => {
@@ -470,6 +481,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
     }
     const newRole = currentRole === 'admin' ? 'user' : 'admin';
     await setRoleByAdmin(userId, newRole);
+    if (targetUser) {
+      await dataAuditService.logAction({
+        type: 'security',
+        entity: 'users',
+        entityId: userId,
+        actorEmail: currentUser?.email || 'admin',
+        actorName: currentUser?.name || 'Super Admin',
+        description: `Role altered for user ${targetUser.name} (${targetUser.email}): ${currentRole || 'user'} -> ${newRole}`,
+        details: { targetUserId: userId, previousRole: currentRole || 'user', newRole }
+      });
+    }
   };
 
   const handleDeletePost = (post: Post) => {
@@ -878,6 +900,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
           }`}
         >
           📢 Broadcasts
+        </button>
+        <button
+          onClick={() => setActiveTab('audit')}
+          className={`flex-1 min-w-[120px] py-3 text-xs font-bold uppercase rounded-xl tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+            activeTab === 'audit'
+              ? 'bg-orange-600 text-white shadow-sm'
+              : 'text-zinc-500 hover:text-zinc-800 hover:bg-white/40'
+          }`}
+        >
+          <FileText className="w-3.5 h-3.5" />
+          <span>Data Audit Trail</span>
         </button>
       </div>
 
@@ -2447,6 +2480,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
         </section>
       )}
 
+      {activeTab === 'audit' && (
+        <section className="space-y-6 text-left animate-in fade-in duration-200" id="admin-section-audit">
+          <AdminAuditLogs currentUserEmail={currentUser?.email} />
+        </section>
+      )}
+
       {/* Custom Delete Confirmation Modal */}
       {postToDelete && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in text-left">
@@ -2480,6 +2519,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                   try {
                     setIsDeleting(true);
                     await deletePost(postToDelete.id);
+                    await dataAuditService.logAction({
+                      type: 'delete',
+                      entity: 'posts',
+                      entityId: postToDelete.id,
+                      actorEmail: currentUser?.email || 'admin',
+                      actorName: currentUser?.name || 'Admin',
+                      description: `Permanently deleted article: "${postToDelete.title}"`,
+                      details: { postId: postToDelete.id, category: postToDelete.category, authorId: postToDelete.userId }
+                    });
                   } catch (err) {
                     console.error(err);
                   } finally {
@@ -2536,6 +2584,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                   try {
                     setIsDeleting(true);
                     await deleteUserByAdmin(userToDelete.id);
+                    await dataAuditService.logAction({
+                      type: 'delete',
+                      entity: 'users',
+                      entityId: userToDelete.id,
+                      actorEmail: currentUser?.email || 'admin',
+                      actorName: currentUser?.name || 'Admin',
+                      description: `Permanently deleted user profile: ${userToDelete.name} (${userToDelete.email})`,
+                      details: { userId: userToDelete.id, userEmail: userToDelete.email }
+                    });
                   } catch (err) {
                     console.error(err);
                   } finally {

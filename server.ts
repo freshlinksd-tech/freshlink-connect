@@ -20,7 +20,8 @@ const memoryDb = {
   withdrawals: [] as WithdrawalRequest[],
   notifications: [] as Notification[],
   postReports: [] as PostReport[],
-  drafts: [] as Draft[]
+  drafts: [] as Draft[],
+  audit_logs: [] as any[]
 };
 
 async function withTimeout<T>(promise: Promise<T>, ms = 3500): Promise<T> {
@@ -60,7 +61,7 @@ async function initDatabases() {
 
 async function warmupMemoryDbFromFirestore() {
   if (!firebaseDb) return;
-  const collections = ['users', 'posts', 'comments', 'followers', 'messages', 'ads', 'withdrawals', 'notifications', 'postReports', 'drafts'];
+  const collections = ['users', 'posts', 'comments', 'followers', 'messages', 'ads', 'withdrawals', 'notifications', 'postReports', 'drafts', 'audit_logs'];
   for (const col of collections) {
     try {
       const colRef = collection(firebaseDb, col);
@@ -930,6 +931,39 @@ Sitemap: https://freshlinkconnect.info/sitemap.xml
     try {
       await dbDeleteOne('drafts', id);
       res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --- DATA AUDIT LOGS ---
+  app.get('/api/audit-logs', async (req, res) => {
+    try {
+      const logs = await dbFindAll('audit_logs');
+      res.json(logs);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/audit-logs', async (req, res) => {
+    const entry = req.body;
+    try {
+      if (!entry.id) entry.id = `audit_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      await dbUpsert('audit_logs', entry.id, entry);
+      res.json(entry);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete('/api/audit-logs', async (req, res) => {
+    try {
+      const logs = await dbFindAll('audit_logs');
+      for (const log of logs) {
+        if (log && log.id) await dbDeleteOne('audit_logs', log.id);
+      }
+      res.json({ success: true, count: logs.length });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
