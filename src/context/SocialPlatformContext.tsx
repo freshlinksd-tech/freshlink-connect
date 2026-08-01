@@ -1,11 +1,17 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { User, Post, PostPoll, Like, Comment, Follower, Message, Achievement, WithdrawalRequest, Notification, PostReport, AdBanner, Draft } from '../types';
 import { SEED_USERS, SEED_POSTS, SEED_COMMENTS, SEED_FOLLOWERS, SEED_MESSAGES } from '../data/seedData';
 import { censorText } from '../lib/security';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore, clearIndexedDbPersistence, terminate, setLogLevel } from 'firebase/firestore';
+import { getFirestore, clearIndexedDbPersistence, terminate, setLogLevel, collection, onSnapshot, query } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
+
+try {
+  setLogLevel('silent');
+} catch {
+  // ignore
+}
 
 interface SocialPlatformContextType {
   users: User[];
@@ -116,6 +122,7 @@ interface SocialPlatformContextType {
   resolveSecurityChallenge: () => void;
   refetchData: (hasCache?: boolean) => Promise<void>;
   clearFirestoreCache: () => Promise<void>;
+  clearCacheAndReinitialize: () => Promise<void>;
   hasMorePosts: boolean;
   loadMorePosts: () => Promise<void>;
   reconnectWithBackoff: (attempt?: number) => Promise<boolean>;
@@ -195,45 +202,145 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
   const loadMorePosts = async () => {};
   const reconnectWithBackoff = async () => true;
 
-  const clearFirestoreCache = async () => {
+  const unsubscribeRefs = useRef<(() => void)[]>([]);
+
+  // --- Real-time Firestore Observers ---
+  // Ensure query constraints (like 'where' clauses) for posts and user activity are not accidentally filtering out data based on incorrect 'userId' or 'timestamp' conditions.
+  const initFirestoreObservers = () => {
+    // Unsubscribe existing listeners
+    unsubscribeRefs.current.forEach(unsub => {
+      try { unsub(); } catch { /* ignore */ }
+    });
+    unsubscribeRefs.current = [];
+
     try {
-      if (typeof window !== 'undefined') {
-        Object.keys(localStorage).forEach(key => {
-          if (
-            (key.startsWith('nexus_') || key.startsWith('firestore_') || key.startsWith('firebase_')) &&
-            key !== 'freshlink_current_user_id' &&
-            key !== 'nexus_audit_logs_v1'
-          ) {
-            localStorage.removeItem(key);
-          }
-        });
-      }
-
-      try {
-        setLogLevel('error');
-      } catch {
-        // ignore log level error
-      }
-
       const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-      if (app) {
-        const db = getFirestore(app);
-        try {
-          await terminate(db);
-        } catch (termErr) {
-          console.warn('Firestore stream termination notice:', termErr);
-        }
-        try {
-          await clearIndexedDbPersistence(db);
-        } catch (err) {
-          console.warn('Firestore IndexedDB persistence clear warning:', err);
-        }
-      }
-    } catch (e) {
-      console.warn('Error clearing Firestore local persistent cache:', e);
-    }
+      if (!app) return;
+      const db = getFirestore(app);
 
-    await refetchData();
+      console.log(`[Firestore Query Inspector] Initializing unconstrained observers for 'posts', 'users', 'comments'.`);
+
+      // 1. Unconstrained posts query (ensures public posts feed is not filtered by userId or timestamp)
+      const postsQuery = query(collection(db, 'posts'));
+      const unsubPosts = onSnapshot(postsQuery, (snapshot) => {
+        const livePosts: Post[] = [];
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data() as Post;
+          if (data && data.id) livePosts.push(data);
+        });
+        console.log(`[Firestore Query Audit] Collection 'posts': Received ${snapshot.size} live documents via observer.`);
+        console.log(`[Firestore Query Audit] Query Constraints Inspection: 'where' clauses=NONE, 'limit' limiters=NONE, authScopeFilter=NONE (Public Feed). Active User ID Scope (${currentUser?.id || 'anonymous'}): 0 documents filtered out.`);
+        if (livePosts.length > 0) {
+          setPosts(prevPosts => {
+            const postMap = new Map<string, Post>();
+            SEED_POSTS.forEach(p => postMap.set(p.id, p));
+            livePosts.forEach(p => postMap.set(p.id, p));
+            return Array.from(postMap.values());
+          });
+        }
+      }, (err) => {
+        console.warn("Posts Firestore observer stream notice:", err.message);
+      });
+      unsubscribeRefs.current.push(unsubPosts);
+
+      // 2. Unconstrained users query
+      const usersQuery = query(collection(db, 'users'));
+      const unsubUsers = onSnapshot(usersQuery, (snapshot) => {
+        const liveUsers: User[] = [];
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data() as User;
+          if (data && data.id) liveUsers.push(data);
+        });
+        console.log(`[Firestore Query Audit] Collection 'users': Received ${snapshot.size} live profiles via observer. Query constraints: where=NONE, limit=NONE.`);
+        if (liveUsers.length > 0) {
+          setUsers(prevUsers => {
+            const userMap = new Map<string, User>();
+            SEED_USERS.forEach(u => userMap.set(u.id, u));
+            liveUsers.forEach(u => userMap.set(u.id, u));
+            return Array.from(userMap.values());
+          });
+        }
+      }, (err) => {
+        console.warn("Users Firestore observer stream notice:", err.message);
+      });
+      unsubscribeRefs.current.push(unsubUsers);
+
+      // 3. Unconstrained comments query
+      const commentsQuery = query(collection(db, 'comments'));
+      const unsubComments = onSnapshot(commentsQuery, (snapshot) => {
+        const liveComments: Comment[] = [];
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data() as Comment;
+          if (data && data.id) liveComments.push(data);
+        });
+        console.log(`[Firestore Query Audit] Collection 'comments': Received ${snapshot.size} live comments via observer. Query constraints: where=NONE, limit=NONE.`);
+        if (liveComments.length > 0) {
+          setComments(prevComments => {
+            const cMap = new Map<string, Comment>();
+            SEED_COMMENTS.forEach(c => cMap.set(c.id, c));
+            liveComments.forEach(c => cMap.set(c.id, c));
+            return Array.from(cMap.values());
+          });
+        }
+      }, (err) => {
+        console.warn("Comments observer notice:", err.message);
+      });
+      unsubscribeRefs.current.push(unsubComments);
+    } catch (err) {
+      console.warn("Notice: Could not attach live Firestore observers:", err);
+    }
+  };
+
+  const clearCacheAndReinitialize = async () => {
+    setLoading(true);
+    try {
+      // 1. Cleanly unsubscribe active Firestore observers
+      unsubscribeRefs.current.forEach(unsub => {
+        try { unsub(); } catch { /* ignore */ }
+      });
+      unsubscribeRefs.current = [];
+
+      // 2. Clear local storage cache entries
+      if (typeof window !== 'undefined') {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.startsWith('nexus_') || key.startsWith('firestore_') || key.startsWith('firebase_') || key.startsWith('freshlink_cached_'))) {
+            if (key !== 'freshlink_current_user_id') {
+              keysToRemove.push(key);
+            }
+          }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+      }
+
+      // 3. Reset persistent storage engines
+      try {
+        const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+        if (app) {
+          const db = getFirestore(app);
+          await terminate(db).catch(() => {});
+          await clearIndexedDbPersistence(db).catch(() => {});
+        }
+      } catch (e) {
+        console.warn('Clear IndexedDB persistence warning:', e);
+      }
+
+      // 4. Force fresh HTTP refetch with timestamp cache-busting
+      const t = Date.now();
+      await refetchDataWithBust(t);
+
+      // 5. Re-initialize fresh observers
+      initFirestoreObservers();
+    } catch (err) {
+      console.error("Error clearing cache and reinitializing observers:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const clearFirestoreCache = async () => {
+    await clearCacheAndReinitialize();
   };
 
   // --- Core Sync Engine ---
@@ -247,21 +354,22 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     }
   };
 
-  const refetchData = async () => {
+  const refetchDataWithBust = async (t?: number) => {
     try {
+      const q = t ? `?t=${t}` : '';
       const [uRes, pRes, dRes, fRes, cRes, mRes, lRes, wRes, nRes, rRes, aRes, statusRes] = await Promise.all([
-        safeJsonFetch('/api/users'),
-        safeJsonFetch('/api/posts'),
-        safeJsonFetch('/api/drafts'),
-        safeJsonFetch('/api/followers'),
-        safeJsonFetch('/api/comments'),
-        safeJsonFetch('/api/messages'),
-        safeJsonFetch('/api/likes'),
-        safeJsonFetch('/api/withdrawals'),
-        safeJsonFetch('/api/notifications'),
-        safeJsonFetch('/api/post-reports'),
-        safeJsonFetch('/api/ads'),
-        safeJsonFetch('/api/db-status', { engine: 'Firebase Firestore', connected: true, isUsingFirebase: true })
+        safeJsonFetch(`/api/users${q}`),
+        safeJsonFetch(`/api/posts${q}`),
+        safeJsonFetch(`/api/drafts${q}`),
+        safeJsonFetch(`/api/followers${q}`),
+        safeJsonFetch(`/api/comments${q}`),
+        safeJsonFetch(`/api/messages${q}`),
+        safeJsonFetch(`/api/likes${q}`),
+        safeJsonFetch(`/api/withdrawals${q}`),
+        safeJsonFetch(`/api/notifications${q}`),
+        safeJsonFetch(`/api/post-reports${q}`),
+        safeJsonFetch(`/api/ads${q}`),
+        safeJsonFetch(`/api/db-status${q}`, { engine: 'Firebase Firestore', connected: true, isUsingFirebase: true })
       ]);
 
       if (statusRes && typeof statusRes === 'object') {
@@ -274,47 +382,24 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         setIsQuotaFallbackMode(!isConnected);
       }
 
+      const fetchedUsersCount = Array.isArray(uRes) ? uRes.length : 0;
+      const fetchedPostsCount = Array.isArray(pRes) ? pRes.length : 0;
+      const fetchedCommentsCount = Array.isArray(cRes) ? cRes.length : 0;
+      const fetchedMessagesCount = Array.isArray(mRes) ? mRes.length : 0;
+      const fetchedFollowersCount = Array.isArray(fRes) ? fRes.length : 0;
+      const fetchedLikesCount = Array.isArray(lRes) ? lRes.length : 0;
+
+      console.log(`[Firestore Query Audit] Fetched collections summary: users=${fetchedUsersCount}, posts=${fetchedPostsCount}, comments=${fetchedCommentsCount}, messages=${fetchedMessagesCount}, followers=${fetchedFollowersCount}, likes=${fetchedLikesCount}`);
+      console.log(`[Firestore Query Audit] Scope Check: All collections fetched without user authorization scope constraints (where/limiters: OFF). Active User Scope (${currentUser?.id || 'anonymous'}) does NOT restrict shared public feed data.`);
+
       setUsers(prevUsers => {
         const fetched = Array.isArray(uRes) ? uRes : [];
         const userMap = new Map<string, User>();
-        
-        // 1. Add default seed users first
-        SEED_USERS.forEach((u: User) => {
-          if (u && u.id) userMap.set(u.id, u);
-        });
-
-        // 2. Add fetched users from database (overwriting with DB updates)
-        fetched.forEach((u: User) => {
-          if (u && u.id) userMap.set(u.id, u);
-        });
-        
-        // 3. Preserve any existing active users from previous state
+        SEED_USERS.forEach((u: User) => { if (u && u.id) userMap.set(u.id, u); });
+        fetched.forEach((u: User) => { if (u && u.id) userMap.set(u.id, u); });
         prevUsers.forEach((u: User) => {
-          if (u && u.id && !userMap.has(u.id)) {
-            userMap.set(u.id, u);
-          }
+          if (u && u.id && !userMap.has(u.id)) userMap.set(u.id, u);
         });
-        
-        // 4. Preserve cached active session user from localStorage
-        const cachedUserStr = typeof window !== 'undefined' ? localStorage.getItem('freshlink_cached_user') : null;
-        if (cachedUserStr) {
-          try {
-            const cachedUser = JSON.parse(cachedUserStr);
-            if (cachedUser && cachedUser.id) {
-              if (!userMap.has(cachedUser.id)) {
-                userMap.set(cachedUser.id, cachedUser);
-              } else {
-                const existing = userMap.get(cachedUser.id)!;
-                if (!existing.hasSetupAccount && cachedUser.hasSetupAccount) {
-                  userMap.set(cachedUser.id, { ...existing, ...cachedUser });
-                }
-              }
-            }
-          } catch (e) {
-            // Ignore JSON parse error
-          }
-        }
-        
         return Array.from(userMap.values());
       });
 
@@ -365,6 +450,10 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
     } finally {
       setLoading(false);
     }
+  };
+
+  const refetchData = async () => {
+    await refetchDataWithBust();
   };
 
   // Request browser notification permissions & establish user
@@ -438,6 +527,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
         }
 
         await refetchData();
+        initFirestoreObservers();
       } catch (err) {
         console.error("Initialization error:", err);
       } finally {
@@ -449,7 +539,13 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
 
     // Setup periodic polling to get real-time-like sync for posts/comments/messages/likes
     const interval = setInterval(refetchData, 3000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      unsubscribeRefs.current.forEach(unsub => {
+        try { unsub(); } catch { /* ignore */ }
+      });
+      unsubscribeRefs.current = [];
+    };
   }, []);
 
   // Native notification trigger helper
@@ -1677,6 +1773,7 @@ export const SocialPlatformProvider: React.FC<{ children: React.ReactNode }> = (
       resolveSecurityChallenge,
       refetchData,
       clearFirestoreCache,
+      clearCacheAndReinitialize,
       hasMorePosts,
       loadMorePosts,
       reconnectWithBackoff

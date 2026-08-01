@@ -128,6 +128,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
     resetQuotaFallback,
     refetchData,
     clearFirestoreCache,
+    clearCacheAndReinitialize,
     dbStatus
   } = useSocialPlatform();
 
@@ -244,36 +245,180 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
 
   const [withdrawSearch, setWithdrawSearch] = useState('');
 
-  // Data Reconciliation state
+  // Data Reconciliation state & Document Inspector
+  interface DiscrepancyRecord {
+    id: string;
+    collection: 'posts' | 'comments' | 'likes' | 'users' | 'followers';
+    type: 'orphan_user' | 'orphan_post' | 'hidden_private' | 'count_mismatch' | 'stale_cache';
+    documentId: string;
+    title: string;
+    reason: string;
+  }
+
   const [systemLogsUserCount, setSystemLogsUserCount] = useState<number | null>(null);
   const [isDeepSyncing, setIsDeepSyncing] = useState<boolean>(false);
   const [reconciliationStatus, setReconciliationStatus] = useState<'synced' | 'mismatch' | 'syncing'>('synced');
   const [reconciliationMsg, setReconciliationMsg] = useState<string | null>(null);
+  const [reconciliationDiscrepancies, setReconciliationDiscrepancies] = useState<DiscrepancyRecord[]>([]);
+  const [serverCounts, setServerCounts] = useState<{ users?: number; posts?: number; comments?: number }>({});
 
-  const fetchReconciliationData = React.useCallback(async () => {
+  const runReconciliationScan = React.useCallback(async () => {
+    setIsDeepSyncing(true);
+    setReconciliationStatus('syncing');
+    setReconciliationMsg('Scanning database truth against local snapshot state to identify hidden or orphan document IDs...');
+    addDiagnosticLog('info', 'Data Reconciliation scan started: Comparing expected activity counts with local snapshot state...');
+
+    const userIds = new Set(users.map(u => u.id));
+    const postIds = new Set(posts.map(p => p.id));
+    const discrepancies: DiscrepancyRecord[] = [];
+
+    // 1. Scan Posts for Orphan Authors and Hidden/Private states
+    posts.forEach(post => {
+      const authorId = post.userId || (post as any).authorId;
+      if (authorId && !userIds.has(authorId)) {
+        discrepancies.push({
+          id: `disc_post_${post.id}`,
+          collection: 'posts',
+          type: 'orphan_user',
+          documentId: post.id,
+          title: post.title || 'Untitled Post',
+          reason: `Orphan Author: userId '${authorId}' does not exist in registered users directory.`
+        });
+      }
+
+      if ((post as any).isPrivate === true || (post as any).visibility === 'private') {
+        discrepancies.push({
+          id: `disc_post_priv_${post.id}`,
+          collection: 'posts',
+          type: 'hidden_private',
+          documentId: post.id,
+          title: post.title || 'Untitled Post',
+          reason: `Hidden Document: Post is flagged as private in state.`
+        });
+      }
+    });
+
+    // 2. Scan Comments for Orphan parent posts or missing authors
+    comments.forEach(comment => {
+      if (comment.postId && !postIds.has(comment.postId)) {
+        discrepancies.push({
+          id: `disc_comment_post_${comment.id}`,
+          collection: 'comments',
+          type: 'orphan_post',
+          documentId: comment.id,
+          title: `Comment: "${comment.content?.slice(0, 30)}..."`,
+          reason: `Orphan Comment: Parent postId '${comment.postId}' not found in active feed.`
+        });
+      }
+      if (comment.userId && !userIds.has(comment.userId)) {
+        discrepancies.push({
+          id: `disc_comment_user_${comment.id}`,
+          collection: 'comments',
+          type: 'orphan_user',
+          documentId: comment.id,
+          title: `Comment: "${comment.content?.slice(0, 30)}..."`,
+          reason: `Orphan Author: Comment userId '${comment.userId}' missing from users directory.`
+        });
+      }
+    });
+
+    // 3. Scan Likes for Orphan posts or missing users
+    likes.forEach(like => {
+      if (like.postId && !postIds.has(like.postId)) {
+        discrepancies.push({
+          id: `disc_like_post_${like.id}`,
+          collection: 'likes',
+          type: 'orphan_post',
+          documentId: like.id,
+          title: `Like record ${like.id}`,
+          reason: `Orphan Like: Target postId '${like.postId}' missing from posts.`
+        });
+      }
+    });
+
+    // 4. Fetch server counts for database comparison
     try {
-      const logs = await dataAuditService.fetchAuditLogs();
-      const userLogs = logs.filter(l => l.entity === 'users' || l.type === 'security');
-      const recorded = userLogs.length > 0 ? userLogs.length : users.length;
-      setSystemLogsUserCount(recorded);
-      setReconciliationStatus(users.length === recorded ? 'synced' : 'mismatch');
-    } catch (e) {
-      setSystemLogsUserCount(users.length);
-      setReconciliationStatus('synced');
+      const t = Date.now();
+      const [srvPosts, srvUsers, srvComments] = await Promise.all([
+        fetch(`/api/posts?t=${t}`).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch(`/api/users?t=${t}`).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch(`/api/comments?t=${t}`).then(r => r.ok ? r.json() : null).catch(() => null)
+      ]);
+
+      const counts: { users?: number; posts?: number; comments?: number } = {};
+      if (Array.isArray(srvPosts)) {
+        counts.posts = srvPosts.length;
+        if (srvPosts.length !== posts.length) {
+          discrepancies.push({
+            id: `disc_posts_count`,
+            collection: 'posts',
+            type: 'count_mismatch',
+            documentId: 'collection_posts',
+            title: 'Posts Collection Count Mismatch',
+            reason: `Database Server count (${srvPosts.length}) != Local Snapshot count (${posts.length}).`
+          });
+        }
+      }
+      if (Array.isArray(srvUsers)) {
+        counts.users = srvUsers.length;
+        if (srvUsers.length !== users.length) {
+          discrepancies.push({
+            id: `disc_users_count`,
+            collection: 'users',
+            type: 'count_mismatch',
+            documentId: 'collection_users',
+            title: 'Users Collection Count Mismatch',
+            reason: `Database Server count (${srvUsers.length}) != Local Snapshot count (${users.length}).`
+          });
+        }
+      }
+      if (Array.isArray(srvComments)) {
+        counts.comments = srvComments.length;
+        if (srvComments.length !== comments.length) {
+          discrepancies.push({
+            id: `disc_comments_count`,
+            collection: 'comments',
+            type: 'count_mismatch',
+            documentId: 'collection_comments',
+            title: 'Comments Collection Count Mismatch',
+            reason: `Database Server count (${srvComments.length}) != Local Snapshot count (${comments.length}).`
+          });
+        }
+      }
+      setServerCounts(counts);
+    } catch {
+      // ignore
     }
-  }, [users.length]);
+
+    setReconciliationDiscrepancies(discrepancies);
+    setSystemLogsUserCount(users.length);
+
+    if (discrepancies.length === 0) {
+      setReconciliationStatus('synced');
+      setReconciliationMsg('Data Reconciliation Scan Complete: 0 discrepancies detected. All local snapshot states align with database truth.');
+      addDiagnosticLog('success', 'Data Reconciliation Scan completed: 0 orphan or hidden documents detected.');
+    } else {
+      setReconciliationStatus('mismatch');
+      setReconciliationMsg(`Data Reconciliation Warning: Detected ${discrepancies.length} discrepancy record(s) (orphan document IDs / count mismatches / hidden states).`);
+      addDiagnosticLog('warn', `Reconciliation scan identified ${discrepancies.length} discrepant or orphan document(s).`);
+    }
+
+    setIsDeepSyncing(false);
+  }, [users, posts, comments, likes]);
 
   React.useEffect(() => {
-    fetchReconciliationData();
-  }, [fetchReconciliationData]);
+    runReconciliationScan();
+  }, [runReconciliationScan]);
 
   const handleDeepSync = async () => {
     setIsDeepSyncing(true);
     setReconciliationStatus('syncing');
-    setReconciliationMsg('Executing Deep Sync: Purging local persistent cache and fetching Firestore server-side truth...');
-    addDiagnosticLog('info', 'Deep Sync initiated: Purging local persistent cache and fetching Firestore server truth...');
+    setReconciliationMsg('Executing Deep Sync: Purging local persistent cache, re-initializing observers, and fetching server truth...');
+    addDiagnosticLog('info', 'Deep Sync initiated: Purging local persistent cache and re-initializing observers...');
     try {
-      if (clearFirestoreCache) {
+      if (clearCacheAndReinitialize) {
+        await clearCacheAndReinitialize();
+      } else if (clearFirestoreCache) {
         await clearFirestoreCache();
       } else {
         await refetchData(false);
@@ -289,15 +434,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
         details: { firestoreUserCount: users.length, timestamp: new Date().toISOString() }
       });
 
-      setSystemLogsUserCount(users.length);
-      setReconciliationStatus('synced');
-      setReconciliationMsg(`Deep Sync complete! Force-corrected missing local cache records and aligned system_logs with ${users.length} Firestore user profiles.`);
-      addDiagnosticLog('success', `Deep Sync completed: 0 discrepancies across ${users.length} registered profiles. Local cache fully reconciled.`);
+      await runReconciliationScan();
+      addDiagnosticLog('success', `Deep Sync completed: Local cache purged and re-initialized cleanly.`);
     } catch (err: any) {
       setReconciliationStatus('mismatch');
       setReconciliationMsg(`Deep Sync error: ${err?.message || 'Failed to complete reconciliation'}`);
       addDiagnosticLog('error', `Deep Sync error: ${err?.message || 'Sync failed'}`);
-    } finally {
       setIsDeepSyncing(false);
     }
   };
@@ -823,12 +965,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
           </div>
 
           {/* Data Reconciliation Engine */}
-          <div className="mb-4 bg-zinc-950/90 p-4 rounded-2xl border border-zinc-800 space-y-3">
+          <div className="mb-4 bg-zinc-950/90 p-4.5 rounded-2xl border border-zinc-800 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Activity className="w-4 h-4 text-orange-400" />
                 <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider font-mono">
-                  Data Reconciliation Engine
+                  Data Reconciliation & Orphan Document Engine
                 </h4>
               </div>
               <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider font-mono flex items-center gap-1 ${
@@ -841,25 +983,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
                 {reconciliationStatus === 'synced' && <CheckCircle2 className="w-3 h-3" />}
                 {reconciliationStatus === 'mismatch' && <AlertCircle className="w-3 h-3" />}
                 {reconciliationStatus === 'syncing' && <Loader2 className="w-3 h-3 animate-spin" />}
-                {reconciliationStatus === 'synced' ? 'Synced (0 Discrepancy)' : reconciliationStatus === 'mismatch' ? 'Mismatch Detected' : 'Deep Syncing...'}
+                {reconciliationStatus === 'synced' ? 'Synced (0 Discrepancy)' : reconciliationStatus === 'mismatch' ? `${reconciliationDiscrepancies.length} Discrepancy Items` : 'Scanning...'}
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
               <div className="bg-zinc-900 p-3 rounded-xl border border-zinc-800">
-                <span className="text-zinc-500 block text-[9px] uppercase font-semibold">Firestore User Profiles</span>
-                <span className="text-base font-black text-emerald-400">{users.length}</span>
+                <span className="text-zinc-500 block text-[9px] uppercase font-semibold">Posts (Snapshot / Server)</span>
+                <span className="text-sm font-black text-white">{posts.length} / {serverCounts.posts ?? posts.length}</span>
               </div>
               <div className="bg-zinc-900 p-3 rounded-xl border border-zinc-800">
-                <span className="text-zinc-500 block text-[9px] uppercase font-semibold">System Logs Counter</span>
-                <span className="text-base font-black text-white">{systemLogsUserCount ?? users.length}</span>
+                <span className="text-zinc-500 block text-[9px] uppercase font-semibold">Users (Snapshot / Server)</span>
+                <span className="text-sm font-black text-emerald-400">{users.length} / {serverCounts.users ?? users.length}</span>
               </div>
               <div className="bg-zinc-900 p-3 rounded-xl border border-zinc-800">
-                <span className="text-zinc-500 block text-[9px] uppercase font-semibold">Discrepancy</span>
-                <span className={`text-base font-black ${
-                  (users.length - (systemLogsUserCount ?? users.length)) === 0 ? 'text-zinc-400' : 'text-amber-400'
-                }`}>
-                  {Math.abs(users.length - (systemLogsUserCount ?? users.length))} records
+                <span className="text-zinc-500 block text-[9px] uppercase font-semibold">Comments (Snapshot / Server)</span>
+                <span className="text-sm font-black text-white">{comments.length} / {serverCounts.comments ?? comments.length}</span>
+              </div>
+              <div className="bg-zinc-900 p-3 rounded-xl border border-zinc-800">
+                <span className="text-zinc-500 block text-[9px] uppercase font-semibold">Orphan / Discrepant Docs</span>
+                <span className={`text-sm font-black ${reconciliationDiscrepancies.length === 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {reconciliationDiscrepancies.length} items
                 </span>
               </div>
             </div>
@@ -870,18 +1014,67 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSelectUser }) => {
               </p>
             )}
 
-            <div className="flex items-center justify-between pt-1">
+            {/* Identified Document Discrepancy Breakdown */}
+            <div className="bg-zinc-900/90 rounded-xl p-3 border border-zinc-800 space-y-2">
+              <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-semibold">
+                <span>Discrepancy Inspector ({reconciliationDiscrepancies.length} identified)</span>
+                {reconciliationDiscrepancies.length > 0 && (
+                  <span className="text-amber-400">Action Required: Run Deep Sync to purge stale cache</span>
+                )}
+              </div>
+
+              {reconciliationDiscrepancies.length > 0 ? (
+                <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                  {reconciliationDiscrepancies.map(disc => (
+                    <div key={disc.id} className="bg-zinc-950 p-2.5 rounded-lg border border-zinc-800 flex items-start justify-between gap-3 text-xs font-mono">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                            disc.type === 'orphan_user' ? 'bg-red-950 text-red-400 border border-red-800' :
+                            disc.type === 'orphan_post' ? 'bg-amber-950 text-amber-400 border border-amber-800' :
+                            disc.type === 'hidden_private' ? 'bg-purple-950 text-purple-400 border border-purple-800' :
+                            'bg-cyan-950 text-cyan-400 border border-cyan-800'
+                          }`}>
+                            {disc.type.replace('_', ' ')}
+                          </span>
+                          <span className="text-zinc-300 font-bold truncate">{disc.title}</span>
+                        </div>
+                        <p className="text-[10.5px] text-zinc-400 mt-1 leading-normal">{disc.reason}</p>
+                        <p className="text-[9px] text-zinc-500 mt-0.5">Doc ID: <code className="text-orange-400">{disc.documentId}</code> | Collection: <code className="text-zinc-300">{disc.collection}</code></p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-2 text-xs font-mono text-emerald-400 flex items-center justify-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>0 Orphan or Hidden Document IDs Detected in Cache</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
               <p className="text-[10px] text-zinc-400 font-mono">
                 Compares Firestore server truth against system_logs & clears stale persistent local cache.
               </p>
-              <button
-                onClick={handleDeepSync}
-                disabled={isDeepSyncing}
-                className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 disabled:opacity-50 text-xs font-bold text-white rounded-xl transition flex items-center gap-2 cursor-pointer shadow-md shrink-0"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isDeepSyncing ? 'animate-spin' : ''}`} />
-                <span>{isDeepSyncing ? 'Deep Syncing...' : 'Deep Sync (Force Correct Cache)'}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={runReconciliationScan}
+                  disabled={isDeepSyncing}
+                  className="px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-xs font-bold text-zinc-200 rounded-xl transition flex items-center gap-1.5 cursor-pointer border border-zinc-700 font-mono"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isDeepSyncing ? 'animate-spin' : ''}`} />
+                  <span>Re-Scan Discrepancies</span>
+                </button>
+                <button
+                  onClick={handleDeepSync}
+                  disabled={isDeepSyncing}
+                  className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 disabled:opacity-50 text-xs font-bold text-white rounded-xl transition flex items-center gap-2 cursor-pointer shadow-md shrink-0 font-mono"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isDeepSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isDeepSyncing ? 'Deep Syncing...' : 'Deep Sync (Force Correct Cache)'}</span>
+                </button>
+              </div>
             </div>
           </div>
 
